@@ -359,7 +359,7 @@ func TestWaitingApprovalKeepsRunContext(t *testing.T) {
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(model, tools)),
 		NewDefaultActionResultResolver(NewDefaultPolicy(), approvals),
-		DefaultStateChangeApplier{},
+		DefaultRuntimeDataChangeApplier{},
 		runs,
 		approvals,
 		nil,
@@ -427,7 +427,7 @@ func TestFinalAssistantResponseFinishesRun(t *testing.T) {
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(model, &fakeTool{})),
 		NewDefaultActionResultResolver(NewDefaultPolicy(), approvals),
-		DefaultStateChangeApplier{},
+		DefaultRuntimeDataChangeApplier{},
 		runs,
 		approvals,
 		nil,
@@ -478,7 +478,7 @@ func TestApproveAlwaysWritesStoreWithoutHoldingEngineLock(t *testing.T) {
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(model, tools)),
 		NewDefaultActionResultResolver(NewDefaultPolicy(), store),
-		DefaultStateChangeApplier{},
+		DefaultRuntimeDataChangeApplier{},
 		NewDefaultRunController(),
 		store,
 		nil,
@@ -778,7 +778,7 @@ func TestToolRiskComesFromToolSpec(t *testing.T) {
 	}
 }
 
-func TestTransitionProducesStateChangesAndScheduledActions(t *testing.T) {
+func TestTransitionProducesRuntimeDataChangesAndScheduledActions(t *testing.T) {
 	event := UserMessageSubmitted{Content: "hi"}
 	decision, err := Transition(transitionSnapshot(StateIdle, event), event)
 	if err != nil {
@@ -787,11 +787,11 @@ func TestTransitionProducesStateChangesAndScheduledActions(t *testing.T) {
 	if decision.NextState != StateWaitingLLM {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateWaitingLLM)
 	}
-	if len(decision.StateChanges) != 1 {
-		t.Fatalf("stateChanges = %+v, want one", decision.StateChanges)
+	if len(decision.RuntimeDataChanges) != 1 {
+		t.Fatalf("runtimeDataChanges = %+v, want one", decision.RuntimeDataChanges)
 	}
-	if _, ok := decision.StateChanges[0].(AppendUserMessage); !ok {
-		t.Fatalf("stateChange = %T, want AppendUserMessage", decision.StateChanges[0])
+	if _, ok := decision.RuntimeDataChanges[0].(AppendUserMessage); !ok {
+		t.Fatalf("runtimeDataChange = %T, want AppendUserMessage", decision.RuntimeDataChanges[0])
 	}
 	if len(decision.ScheduledActions) != 1 {
 		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
@@ -811,11 +811,11 @@ func TestApprovalGrantedRunsPendingLocalTool(t *testing.T) {
 	if decision.NextState != StateRunningTool {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateRunningTool)
 	}
-	if len(decision.StateChanges) != 2 {
-		t.Fatalf("stateChanges = %+v, want two", decision.StateChanges)
+	if len(decision.RuntimeDataChanges) != 2 {
+		t.Fatalf("runtimeDataChanges = %+v, want two", decision.RuntimeDataChanges)
 	}
-	if _, ok := decision.StateChanges[0].(SetCurrentTool); !ok {
-		t.Fatalf("stateChange = %T, want SetCurrentTool", decision.StateChanges[0])
+	if _, ok := decision.RuntimeDataChanges[0].(SetCurrentTool); !ok {
+		t.Fatalf("runtimeDataChange = %T, want SetCurrentTool", decision.RuntimeDataChanges[0])
 	}
 	if len(decision.ScheduledActions) != 1 {
 		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
@@ -1450,7 +1450,7 @@ func TestClassifierToolSpecsAreFetchedWithoutHoldingEngineLock(t *testing.T) {
 	engine := NewEngineWithComponents(
 		runner,
 		NewDefaultActionResultResolver(NewDefaultPolicy(), store),
-		DefaultStateChangeApplier{},
+		DefaultRuntimeDataChangeApplier{},
 		NewDefaultRunController(),
 		store,
 		nil,

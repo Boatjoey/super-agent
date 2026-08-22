@@ -85,15 +85,15 @@ func TestTransitionRejectsBatchFinishedBeforeQueueEmpty(t *testing.T) {
 	}
 }
 
-func TestStateChangeApplierDoesNotMutateOriginalStateWhenValidationFails(t *testing.T) {
+func TestRuntimeDataChangeApplierDoesNotMutateOriginalStateWhenValidationFails(t *testing.T) {
 	call := ToolCall{ID: "call-1"}
 	original := RuntimeData{
 		State:     StateAdvancingQueue,
 		ToolBatch: &ToolCallBatch{Calls: []ToolCall{call}},
 	}
-	_, err := (DefaultStateChangeApplier{}).ApplyStateChanges(original, TransitionResult{
+	_, err := (DefaultRuntimeDataChangeApplier{}).ApplyRuntimeDataChanges(original, TransitionResult{
 		NextState: StateRunningTool,
-		StateChanges: []StateChange{
+		RuntimeDataChanges: []RuntimeDataChange{
 			AdvanceToolCallBatch{},
 		},
 	})
@@ -106,25 +106,25 @@ func TestStateChangeApplierDoesNotMutateOriginalStateWhenValidationFails(t *test
 	}
 }
 
-type invalidStateChangeApplier struct{}
+type invalidRuntimeDataChangeApplier struct{}
 
-func (invalidStateChangeApplier) ApplyStateChanges(state RuntimeData, result TransitionResult) (StateChangeResult, error) {
+func (invalidRuntimeDataChangeApplier) ApplyRuntimeDataChanges(state RuntimeData, result TransitionResult) (RuntimeDataChangeResult, error) {
 	if state.State == StateInitializing {
-		return (DefaultStateChangeApplier{}).ApplyStateChanges(state, result)
+		return (DefaultRuntimeDataChangeApplier{}).ApplyRuntimeDataChanges(state, result)
 	}
-	return StateChangeResult{RuntimeData: RuntimeData{
+	return RuntimeDataChangeResult{RuntimeData: RuntimeData{
 		State:     StateIdle,
 		ToolBatch: &ToolCallBatch{},
 	}}, nil
 }
 
-func TestEngineDoesNotCommitInvalidCustomStateChangeResult(t *testing.T) {
+func TestEngineDoesNotCommitInvalidCustomRuntimeDataChangeResult(t *testing.T) {
 	approvals := NewMemoryApprovalStore()
 	runs := NewDefaultRunController()
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(nil, nil)),
 		NewDefaultActionResultResolver(NewDefaultPolicy(), approvals),
-		invalidStateChangeApplier{},
+		invalidRuntimeDataChangeApplier{},
 		runs,
 		approvals,
 		nil,
@@ -171,7 +171,7 @@ func TestToolFlowPreservesMachineInvariants(t *testing.T) {
 		if err != nil {
 			t.Fatalf("step %d transition: %v", i, err)
 		}
-		changeResult, err := (DefaultStateChangeApplier{}).ApplyStateChanges(state, result)
+		changeResult, err := (DefaultRuntimeDataChangeApplier{}).ApplyRuntimeDataChanges(state, result)
 		if err != nil {
 			t.Fatalf("step %d changeResult: %v", i, err)
 		}

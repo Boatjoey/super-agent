@@ -124,7 +124,7 @@ Idle + UserMessageSubmitted → WaitingLLM
 
 该转移会：
 
-1. 通过 `AppendUserMessage` StateChange 保存用户消息。
+1. 通过 `AppendUserMessage` RuntimeDataChange 保存用户消息。
 2. 将状态改为 `WaitingLLM`。
 3. 产生 `CallModel` ScheduledAction。
 
@@ -160,7 +160,7 @@ AdvancingQueue + ToolBatchFinished   → WaitingLLM
 
 ### 流式输出
 
-模型返回的流式片段通过 `AppendStreamingAssistant` StateChange 累积。流式内容只能存在于 `WaitingLLM`。
+模型返回的流式片段通过 `AppendStreamingAssistant` RuntimeDataChange 累积。流式内容只能存在于 `WaitingLLM`。
 
 流式片段不会结束当前状态，只有最终模型结果才会触发下一次状态转移。
 

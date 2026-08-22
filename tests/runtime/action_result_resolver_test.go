@@ -173,7 +173,7 @@ func TestEngineRejectsInvalidPermissionMode(t *testing.T) {
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(nil, nil)),
 		NewDefaultActionResultResolver(NewDefaultPolicy(), NewMemoryApprovalStore()),
-		DefaultStateChangeApplier{},
+		DefaultRuntimeDataChangeApplier{},
 		NewDefaultRunController(),
 		NewMemoryApprovalStore(),
 		nil,

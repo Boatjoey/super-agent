@@ -24,7 +24,7 @@ main.go
 - `runtime/`: public aliases and constructors for runtime packages.
 - `runtime/protocol/`: model and tool adapter contracts (`Message`, `ToolCall`, `Model`, `ToolRunner`).
 - `runtime/permission/`: permission request and command classification vocabulary.
-- `runtime/machine/`: state, events, runtime data, state changes, action-queue changes, scheduled actions, transitions.
+- `runtime/machine/`: state, events, runtime data, runtime-data changes, action-queue changes, scheduled actions, transitions.
 - `runtime/execution/`: scheduled-action runner, executor, action queue, action-result resolver, command analyzer, policy, approvals, run control.
 - `runtime/engine/`: orchestration, state lock, lifecycle, dispatch, stale-result dropping.
 - `runtime/session/`: application use cases, event output, and persistence/workspace ports.
@@ -83,8 +83,8 @@ QueuedAction { RunID, ActionID, ScheduledAction }
   -> ActionResultResolver.Resolve -> transition Event
   -> SnapshotFrom(RuntimeData) -> validated MachineSnapshot
   -> Transition(snapshot, event)
-  -> TransitionResult { NextState, StateChanges, ActionQueueChanges, ScheduledActions }
-  -> StateChangeApplier.ApplyStateChanges on cloned RuntimeData -> ValidateRuntimeData
+  -> TransitionResult { NextState, RuntimeDataChanges, ActionQueueChanges, ScheduledActions }
+  -> RuntimeDataChangeApplier.ApplyRuntimeDataChanges on cloned RuntimeData -> ValidateRuntimeData
   -> atomic RuntimeData + ActionQueueChange commit
 ```
 
@@ -94,12 +94,12 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 
 - `State`: current runtime phase.
 - `Event`: fact that triggers a transition.
-- `StateChange`: synchronous internal state change.
+- `RuntimeDataChange`: synchronous transformation of cloned `RuntimeData`.
 - `ActionQueueChange`: action-queue update committed with runtime data.
 - `ScheduledAction`: requested work such as model calls, tool execution, or queue processing.
 - `MachineSnapshot`: validated read-only view containing only transition guards.
 - `Transition`: pure state-machine decision with state, call, and queue guards.
-- `StateChangeApplier`: applies state changes to cloned `RuntimeData` and validates it.
+- `RuntimeDataChangeApplier`: applies runtime-data changes to cloned `RuntimeData` and validates it.
 - `ActionQueue`: stores post-commit scheduled actions.
 - `ActionResultResolver`: turns `ScheduledActionResult` into transition-ready events and applies tool policy.
 - `Policy`: permission mode, allow/deny rules, command classification, and approval decision.
@@ -117,9 +117,9 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `runtime/machine/action_queue_change.go`: action-queue change vocabulary.
 - `runtime/machine/tool_batch.go`: queued tool-batch state.
 - `runtime/machine/snapshot.go`: machine snapshot construction and state invariants.
-- `runtime/machine/state_change.go`: internal state-change vocabulary.
+- `runtime/machine/runtime_data_change.go`: runtime-data change vocabulary.
 - `runtime/machine/scheduled_action.go`: post-commit scheduled-action vocabulary.
-- `runtime/machine/state_change_applier.go`: transactional state-change application.
+- `runtime/machine/runtime_data_change_applier.go`: transactional runtime-data change application.
 - `runtime/engine/engine.go`: engine construction and dependencies.
 - Engine files name `machine`, `execution`, and `protocol` types explicitly; the package has no internal alias facade.
 - `runtime/engine/commands.go`: lifecycle, approval, policy, and context commands.
@@ -148,7 +148,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 
 ## Transition Table
 
-| State | Event | Next | StateChanges | ActionQueueChanges | ScheduledActions |
+| State | Event | Next | RuntimeDataChanges | ActionQueueChanges | ScheduledActions |
 |---|---|---|---|---|---|
 | Initializing | EngineReady | Idle | - | - | - |
 | Idle | UserMessageSubmitted | WaitingLLM | AppendUserMessage | - | CallModel |

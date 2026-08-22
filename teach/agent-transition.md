@@ -26,21 +26,21 @@ func Transition(
 ```go
 type TransitionResult struct {
 	NextState          State
-	StateChanges       []StateChange
+	RuntimeDataChanges []RuntimeDataChange
 	ActionQueueChanges []ActionQueueChange
 	ScheduledActions   []ScheduledAction
 }
 ```
 
-`NextState` 是下一执行状态；`StateChanges` 构造下一份 `RuntimeData`；`ActionQueueChanges` 在提交时修改队列；`ScheduledActions` 在提交后执行外部工作。
+`NextState` 是下一执行状态；`RuntimeDataChanges` 构造下一份 `RuntimeData`；`ActionQueueChanges` 在提交时修改队列；`ScheduledActions` 在提交后执行外部工作。
 
 例如：
 
 ```go
 return TransitionResult{
-	NextState:        StateWaitingLLM,
-	StateChanges:     []StateChange{AppendUserMessage{Content: event.Content}},
-	ScheduledActions: []ScheduledAction{CallModel{}},
+	NextState:          StateWaitingLLM,
+	RuntimeDataChanges: []RuntimeDataChange{AppendUserMessage{Content: event.Content}},
+	ScheduledActions:   []ScheduledAction{CallModel{}},
 }, nil
 ```
 
@@ -146,7 +146,7 @@ return handler(snapshot, event)
 Event
   -> SnapshotFrom：验证当前 RuntimeData
   -> Transition：产生决策
-  -> StateChangeApplier：克隆、修改、验证下一份 RuntimeData
+  -> RuntimeDataChangeApplier：克隆、修改、验证下一份 RuntimeData
   -> Engine：提交 RuntimeData 和 ActionQueueChanges
   -> ActionQueue：加入 ScheduledActions
   -> ScheduledActionRunner：执行动作

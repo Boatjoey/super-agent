@@ -2,34 +2,34 @@ package machine
 
 import "fmt"
 
-type StateChangeResult struct {
+type RuntimeDataChangeResult struct {
 	RuntimeData RuntimeData
 }
 
-type StateChangeApplier interface {
-	ApplyStateChanges(runtimeData RuntimeData, result TransitionResult) (StateChangeResult, error)
+type RuntimeDataChangeApplier interface {
+	ApplyRuntimeDataChanges(runtimeData RuntimeData, result TransitionResult) (RuntimeDataChangeResult, error)
 }
 
-type DefaultStateChangeApplier struct{}
+type DefaultRuntimeDataChangeApplier struct{}
 
-func (DefaultStateChangeApplier) ApplyStateChanges(runtimeData RuntimeData, result TransitionResult) (StateChangeResult, error) {
+func (DefaultRuntimeDataChangeApplier) ApplyRuntimeDataChanges(runtimeData RuntimeData, result TransitionResult) (RuntimeDataChangeResult, error) {
 	next := cloneRuntimeData(runtimeData)
 	next.State = result.NextState
-	changeResult := StateChangeResult{RuntimeData: next}
-	for _, stateChange := range result.StateChanges {
-		if err := applyStateChange(&changeResult, stateChange); err != nil {
-			return StateChangeResult{}, err
+	changeResult := RuntimeDataChangeResult{RuntimeData: next}
+	for _, runtimeDataChange := range result.RuntimeDataChanges {
+		if err := applyRuntimeDataChange(&changeResult, runtimeDataChange); err != nil {
+			return RuntimeDataChangeResult{}, err
 		}
 	}
 	if err := ValidateRuntimeData(changeResult.RuntimeData); err != nil {
-		return StateChangeResult{}, err
+		return RuntimeDataChangeResult{}, err
 	}
 	return changeResult, nil
 }
 
-func applyStateChange(changeResult *StateChangeResult, stateChange StateChange) error {
+func applyRuntimeDataChange(changeResult *RuntimeDataChangeResult, runtimeDataChange RuntimeDataChange) error {
 	state := &changeResult.RuntimeData
-	switch m := stateChange.(type) {
+	switch m := runtimeDataChange.(type) {
 	case AppendUserMessage:
 		state.StreamingContent = ""
 		state.StreamingReasoning = ""
@@ -87,7 +87,7 @@ func applyStateChange(changeResult *StateChangeResult, stateChange StateChange) 
 		state.StreamingContent = ""
 		state.StreamingReasoning = ""
 	default:
-		return InvariantViolationError{Reason: fmt.Sprintf("unknown state change %T", m)}
+		return InvariantViolationError{Reason: fmt.Sprintf("unknown runtime data change %T", m)}
 	}
 	return nil
 }

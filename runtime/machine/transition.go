@@ -2,7 +2,7 @@ package machine
 
 type TransitionResult struct {
 	NextState          State
-	StateChanges       []StateChange
+	RuntimeDataChanges []RuntimeDataChange
 	ActionQueueChanges []ActionQueueChange
 	ScheduledActions   []ScheduledAction
 }
@@ -95,16 +95,16 @@ func handleEngineReady(MachineSnapshot, EngineReady) (TransitionResult, error) {
 
 func handleUserMessageSubmitted(_ MachineSnapshot, event UserMessageSubmitted) (TransitionResult, error) {
 	return TransitionResult{
-		NextState:        StateWaitingLLM,
-		StateChanges:     []StateChange{AppendUserMessage{Content: event.Content}},
-		ScheduledActions: []ScheduledAction{CallModel{}},
+		NextState:          StateWaitingLLM,
+		RuntimeDataChanges: []RuntimeDataChange{AppendUserMessage{Content: event.Content}},
+		ScheduledActions:   []ScheduledAction{CallModel{}},
 	}, nil
 }
 
 func handleAssistantMessageReceived(_ MachineSnapshot, event AssistantMessageReceived) (TransitionResult, error) {
 	return TransitionResult{
 		NextState: StateIdle,
-		StateChanges: []StateChange{AppendAssistantMessage{Message: Message{
+		RuntimeDataChanges: []RuntimeDataChange{AppendAssistantMessage{Message: Message{
 			Role:             RoleAssistant,
 			Content:          event.Response.Content,
 			ReasoningContent: event.Response.ReasoningContent,
@@ -118,7 +118,7 @@ func handleToolBatchReceived(snapshot MachineSnapshot, event ToolBatchReceived) 
 	}
 	return TransitionResult{
 		NextState: StateAdvancingQueue,
-		StateChanges: []StateChange{
+		RuntimeDataChanges: []RuntimeDataChange{
 			AppendAssistantMessage{Message: Message{
 				Role:             RoleAssistant,
 				Content:          event.Content,
@@ -147,9 +147,9 @@ func approveTool(snapshot MachineSnapshot, event Event, call ToolCall) (Transiti
 		return protocolViolation(snapshot, event, "approved call does not match pending tool")
 	}
 	return TransitionResult{
-		NextState:        StateRunningTool,
-		StateChanges:     []StateChange{SetCurrentTool{Call: call}, ClearPendingTool{}},
-		ScheduledActions: []ScheduledAction{RunTool{Call: call}},
+		NextState:          StateRunningTool,
+		RuntimeDataChanges: []RuntimeDataChange{SetCurrentTool{Call: call}, ClearPendingTool{}},
+		ScheduledActions:   []ScheduledAction{RunTool{Call: call}},
 	}, nil
 }
 
@@ -162,7 +162,7 @@ func handleApprovalDenied(snapshot MachineSnapshot, event ApprovalDenied) (Trans
 	}
 	return TransitionResult{
 		NextState: StateAdvancingQueue,
-		StateChanges: []StateChange{
+		RuntimeDataChanges: []RuntimeDataChange{
 			ClearPendingTool{},
 			AppendToolResult{Call: event.Call, Result: "denied: " + event.Call.Name},
 		},
@@ -179,7 +179,7 @@ func handleToolResultReceived(snapshot MachineSnapshot, event ToolResultReceived
 	}
 	return TransitionResult{
 		NextState: StateAdvancingQueue,
-		StateChanges: []StateChange{
+		RuntimeDataChanges: []RuntimeDataChange{
 			AppendToolResult{Call: event.Call, Result: event.Result},
 			ClearCurrentTool{},
 		},
@@ -192,9 +192,9 @@ func handleToolBatchFinished(snapshot MachineSnapshot, event ToolBatchFinished) 
 		return protocolViolation(snapshot, event, "tool batch finished before the queue was empty")
 	}
 	return TransitionResult{
-		NextState:        StateWaitingLLM,
-		StateChanges:     []StateChange{ClearToolCallBatch{}},
-		ScheduledActions: []ScheduledAction{CallModel{}},
+		NextState:          StateWaitingLLM,
+		RuntimeDataChanges: []RuntimeDataChange{ClearToolCallBatch{}},
+		ScheduledActions:   []ScheduledAction{CallModel{}},
 	}, nil
 }
 
@@ -207,7 +207,7 @@ func handleToolCallNeedsApproval(snapshot MachineSnapshot, event ToolCallNeedsAp
 	}
 	return TransitionResult{
 		NextState: StateWaitingApproval,
-		StateChanges: []StateChange{
+		RuntimeDataChanges: []RuntimeDataChange{
 			SetPendingTool{Call: event.Call, Request: event.Request},
 			AdvanceToolCallBatch{},
 		},
@@ -222,16 +222,16 @@ func handleToolCallReadyToRun(snapshot MachineSnapshot, event ToolCallReadyToRun
 		return protocolViolation(snapshot, event, "ready call does not match next tool")
 	}
 	return TransitionResult{
-		NextState:        StateRunningTool,
-		StateChanges:     []StateChange{AdvanceToolCallBatch{}, SetCurrentTool{Call: event.Call}},
-		ScheduledActions: []ScheduledAction{RunTool{Call: event.Call}},
+		NextState:          StateRunningTool,
+		RuntimeDataChanges: []RuntimeDataChange{AdvanceToolCallBatch{}, SetCurrentTool{Call: event.Call}},
+		ScheduledActions:   []ScheduledAction{RunTool{Call: event.Call}},
 	}, nil
 }
 
 func handleErrorOccurred(_ MachineSnapshot, event ErrorOccurred) (TransitionResult, error) {
 	return TransitionResult{
 		NextState: StateIdle,
-		StateChanges: []StateChange{
+		RuntimeDataChanges: []RuntimeDataChange{
 			FlushStreamingAssistant{Interrupted: true},
 			AppendToolResult{
 				Call:   ToolCall{ID: "runtime_error", Name: "runtime_error"},
@@ -248,7 +248,7 @@ func handleErrorOccurred(_ MachineSnapshot, event ErrorOccurred) (TransitionResu
 func handleCancelRequested(MachineSnapshot, CancelRequested) (TransitionResult, error) {
 	return TransitionResult{
 		NextState: StateIdle,
-		StateChanges: []StateChange{
+		RuntimeDataChanges: []RuntimeDataChange{
 			FlushStreamingAssistant{Interrupted: true},
 			ClearPendingTool{},
 			ClearCurrentTool{},
@@ -261,7 +261,7 @@ func handleCancelRequested(MachineSnapshot, CancelRequested) (TransitionResult, 
 func handleResetRequested(MachineSnapshot, ResetRequested) (TransitionResult, error) {
 	return TransitionResult{
 		NextState:          StateIdle,
-		StateChanges:       []StateChange{ResetConversation{}},
+		RuntimeDataChanges: []RuntimeDataChange{ResetConversation{}},
 		ActionQueueChanges: []ActionQueueChange{ClearActionQueue{}},
 	}, nil
 }

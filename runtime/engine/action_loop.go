@@ -49,7 +49,7 @@ func (e *Engine) dispatchLocked(event machine.Event) error {
 	return e.applyTransitionLocked(decision)
 }
 func (e *Engine) applyTransitionLocked(decision machine.TransitionResult) error {
-	changeResult, err := e.stateChangeApplier.ApplyStateChanges(e.runtimeData, decision)
+	changeResult, err := e.runtimeDataChangeApplier.ApplyRuntimeDataChanges(e.runtimeData, decision)
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func (e *Engine) recordStreamChunk(runID execution.RunID, chunk protocol.StreamC
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	_ = e.applyTransitionLocked(machine.TransitionResult{
-		NextState:    e.runtimeData.State,
-		StateChanges: []machine.StateChange{machine.AppendStreamingAssistant{Chunk: chunk}},
+		NextState:          e.runtimeData.State,
+		RuntimeDataChanges: []machine.RuntimeDataChange{machine.AppendStreamingAssistant{Chunk: chunk}},
 	})
 }

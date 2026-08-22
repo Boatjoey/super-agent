@@ -109,7 +109,7 @@ assistant(tool_calls)
 
 ## 重置上下文：Reset
 
-`Session.Reset` 先写入 `reset` 事件，再调用 `Engine.Reset`。状态机的 `ResetConversation` StateChange 会清除非 system 消息，但保留所有 `system` 消息。
+`Session.Reset` 先写入 `reset` 事件，再调用 `Engine.Reset`。状态机的 `ResetConversation` RuntimeDataChange 会清除非 system 消息，但保留所有 `system` 消息。
 
 ```text
 reset 前：system + user + assistant + tool + ...
@@ -152,7 +152,7 @@ Cancel 会停止当前 run，清理工具队列并回到 `Idle`，但保留已�
 | 消息与模型接口 | `runtime/protocol/types.go` |
 | 初始 system 消息 | `app/system_prompt.go`、`app/session.go` |
 | 分层指令加载 | `app/instructions/instructions.go` |
-| 消息变更与重置 | `runtime/machine/state_change_applier.go` |
+| 消息变更与重置 | `runtime/machine/runtime_data_change_applier.go` |
 | 对话和工具状态转移 | `runtime/machine/transition.go` |
 | 模型/工具执行 | `runtime/execution/scheduled_action_executor.go` |
 | 会话轮次与消息发送 | `runtime/session/turn.go`、`runtime/session/snapshot_emitter.go` |

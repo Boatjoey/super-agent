@@ -22,7 +22,7 @@ flowchart TD
 
 ## Dependency Rule
 
-- `runtime/machine` is the domain core. It owns states, events, state changes, action-queue changes, scheduled actions, and transitions.
+- `runtime/machine` is the domain core. It owns states, events, runtime-data changes, action-queue changes, scheduled actions, and transitions.
 - `runtime/protocol` owns model and tool adapter contracts without state-machine policy.
 - `runtime/permission` owns permission request and command classification value types.
 - `runtime/engine` drives the machine. It owns synchronization, scheduled-action draining, and run identity.
@@ -66,7 +66,7 @@ The TUI is the only interaction surface. Headless CLI, HTTP server, WebSocket, a
 
 ```mermaid
 flowchart LR
-    Event --> Snapshot[Validated MachineSnapshot] --> Transition --> "StateChange + ActionQueueChange + ScheduledAction" --> StateChangeApplier[Transactional StateChangeApplier] --> Commit[Atomic Engine Commit] --> ScheduledActionRunner --> ActionResultResolver --> Event
+    Event --> Snapshot[Validated MachineSnapshot] --> Transition --> "RuntimeDataChange + ActionQueueChange + ScheduledAction" --> RuntimeDataChangeApplier[Transactional RuntimeDataChangeApplier] --> Commit[Atomic Engine Commit] --> ScheduledActionRunner --> ActionResultResolver --> Event
 ```
 
 The state machine this rule produces:
@@ -93,7 +93,7 @@ stateDiagram
 
 `ErrorOccurred`, `CancelRequested`, and `ResetRequested` return to `Idle` from any state; `ResetConversation` preserves `system` messages.
 
-The engine drops stale `RunID` results before event resolution. `State` names the current execution state; `RuntimeData` contains the complete mutable runtime data. `SnapshotFrom` validates runtime data and exposes only transition guards. `Transition` owns state/event compatibility plus call and queue guards. The `StateChangeApplier` clones runtime data, applies state changes, and validates the result. The engine then commits runtime data and `ActionQueueChange` values under one lock. Scheduled actions run only after that commit.
+The engine drops stale `RunID` results before event resolution. `State` names the current execution state; `RuntimeData` contains the complete mutable runtime data. `SnapshotFrom` validates runtime data and exposes only transition guards. `Transition` owns state/event compatibility plus call and queue guards. The `RuntimeDataChangeApplier` clones runtime data, applies runtime-data changes, and validates the result. The engine then commits runtime data and `ActionQueueChange` values under one lock. Scheduled actions run only after that commit.
 
 Errors distinguish incompatible events (`UnexpectedEventError`), current-run protocol mismatches (`ProtocolViolationError`), and impossible machine state (`InvariantViolationError`).
 

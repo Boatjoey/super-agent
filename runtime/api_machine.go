@@ -21,9 +21,9 @@ type CancelRequested = machine.CancelRequested
 type ResetRequested = machine.ResetRequested
 type EngineReady = machine.EngineReady
 
-type StateChange = machine.StateChange
+type RuntimeDataChange = machine.RuntimeDataChange
 
-var AllStateChanges = machine.AllStateChanges
+var AllRuntimeDataChanges = machine.AllRuntimeDataChanges
 
 type AppendUserMessage = machine.AppendUserMessage
 type AppendAssistantMessage = machine.AppendAssistantMessage
@@ -57,9 +57,9 @@ type MachineSnapshot = machine.MachineSnapshot
 type UnexpectedEventError = machine.UnexpectedEventError
 type ProtocolViolationError = machine.ProtocolViolationError
 type InvariantViolationError = machine.InvariantViolationError
-type StateChangeResult = machine.StateChangeResult
-type StateChangeApplier = machine.StateChangeApplier
-type DefaultStateChangeApplier = machine.DefaultStateChangeApplier
+type RuntimeDataChangeResult = machine.RuntimeDataChangeResult
+type RuntimeDataChangeApplier = machine.RuntimeDataChangeApplier
+type DefaultRuntimeDataChangeApplier = machine.DefaultRuntimeDataChangeApplier
 
 func SnapshotFrom(runtimeData RuntimeData) (MachineSnapshot, error) {
 	return machine.SnapshotFrom(runtimeData)

@@ -13,6 +13,6 @@ func NewEngineWithExecutor(executor ScheduledActionExecutor, initial []Message) 
 func NewEngineWithExecutorAndPolicy(executor ScheduledActionExecutor, policy Policy, initial []Message) *Engine {
 	return engine.NewEngineWithExecutorAndPolicy(executor, policy, initial)
 }
-func NewEngineWithComponents(runner ScheduledActionRunner, resolver ActionResultResolver, stateChangeApplier StateChangeApplier, runs RunController, approvals ApprovalStore, initial []Message) *Engine {
-	return engine.NewEngineWithComponents(runner, resolver, stateChangeApplier, runs, approvals, initial)
+func NewEngineWithComponents(runner ScheduledActionRunner, resolver ActionResultResolver, runtimeDataChangeApplier RuntimeDataChangeApplier, runs RunController, approvals ApprovalStore, initial []Message) *Engine {
+	return engine.NewEngineWithComponents(runner, resolver, runtimeDataChangeApplier, runs, approvals, initial)
 }

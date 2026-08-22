@@ -1,82 +1,82 @@
 package machine
 
-type StateChange interface {
-	isStateChange()
+type RuntimeDataChange interface {
+	isRuntimeDataChange()
 }
 
 type AppendUserMessage struct {
 	Content string
 }
 
-func (AppendUserMessage) isStateChange() {}
+func (AppendUserMessage) isRuntimeDataChange() {}
 
 type AppendAssistantMessage struct {
 	Message Message
 }
 
-func (AppendAssistantMessage) isStateChange() {}
+func (AppendAssistantMessage) isRuntimeDataChange() {}
 
 type AppendToolResult struct {
 	Call   ToolCall
 	Result string
 }
 
-func (AppendToolResult) isStateChange() {}
+func (AppendToolResult) isRuntimeDataChange() {}
 
 type AppendStreamingAssistant struct {
 	Chunk StreamChunk
 }
 
-func (AppendStreamingAssistant) isStateChange() {}
+func (AppendStreamingAssistant) isRuntimeDataChange() {}
 
 type FlushStreamingAssistant struct {
 	Interrupted bool
 }
 
-func (FlushStreamingAssistant) isStateChange() {}
+func (FlushStreamingAssistant) isRuntimeDataChange() {}
 
 type SetPendingTool struct {
 	Call    ToolCall
 	Request PermissionRequest
 }
 
-func (SetPendingTool) isStateChange() {}
+func (SetPendingTool) isRuntimeDataChange() {}
 
 type SetToolCallBatch struct {
 	ID    string
 	Calls []ToolCall
 }
 
-func (SetToolCallBatch) isStateChange() {}
+func (SetToolCallBatch) isRuntimeDataChange() {}
 
 type AdvanceToolCallBatch struct{}
 
-func (AdvanceToolCallBatch) isStateChange() {}
+func (AdvanceToolCallBatch) isRuntimeDataChange() {}
 
 type ClearPendingTool struct{}
 
-func (ClearPendingTool) isStateChange() {}
+func (ClearPendingTool) isRuntimeDataChange() {}
 
 type SetCurrentTool struct {
 	Call ToolCall
 }
 
-func (SetCurrentTool) isStateChange() {}
+func (SetCurrentTool) isRuntimeDataChange() {}
 
 type ClearCurrentTool struct{}
 
-func (ClearCurrentTool) isStateChange() {}
+func (ClearCurrentTool) isRuntimeDataChange() {}
 
 type ClearToolCallBatch struct{}
 
-func (ClearToolCallBatch) isStateChange() {}
+func (ClearToolCallBatch) isRuntimeDataChange() {}
 
 type ResetConversation struct{}
 
-func (ResetConversation) isStateChange() {}
+func (ResetConversation) isRuntimeDataChange() {}
 
-// AllStateChanges lists every StateChange type for registration, serialization, and testing.
-var AllStateChanges = []StateChange{
+// AllRuntimeDataChanges lists every RuntimeDataChange type for registration, serialization, and testing.
+var AllRuntimeDataChanges = []RuntimeDataChange{
 	AppendUserMessage{},
 	AppendAssistantMessage{},
 	AppendToolResult{},
