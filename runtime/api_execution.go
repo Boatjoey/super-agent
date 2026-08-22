@@ -39,7 +39,7 @@ type MemoryApprovalStore = execution.MemoryApprovalStore
 func NewMemoryApprovalStore() *MemoryApprovalStore { return execution.NewMemoryApprovalStore() }
 func NewApprovalKey(call ToolCall) ApprovalKey     { return execution.NewApprovalKey(call) }
 
-type ExecutionInput = execution.ExecutionInput
+type ScheduledActionInput = execution.ScheduledActionInput
 type ScheduledActionExecutor = execution.ScheduledActionExecutor
 type DefaultScheduledActionExecutor = execution.DefaultScheduledActionExecutor
 
@@ -47,7 +47,7 @@ func NewDefaultScheduledActionExecutor(model Model, tools ToolRunner) *DefaultSc
 	return execution.NewDefaultScheduledActionExecutor(model, tools)
 }
 
-type ExecutionResult = execution.ExecutionResult
+type ScheduledActionResult = execution.ScheduledActionResult
 type ModelReplied = execution.ModelReplied
 type ToolFinished = execution.ToolFinished
 type ToolQueueChecked = execution.ToolQueueChecked
@@ -55,7 +55,7 @@ type ToolQueueChecked = execution.ToolQueueChecked
 type RunID = execution.RunID
 type ActionID = execution.ActionID
 type QueuedAction = execution.QueuedAction
-type ActionOutcome = execution.ActionOutcome
+type ActionCompletion = execution.ActionCompletion
 type ScheduledActionRunner = execution.ScheduledActionRunner
 type DefaultScheduledActionRunner = execution.DefaultScheduledActionRunner
 
@@ -63,16 +63,16 @@ func NewDefaultScheduledActionRunner(executor ScheduledActionExecutor) *DefaultS
 	return execution.NewDefaultScheduledActionRunner(executor)
 }
 
-type ActionScheduler = execution.ActionScheduler
+type ActionQueue = execution.ActionQueue
 
-func NewActionScheduler() *ActionScheduler { return execution.NewActionScheduler() }
+func NewActionQueue() *ActionQueue { return execution.NewActionQueue() }
 
-type OutcomeResolver = execution.OutcomeResolver
-type OutcomeResolveInput = execution.OutcomeResolveInput
-type DefaultOutcomeResolver = execution.DefaultOutcomeResolver
+type ActionResultResolver = execution.ActionResultResolver
+type ActionResultInput = execution.ActionResultInput
+type DefaultActionResultResolver = execution.DefaultActionResultResolver
 
-func NewDefaultOutcomeResolver(policy Policy, approvals ApprovalStore) *DefaultOutcomeResolver {
-	return execution.NewDefaultOutcomeResolver(policy, approvals)
+func NewDefaultActionResultResolver(policy Policy, approvals ApprovalStore) *DefaultActionResultResolver {
+	return execution.NewDefaultActionResultResolver(policy, approvals)
 }
 
 type RunController = execution.RunController

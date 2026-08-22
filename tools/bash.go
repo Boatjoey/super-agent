@@ -7,13 +7,13 @@ import (
 	"os/exec"
 	"strings"
 
-	runtime "super-agent/runtime/protocol"
+	"super-agent/runtime/protocol"
 )
 
 type BashTool struct{}
 
-func (BashTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (BashTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "bash",
 		Description: "Run a bash command after user approval.",
 		Risky:       true,
@@ -27,7 +27,7 @@ func (BashTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (t BashTool) Run(ctx context.Context, call runtime.ToolCall) (string, error) {
+func (t BashTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	command := bashCommand(call.Input)
 	if command == "" {
 		return "", errors.New("invalid bash command input: must be JSON with 'command' field")

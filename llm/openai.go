@@ -10,12 +10,12 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/shared"
 
-	runtime "super-agent/runtime/protocol"
+	"super-agent/runtime/protocol"
 )
 
-func NewOpenAI(cfg Config) *OpenAIModel {
-	cfg = withDefaults(cfg, Config{Model: "gpt-4o"})
-	return NewOpenAIModel(cfg)
+func NewOpenAI(cfg ProviderConfig) *OpenAIModel {
+	cfg = withDefaults(cfg, ProviderConfig{Model: "gpt-4o"})
+	return newOpenAIModel(cfg)
 }
 
 type OpenAIModel struct {
@@ -23,7 +23,7 @@ type OpenAIModel struct {
 	model  string
 }
 
-func NewOpenAIModel(cfg Config) *OpenAIModel {
+func newOpenAIModel(cfg ProviderConfig) *OpenAIModel {
 	opts := []option.RequestOption{
 		option.WithAPIKey(cfg.APIKey),
 		option.WithHeader("X-Title", "SuperAgent"),
@@ -37,7 +37,7 @@ func NewOpenAIModel(cfg Config) *OpenAIModel {
 	}
 }
 
-func (m *OpenAIModel) Next(ctx context.Context, messages []runtime.Message, tools []runtime.ToolSpec, chunkFunc func(runtime.StreamChunk)) (runtime.ModelResponse, error) {
+func (m *OpenAIModel) Next(ctx context.Context, messages []protocol.Message, tools []protocol.ToolSpec, chunkFunc func(protocol.StreamChunk)) (protocol.ModelResponse, error) {
 	params := openai.ChatCompletionNewParams{
 		Model:    m.model,
 		Messages: toOpenAIMessages(messages),
@@ -69,7 +69,7 @@ func (m *OpenAIModel) Next(ctx context.Context, messages []runtime.Message, tool
 			}
 
 			if chunkFunc != nil && (delta.Content != "" || rc != "") {
-				chunkFunc(runtime.StreamChunk{
+				chunkFunc(protocol.StreamChunk{
 					ContentDelta:          delta.Content,
 					ReasoningContentDelta: rc,
 				})
@@ -77,10 +77,10 @@ func (m *OpenAIModel) Next(ctx context.Context, messages []runtime.Message, tool
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return runtime.ModelResponse{}, err
+		return protocol.ModelResponse{}, err
 	}
 	if len(acc.Choices) == 0 {
-		return runtime.ModelResponse{}, errors.New("llm returned no choices")
+		return protocol.ModelResponse{}, errors.New("llm returned no choices")
 	}
 
 	message := acc.Choices[0].Message
@@ -91,27 +91,27 @@ func (m *OpenAIModel) Next(ctx context.Context, messages []runtime.Message, tool
 	}
 
 	if len(message.ToolCalls) > 0 {
-		calls := make([]runtime.ToolCall, 0, len(message.ToolCalls))
+		calls := make([]protocol.ToolCall, 0, len(message.ToolCalls))
 		for _, call := range message.ToolCalls {
-			calls = append(calls, runtime.ToolCall{
+			calls = append(calls, protocol.ToolCall{
 				ID:    call.ID,
 				Name:  call.Function.Name,
 				Input: call.Function.Arguments,
 			})
 		}
-		return runtime.ModelResponse{
+		return protocol.ModelResponse{
 			Content:          message.Content,
 			ReasoningContent: finalRC,
 			ToolCalls:        calls,
 		}, nil
 	}
-	return runtime.ModelResponse{
+	return protocol.ModelResponse{
 		Content:          message.Content,
 		ReasoningContent: finalRC,
 	}, nil
 }
 
-func toOpenAITools(tools []runtime.ToolSpec) []openai.ChatCompletionToolUnionParam {
+func toOpenAITools(tools []protocol.ToolSpec) []openai.ChatCompletionToolUnionParam {
 	params := make([]openai.ChatCompletionToolUnionParam, 0, len(tools))
 	for _, tool := range tools {
 		params = append(params, openai.ChatCompletionFunctionTool(shared.FunctionDefinitionParam{
@@ -123,15 +123,15 @@ func toOpenAITools(tools []runtime.ToolSpec) []openai.ChatCompletionToolUnionPar
 	return params
 }
 
-func toOpenAIMessages(messages []runtime.Message) []openai.ChatCompletionMessageParamUnion {
+func toOpenAIMessages(messages []protocol.Message) []openai.ChatCompletionMessageParamUnion {
 	params := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
 	for _, msg := range messages {
 		switch msg.Role {
-		case runtime.RoleSystem:
+		case protocol.RoleSystem:
 			params = append(params, openai.SystemMessage(msg.Content))
-		case runtime.RoleAssistant:
+		case protocol.RoleAssistant:
 			params = append(params, assistantMessage(msg.Content, msg.ReasoningContent, msg.ToolCalls))
-		case runtime.RoleTool:
+		case protocol.RoleTool:
 			params = append(params, openai.ToolMessage(msg.Content, msg.ToolCallID))
 		default:
 			params = append(params, openai.UserMessage(msg.Content))
@@ -140,7 +140,7 @@ func toOpenAIMessages(messages []runtime.Message) []openai.ChatCompletionMessage
 	return params
 }
 
-func assistantMessage(content, reasoningContent string, toolCalls []*runtime.ToolCall) openai.ChatCompletionMessageParamUnion {
+func assistantMessage(content, reasoningContent string, toolCalls []*protocol.ToolCall) openai.ChatCompletionMessageParamUnion {
 	msg := openai.AssistantMessage(content)
 	if reasoningContent != "" {
 		msg.OfAssistant.SetExtraFields(map[string]any{
@@ -187,7 +187,7 @@ func reasoningText(rawJSON string) string {
 	}
 }
 
-func withDefaults(cfg, defaults Config) Config {
+func withDefaults(cfg, defaults ProviderConfig) ProviderConfig {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = defaults.BaseURL
 	}

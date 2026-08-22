@@ -24,8 +24,8 @@ main.go
 - `runtime/`: public aliases and constructors for runtime packages.
 - `runtime/protocol/`: model and tool adapter contracts (`Message`, `ToolCall`, `Model`, `ToolRunner`).
 - `runtime/permission/`: permission request and command classification vocabulary.
-- `runtime/machine/`: state, events, state changes, scheduled actions, state-change application, transitions.
-- `runtime/execution/`: scheduled-action runner, executor, scheduler, outcome resolver, command analyzer, policy, approvals, run control.
+- `runtime/machine/`: state, events, runtime data, state changes, action-queue changes, scheduled actions, transitions.
+- `runtime/execution/`: scheduled-action runner, executor, action queue, action-result resolver, command analyzer, policy, approvals, run control.
 - `runtime/engine/`: orchestration, state lock, lifecycle, dispatch, stale-result dropping.
 - `runtime/session/`: application use cases, event output, and persistence/workspace ports.
 - `store/`: durable JSONL session metadata, transcripts, checkpoints, compaction records.
@@ -40,7 +40,7 @@ main.go
 
 `app/instructions.Load` reads the optional user-level spec from `~/.superagent/AGENTS.md`, then searches upward from the current working directory and merges project instructions from root to leaf. `AGENTS.md` wins in a directory; `CLAUDE.md` is loaded as lower-priority compatibility guidance only when that directory has no `AGENTS.md`. Each instruction file is capped at 128 KiB and oversized files return a clear path-specific error.
 
-`app.NewSession` appends the merged instruction bundle to the built-in system prompt and passes one `system` message to the runtime. OpenAI-compatible providers send it as a chat `system` message. Claude sends it through the Anthropic `system` field. `ResetContext` clears conversation state but preserves `system` messages. Persistent replay also preserves system messages across reset records.
+`app.NewSession` appends the merged instruction bundle to the built-in system prompt and passes one `system` message to the runtime. OpenAI-compatible providers send it as a chat `system` message. Claude sends it through the Anthropic `system` field. `ResetConversation` clears conversation history but preserves `system` messages. Persistent replay also preserves system messages across reset records.
 
 ## Session Persistence
 
@@ -78,39 +78,43 @@ Tool approval is a selectable menu: arrows or `j`/`k` move, `Enter` confirms, an
 
 ```text
 QueuedAction { RunID, ActionID, ScheduledAction }
-  -> ScheduledActionRunner.Run -> ActionOutcome
+  -> ScheduledActionRunner.Run -> ActionCompletion
   -> stale RunID check
-  -> OutcomeResolver.Resolve -> transition Event
-  -> SnapshotFrom(EngineState) -> validated MachineSnapshot
+  -> ActionResultResolver.Resolve -> transition Event
+  -> SnapshotFrom(RuntimeData) -> validated MachineSnapshot
   -> Transition(snapshot, event)
-  -> TransitionResult { NextState, StateChanges, ScheduledActions }
-  -> StateChangeApplier.ApplyStateChanges on cloned state -> ValidateState
-  -> atomic EngineState + scheduler commit
+  -> TransitionResult { NextState, StateChanges, ActionQueueChanges, ScheduledActions }
+  -> StateChangeApplier.ApplyStateChanges on cloned RuntimeData -> ValidateRuntimeData
+  -> atomic RuntimeData + ActionQueueChange commit
 ```
 
-`OutcomeResolver` maps model/tool outcomes directly to events accepted by the transition table. It starts tool batches and classifies each queued call into `ToolCallNeedsApproval`, `ToolCallReadyToRun`, or a policy denial error. A batch is the context unit; a call is the approval and execution unit. `runtime/execution` owns command classification, protected path checks, network default-deny behavior, and structured permission requests.
+`ActionResultResolver` maps model/tool action results directly to events accepted by the transition table. It starts tool batches and classifies each queued call into `ToolCallNeedsApproval`, `ToolCallReadyToRun`, or a policy denial error. A batch is the context unit; a call is the approval and execution unit. `runtime/execution` owns command classification, protected path checks, network default-deny behavior, and structured permission requests.
 
 ## Runtime Terms
 
 - `State`: current runtime phase.
 - `Event`: fact that triggers a transition.
 - `StateChange`: synchronous internal state change.
+- `ActionQueueChange`: action-queue update committed with runtime data.
 - `ScheduledAction`: requested work such as model calls, tool execution, or queue processing.
 - `MachineSnapshot`: validated read-only view containing only transition guards.
 - `Transition`: pure state-machine decision with state, call, and queue guards.
-- `StateChangeApplier`: applies state changes to a cloned `EngineState`, validates it, and describes scheduler operations.
-- `OutcomeResolver`: turns `ExecutionResult` into transition-ready events and applies tool policy.
+- `StateChangeApplier`: applies state changes to cloned `RuntimeData` and validates it.
+- `ActionQueue`: stores post-commit scheduled actions.
+- `ActionResultResolver`: turns `ScheduledActionResult` into transition-ready events and applies tool policy.
 - `Policy`: permission mode, allow/deny rules, command classification, and approval decision.
 - `ApprovalStore`: stores always-allow and auto-approve state.
 - `RunController`: owns run id, cancel function, and stale-result checks.
-- `ScheduledActionRunner`: executes scheduled actions and returns owned outcomes.
-- `Engine`: scheduler, state lock, lifecycle, dispatch, scheduled-action drain, stale dropping.
+- `ScheduledActionRunner`: executes scheduled actions and returns `ActionCompletion` values.
+- `Engine`: action queue, state lock, lifecycle, dispatch, scheduled-action drain, stale dropping.
 - `Session`: channel boundary for UI events and approvals.
 
 ## Runtime Package Boundaries
 
 - `runtime/machine/transition.go`: pure context-aware transition handlers selected from one package-private static registry keyed by state and event kind; a zero-state key represents events accepted from any state.
 - `runtime/machine/state.go`: runtime state type and constants.
+- `runtime/machine/runtime_data.go`: complete mutable runtime data.
+- `runtime/machine/action_queue_change.go`: action-queue change vocabulary.
 - `runtime/machine/tool_batch.go`: queued tool-batch state.
 - `runtime/machine/snapshot.go`: machine snapshot construction and state invariants.
 - `runtime/machine/state_change.go`: internal state-change vocabulary.
@@ -122,13 +126,15 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `runtime/engine/action_loop.go`: transition dispatch and queued-action draining.
 - `runtime/engine/query.go`: state queries and snapshots.
 - `runtime/execution/scheduled_action_executor.go`: calls the model or tool runner.
-- `runtime/execution/outcome_resolver.go`: maps execution results to transition-ready events and classifies tool calls.
+- `runtime/execution/action_queue.go`: post-commit scheduled-action queue.
+- `runtime/execution/scheduled_action_result.go`: scheduled-action result vocabulary.
+- `runtime/execution/action_result_resolver.go`: maps action results to transition-ready events and classifies tool calls.
 - `runtime/session/session.go`: serializes turns and coordinates application use cases.
 - `runtime/session/events.go`: application event protocol.
 - `runtime/session/turn.go`: turn execution and approval flow.
 - `runtime/session/history.go`: resume, rename, delete, compact, and undo use cases.
 - `runtime/session/persistence.go`: repository notifications.
-- `runtime/session/repository.go`: persistence and workspace ports, including checkpoint creation, `CheckpointState`, and `TruncateAfter`.
+- `runtime/session/repository.go`: persistence and workspace ports, including checkpoint creation, `LoadUndoPoint`, and `TruncateAfter`.
 - `store/repository.go`: `runtime/session.Repository` JSONL adapter.
 - `workspace/workspace.go`: `runtime/session.Workspace` filesystem adapter.
 - `tui/commands.go`: slash-command handling and turn submission.
@@ -137,27 +143,27 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `tui/view.go`: top-level layout and informational views.
 - `tui/styles.go`: visual theme construction.
 - `store/store.go`: writes and replays durable session records. All access is serialized; creation writes the transcript first and `meta.json` last so partial failures cannot leave orphan sessions; undo uses `CheckpointUndo` (skipping empty checkpoints) and an atomic `TruncateAfter`.
-- `runtime/api_*.go`: compatibility facade grouped by model, machine, execution, engine, and session. It exposes session persistence ports and metadata without importing concrete adapters. The pre-facade `ToolCallsReceived`, `ToolCallAvailable`, `EventClassifier`, and `ResultResolver` names were intentionally retired in favor of `ToolBatchReceived`/`ToolCallNeedsApproval` and `OutcomeResolver` and are not re-exported.
+- `runtime/api_*.go`: compatibility facade grouped by model, machine, execution, engine, and session. It exposes session persistence ports and metadata without importing concrete adapters. The pre-facade `ToolCallsReceived`, `ToolCallAvailable`, `EventClassifier`, and `ResultResolver` names were intentionally retired in favor of `ToolBatchReceived`/`ToolCallNeedsApproval` and `ActionResultResolver` and are not re-exported.
 - `runtime/execution/command_analyzer.go`: shell command classification and metadata extraction.
 
 ## Transition Table
 
-| State | Event | Next | StateChanges | ScheduledActions |
-|---|---|---|---|---|
-| Initializing | EngineReady | Idle | - | - |
-| Idle | UserMessageSubmitted | WaitingLLM | AppendUserMessage | CallModel |
-| WaitingLLM | AssistantMessageReceived | Idle | AppendAssistantMessage | - |
-| WaitingLLM | ToolBatchReceived | AdvancingQueue | AppendAssistantMessage, SetToolCallBatch | ProcessNextToolCall |
-| WaitingApproval | ApprovalGranted | RunningTool | SetCurrentTool, ClearPendingTool | RunTool |
-| WaitingApproval | ApprovalAlwaysGranted | RunningTool | SetCurrentTool, ClearPendingTool | RunTool |
-| WaitingApproval | ApprovalDenied | AdvancingQueue | ClearPendingTool, AppendToolResult | ProcessNextToolCall |
-| RunningTool | ToolResultReceived | AdvancingQueue | AppendToolResult, ClearCurrentTool | ProcessNextToolCall |
-| AdvancingQueue | ToolBatchFinished | WaitingLLM | ClearToolCallBatch | CallModel |
-| AdvancingQueue | ToolCallNeedsApproval | WaitingApproval | SetPendingTool, AdvanceToolCallBatch | - |
-| AdvancingQueue | ToolCallReadyToRun | RunningTool | AdvanceToolCallBatch, SetCurrentTool | RunTool |
-| any | ErrorOccurred | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch, ClearScheduledActions | - |
-| any | CancelRequested | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch, ClearScheduledActions | - |
-| any | ResetRequested | Idle | ResetContext | - |
+| State | Event | Next | StateChanges | ActionQueueChanges | ScheduledActions |
+|---|---|---|---|---|---|
+| Initializing | EngineReady | Idle | - | - | - |
+| Idle | UserMessageSubmitted | WaitingLLM | AppendUserMessage | - | CallModel |
+| WaitingLLM | AssistantMessageReceived | Idle | AppendAssistantMessage | - | - |
+| WaitingLLM | ToolBatchReceived | AdvancingQueue | AppendAssistantMessage, SetToolCallBatch | - | CheckToolQueue |
+| WaitingApproval | ApprovalGranted | RunningTool | SetCurrentTool, ClearPendingTool | - | RunTool |
+| WaitingApproval | ApprovalAlwaysGranted | RunningTool | SetCurrentTool, ClearPendingTool | - | RunTool |
+| WaitingApproval | ApprovalDenied | AdvancingQueue | ClearPendingTool, AppendToolResult | - | CheckToolQueue |
+| RunningTool | ToolResultReceived | AdvancingQueue | AppendToolResult, ClearCurrentTool | - | CheckToolQueue |
+| AdvancingQueue | ToolBatchFinished | WaitingLLM | ClearToolCallBatch | - | CallModel |
+| AdvancingQueue | ToolCallNeedsApproval | WaitingApproval | SetPendingTool, AdvanceToolCallBatch | - | - |
+| AdvancingQueue | ToolCallReadyToRun | RunningTool | AdvanceToolCallBatch, SetCurrentTool | - | RunTool |
+| any | ErrorOccurred | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | ClearActionQueue | - |
+| any | CancelRequested | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | ClearActionQueue | - |
+| any | ResetRequested | Idle | ResetConversation | ClearActionQueue | - |
 
 ## Git And PR Notes
 

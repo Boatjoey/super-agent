@@ -4,18 +4,18 @@ import (
 	"context"
 	"errors"
 
-	runtime "super-agent/runtime/protocol"
+	"super-agent/runtime/protocol"
 )
 
 type Tool interface {
-	Spec() runtime.ToolSpec
-	Run(ctx context.Context, call runtime.ToolCall) (string, error)
+	Spec() protocol.ToolSpec
+	Run(ctx context.Context, call protocol.ToolCall) (string, error)
 }
 
 type Registry struct {
 	order      []string
 	tools      map[string]Tool
-	checkpoint func(runtime.ToolCall) error
+	checkpoint func(protocol.ToolCall) error
 }
 
 func NewRegistry(items ...Tool) *Registry {
@@ -30,7 +30,7 @@ func NewRegistry(items ...Tool) *Registry {
 	return registry
 }
 
-func (r *Registry) SetCheckpointCallback(callback func(runtime.ToolCall) error) {
+func (r *Registry) SetCheckpointCallback(callback func(protocol.ToolCall) error) {
 	r.checkpoint = callback
 }
 
@@ -50,15 +50,15 @@ func DefaultRegistry() *Registry {
 	)
 }
 
-func (r *Registry) Specs() []runtime.ToolSpec {
-	specs := make([]runtime.ToolSpec, 0, len(r.order))
+func (r *Registry) Specs() []protocol.ToolSpec {
+	specs := make([]protocol.ToolSpec, 0, len(r.order))
 	for _, name := range r.order {
 		specs = append(specs, r.tools[name].Spec())
 	}
 	return specs
 }
 
-func (r *Registry) Run(ctx context.Context, call runtime.ToolCall) (string, error) {
+func (r *Registry) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	tool, ok := r.tools[call.Name]
 	if !ok {
 		return "", errors.New("unknown tool: " + call.Name)

@@ -24,10 +24,10 @@ func TestToolBatchReceivedAdvancesThroughUnifiedApprovalEvents(t *testing.T) {
 		t.Fatalf("state = %s, want %s", start.NextState, StateAdvancingQueue)
 	}
 	if len(start.ScheduledActions) != 1 {
-		t.Fatalf("actions = %+v, want one ProcessNextToolCall", start.ScheduledActions)
+		t.Fatalf("actions = %+v, want one CheckToolQueue", start.ScheduledActions)
 	}
-	if _, ok := start.ScheduledActions[0].(ProcessNextToolCall); !ok {
-		t.Fatalf("action = %T, want ProcessNextToolCall", start.ScheduledActions[0])
+	if _, ok := start.ScheduledActions[0].(CheckToolQueue); !ok {
+		t.Fatalf("action = %T, want CheckToolQueue", start.ScheduledActions[0])
 	}
 
 	firstEvent := ToolCallNeedsApproval{Call: calls[0]}
@@ -59,7 +59,7 @@ func TestSnapshotIncludesPendingToolBatchProgress(t *testing.T) {
 		Index: 2,
 	}
 
-	snapshot := Snapshot{
+	snapshot := EngineView{
 		PendingTool:           &batch.Calls[1],
 		PendingToolBatchID:    batch.ID,
 		PendingToolBatchIndex: batch.Index,

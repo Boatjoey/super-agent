@@ -6,12 +6,12 @@ import (
 	. "super-agent/runtime"
 )
 
-func TestDefaultOutcomeResolverTurnsModelToolCallsIntoBatchEvent(t *testing.T) {
+func TestDefaultActionResultResolverTurnsModelToolCallsIntoBatchEvent(t *testing.T) {
 	store := NewMemoryApprovalStore()
-	resolver := NewDefaultOutcomeResolver(NewDefaultPolicy(), store)
+	resolver := NewDefaultActionResultResolver(NewDefaultPolicy(), store)
 	event, err := resolver.Resolve(ModelReplied{Response: ModelResponse{
 		ToolCalls: []ToolCall{{ID: "call-1", Name: "bash", Input: `{"command":"rm -rf /"}`}},
-	}}, OutcomeResolveInput{
+	}}, ActionResultInput{
 		ToolSpecs: []ToolSpec{{Name: "bash", Risky: true}},
 	})
 	if err != nil {
@@ -22,10 +22,10 @@ func TestDefaultOutcomeResolverTurnsModelToolCallsIntoBatchEvent(t *testing.T) {
 	}
 }
 
-func TestDefaultOutcomeResolverTurnsRiskyQueuedToolIntoApprovalEvent(t *testing.T) {
+func TestDefaultActionResultResolverTurnsRiskyQueuedToolIntoApprovalEvent(t *testing.T) {
 	store := NewMemoryApprovalStore()
-	resolver := NewDefaultOutcomeResolver(NewDefaultPolicy(), store)
-	event, err := resolver.Resolve(ToolQueueChecked{}, OutcomeResolveInput{
+	resolver := NewDefaultActionResultResolver(NewDefaultPolicy(), store)
+	event, err := resolver.Resolve(ToolQueueChecked{}, ActionResultInput{
 		ToolBatch: &ToolCallBatch{Calls: []ToolCall{{ID: "call-1", Name: "bash", Input: `{"command":"touch build.txt"}`}}},
 		ToolSpecs: []ToolSpec{{Name: "bash", Risky: true}},
 	})
@@ -37,12 +37,12 @@ func TestDefaultOutcomeResolverTurnsRiskyQueuedToolIntoApprovalEvent(t *testing.
 	}
 }
 
-func TestDefaultOutcomeResolverRejectsToolCallsWhenNoToolsAreConfigured(t *testing.T) {
+func TestDefaultActionResultResolverRejectsToolCallsWhenNoToolsAreConfigured(t *testing.T) {
 	store := NewMemoryApprovalStore()
-	resolver := NewDefaultOutcomeResolver(NewDefaultPolicy(), store)
+	resolver := NewDefaultActionResultResolver(NewDefaultPolicy(), store)
 	_, err := resolver.Resolve(ModelReplied{Response: ModelResponse{
 		ToolCalls: []ToolCall{{ID: "call-1", Name: "bash", Input: "pwd"}},
-	}}, OutcomeResolveInput{})
+	}}, ActionResultInput{})
 	if err == nil {
 		t.Fatal("Classify succeeded with no tool specs")
 	}
@@ -172,7 +172,7 @@ func TestApprovalStoreStoresPermissionPolicy(t *testing.T) {
 func TestEngineRejectsInvalidPermissionMode(t *testing.T) {
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(nil, nil)),
-		NewDefaultOutcomeResolver(NewDefaultPolicy(), NewMemoryApprovalStore()),
+		NewDefaultActionResultResolver(NewDefaultPolicy(), NewMemoryApprovalStore()),
 		DefaultStateChangeApplier{},
 		NewDefaultRunController(),
 		NewMemoryApprovalStore(),
@@ -186,9 +186,9 @@ func TestEngineRejectsInvalidPermissionMode(t *testing.T) {
 	}
 }
 
-func TestDefaultOutcomeResolverUsesToolBatchInput(t *testing.T) {
-	resolver := NewDefaultOutcomeResolver(NewDefaultPolicy(), NewMemoryApprovalStore())
-	event, err := resolver.Resolve(ToolQueueChecked{}, OutcomeResolveInput{
+func TestDefaultActionResultResolverUsesToolBatchInput(t *testing.T) {
+	resolver := NewDefaultActionResultResolver(NewDefaultPolicy(), NewMemoryApprovalStore())
+	event, err := resolver.Resolve(ToolQueueChecked{}, ActionResultInput{
 		ToolBatch: &ToolCallBatch{
 			ID:    "batch-1",
 			Calls: []ToolCall{{ID: "call-1", Name: "bash", Input: "pwd"}},

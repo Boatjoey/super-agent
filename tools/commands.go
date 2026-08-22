@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	runtime "super-agent/runtime/protocol"
+	"super-agent/runtime/protocol"
 )
 
 const (
@@ -24,8 +24,8 @@ type FormatTool struct{}
 type GitStatusTool struct{}
 type GitDiffTool struct{}
 
-func (RunCommandTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (RunCommandTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "run_command",
 		Description: "Run a workspace command with cwd, timeout_seconds, and max_output_bytes.",
 		Risky:       true,
@@ -39,7 +39,7 @@ func (RunCommandTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (t RunCommandTool) Run(ctx context.Context, call runtime.ToolCall) (string, error) {
+func (t RunCommandTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Command         string `json:"command"`
 		CWD             string `json:"cwd"`
@@ -67,8 +67,8 @@ func (t RunCommandTool) Run(ctx context.Context, call runtime.ToolCall) (string,
 	return output, nil
 }
 
-func (GoTestTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (GoTestTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "go_test",
 		Description: "Run go test for workspace packages.",
 		Risky:       true,
@@ -79,7 +79,7 @@ func (GoTestTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (GoTestTool) Run(ctx context.Context, call runtime.ToolCall) (string, error) {
+func (GoTestTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Packages []string `json:"packages"`
 		CWD      string   `json:"cwd"`
@@ -100,8 +100,8 @@ func (GoTestTool) Run(ctx context.Context, call runtime.ToolCall) (string, error
 	return runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "go", cmdArgs...)
 }
 
-func (FormatTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (FormatTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "format",
 		Description: "Run gofmt -w on workspace Go files.",
 		Risky:       true,
@@ -111,7 +111,7 @@ func (FormatTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (FormatTool) Run(ctx context.Context, call runtime.ToolCall) (string, error) {
+func (FormatTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Files []string `json:"files"`
 	}
@@ -135,15 +135,15 @@ func (FormatTool) Run(ctx context.Context, call runtime.ToolCall) (string, error
 	return "formatted " + strconv.Itoa(len(files)) + plural(len(files), " file", " files"), nil
 }
 
-func (GitStatusTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (GitStatusTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "git_status",
 		Description: "Show git status --short for the workspace.",
 		Parameters:  objectSchema(map[string]any{}, nil),
 	}
 }
 
-func (GitStatusTool) Run(ctx context.Context, call runtime.ToolCall) (string, error) {
+func (GitStatusTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	if call.Input != "" && call.Input != "{}" {
 		var args map[string]any
 		if err := json.Unmarshal([]byte(call.Input), &args); err != nil {
@@ -157,8 +157,8 @@ func (GitStatusTool) Run(ctx context.Context, call runtime.ToolCall) (string, er
 	return runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "git", "status", "--short")
 }
 
-func (GitDiffTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (GitDiffTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "git_diff",
 		Description: "Show git diff for optional workspace paths.",
 		Parameters: objectSchema(map[string]any{
@@ -167,7 +167,7 @@ func (GitDiffTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (GitDiffTool) Run(ctx context.Context, call runtime.ToolCall) (string, error) {
+func (GitDiffTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Paths []string `json:"paths"`
 	}

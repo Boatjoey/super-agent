@@ -66,10 +66,10 @@ func (e *Engine) resolveApproval(_ context.Context, decision machine.Event, chun
 }
 
 func (e *Engine) pendingApprovalCallLocked() (protocol.ToolCall, error) {
-	if e.state.State != machine.StateWaitingApproval || e.state.PendingTool == nil {
+	if e.runtimeData.State != machine.StateWaitingApproval || e.runtimeData.PendingTool == nil {
 		return protocol.ToolCall{}, errors.New("no tool is waiting for approval")
 	}
-	return *e.state.PendingTool, nil
+	return *e.runtimeData.PendingTool, nil
 }
 
 func (e *Engine) continueRun(chunks func(protocol.StreamChunk)) error {
@@ -83,24 +83,24 @@ func (e *Engine) continueRun(chunks func(protocol.StreamChunk)) error {
 func (e *Engine) Cancel() error { e.runs.CancelRun(); return e.dispatch(machine.CancelRequested{}) }
 func (e *Engine) Reset() error {
 	e.runs.CancelRun()
-	e.runs.StartNewGeneration()
+	e.runs.InvalidateCurrentRun()
 	return e.dispatch(machine.ResetRequested{})
 }
 
 func (e *Engine) ReplaceMessages(messages []protocol.Message) {
 	e.runs.CancelRun()
-	e.runs.StartNewGeneration()
+	e.runs.InvalidateCurrentRun()
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.state.Messages = append([]protocol.Message(nil), messages...)
-	e.state.PendingTool = nil
-	e.state.PendingPermission = nil
-	e.state.CurrentTool = nil
-	e.state.ToolBatch = nil
-	e.state.StreamingContent = ""
-	e.state.StreamingReasoning = ""
-	e.state.State = machine.StateIdle
-	e.scheduler.Clear()
+	e.runtimeData.Messages = append([]protocol.Message(nil), messages...)
+	e.runtimeData.PendingTool = nil
+	e.runtimeData.PendingPermission = nil
+	e.runtimeData.CurrentTool = nil
+	e.runtimeData.ToolBatch = nil
+	e.runtimeData.StreamingContent = ""
+	e.runtimeData.StreamingReasoning = ""
+	e.runtimeData.State = machine.StateIdle
+	e.actionQueue.Clear()
 }
 
 func (e *Engine) SetPermissionPolicy(mode execution.PermissionMode, rules execution.PermissionRules) error {
@@ -111,7 +111,7 @@ func (e *Engine) SetPermissionPolicy(mode execution.PermissionMode, rules execut
 	}
 	setter, ok := e.resolver.(policySetter)
 	if !ok {
-		return errors.New("outcome resolver does not support policy updates")
+		return errors.New("action result resolver does not support policy updates")
 	}
 	setter.SetPolicy(execution.NewPolicy(mode, rules))
 	if store, ok := e.approvals.(policyStore); ok {
@@ -126,11 +126,11 @@ func (e *Engine) CompactSummary(ctx context.Context) (string, error) {
 		return "", nil
 	}
 	prompt := protocol.Message{Role: protocol.RoleUser, Content: "Summarize this conversation for context compaction. Preserve goals, decisions, files changed, tool results, and unresolved next steps."}
-	outcome, err := e.runner.Run(ctx, execution.QueuedAction{Action: machine.CallModel{}}, execution.ExecutionInput{Messages: append(messages, prompt)}, nil)
+	completion, err := e.runner.Run(ctx, execution.QueuedAction{Action: machine.CallModel{}}, execution.ScheduledActionInput{Messages: append(messages, prompt)}, nil)
 	if err != nil {
 		return "", err
 	}
-	reply, ok := outcome.Result.(execution.ModelReplied)
+	reply, ok := completion.Result.(execution.ModelReplied)
 	if !ok {
 		return "", errors.New("compact summary did not return a model response")
 	}

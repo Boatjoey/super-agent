@@ -2,42 +2,33 @@ package machine
 
 import "fmt"
 
-type SchedulerOp interface {
-	isSchedulerOp()
-}
-
-type ClearScheduledActionsOp struct{}
-
-func (ClearScheduledActionsOp) isSchedulerOp() {}
-
 type StateChangeResult struct {
-	State        EngineState
-	SchedulerOps []SchedulerOp
+	RuntimeData RuntimeData
 }
 
 type StateChangeApplier interface {
-	ApplyStateChanges(state EngineState, result TransitionResult) (StateChangeResult, error)
+	ApplyStateChanges(runtimeData RuntimeData, result TransitionResult) (StateChangeResult, error)
 }
 
 type DefaultStateChangeApplier struct{}
 
-func (DefaultStateChangeApplier) ApplyStateChanges(state EngineState, result TransitionResult) (StateChangeResult, error) {
-	next := cloneEngineState(state)
+func (DefaultStateChangeApplier) ApplyStateChanges(runtimeData RuntimeData, result TransitionResult) (StateChangeResult, error) {
+	next := cloneRuntimeData(runtimeData)
 	next.State = result.NextState
-	changeResult := StateChangeResult{State: next}
+	changeResult := StateChangeResult{RuntimeData: next}
 	for _, stateChange := range result.StateChanges {
 		if err := applyStateChange(&changeResult, stateChange); err != nil {
 			return StateChangeResult{}, err
 		}
 	}
-	if err := ValidateState(changeResult.State); err != nil {
+	if err := ValidateRuntimeData(changeResult.RuntimeData); err != nil {
 		return StateChangeResult{}, err
 	}
 	return changeResult, nil
 }
 
 func applyStateChange(changeResult *StateChangeResult, stateChange StateChange) error {
-	state := &changeResult.State
+	state := &changeResult.RuntimeData
 	switch m := stateChange.(type) {
 	case AppendUserMessage:
 		state.StreamingContent = ""
@@ -87,9 +78,7 @@ func applyStateChange(changeResult *StateChangeResult, stateChange StateChange) 
 		state.CurrentTool = nil
 	case ClearToolCallBatch:
 		state.ToolBatch = nil
-	case ClearScheduledActions:
-		changeResult.SchedulerOps = append(changeResult.SchedulerOps, ClearScheduledActionsOp{})
-	case ResetContext:
+	case ResetConversation:
 		state.Messages = systemMessages(state.Messages)
 		state.PendingTool = nil
 		state.PendingPermission = nil
@@ -97,30 +86,29 @@ func applyStateChange(changeResult *StateChangeResult, stateChange StateChange) 
 		state.ToolBatch = nil
 		state.StreamingContent = ""
 		state.StreamingReasoning = ""
-		changeResult.SchedulerOps = append(changeResult.SchedulerOps, ClearScheduledActionsOp{})
 	default:
 		return InvariantViolationError{Reason: fmt.Sprintf("unknown state change %T", m)}
 	}
 	return nil
 }
 
-func cloneEngineState(state EngineState) EngineState {
-	cloned := state
-	cloned.Messages = make([]Message, len(state.Messages))
-	for i, message := range state.Messages {
+func cloneRuntimeData(runtimeData RuntimeData) RuntimeData {
+	cloned := runtimeData
+	cloned.Messages = make([]Message, len(runtimeData.Messages))
+	for i, message := range runtimeData.Messages {
 		cloned.Messages[i] = cloneMessage(message)
 	}
-	cloned.PendingTool = cloneToolCall(state.PendingTool)
-	if state.PendingPermission != nil {
-		request := clonePermissionRequest(*state.PendingPermission)
+	cloned.PendingTool = cloneToolCall(runtimeData.PendingTool)
+	if runtimeData.PendingPermission != nil {
+		request := clonePermissionRequest(*runtimeData.PendingPermission)
 		cloned.PendingPermission = &request
 	}
-	cloned.CurrentTool = cloneToolCall(state.CurrentTool)
-	if state.ToolBatch != nil {
+	cloned.CurrentTool = cloneToolCall(runtimeData.CurrentTool)
+	if runtimeData.ToolBatch != nil {
 		cloned.ToolBatch = &ToolCallBatch{
-			ID:    state.ToolBatch.ID,
-			Calls: append([]ToolCall(nil), state.ToolBatch.Calls...),
-			Index: state.ToolBatch.Index,
+			ID:    runtimeData.ToolBatch.ID,
+			Calls: append([]ToolCall(nil), runtimeData.ToolBatch.Calls...),
+			Index: runtimeData.ToolBatch.Index,
 		}
 	}
 	return cloned

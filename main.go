@@ -36,7 +36,7 @@ func main() {
 		os.Exit(1)
 	}
 	cwd, _ := os.Getwd()
-	if _, err := tea.NewProgram(tui.New(app.NewTUIConversation(session), tui.TUIInfo{
+	if _, err := tea.NewProgram(tui.New(app.NewTUIConversation(session), tui.StartupInfo{
 		Provider:         cfg.Provider,
 		ModelName:        llm.ModelDisplayName(cfg.Provider, cfg.ModelConfig),
 		AutoApprove:      cfg.AutoApproveTools,

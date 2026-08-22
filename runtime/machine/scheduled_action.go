@@ -14,13 +14,13 @@ type RunTool struct {
 
 func (RunTool) isScheduledAction() {}
 
-type ProcessNextToolCall struct{}
+type CheckToolQueue struct{}
 
-func (ProcessNextToolCall) isScheduledAction() {}
+func (CheckToolQueue) isScheduledAction() {}
 
 // AllScheduledActions lists every ScheduledAction type for registration, serialization, and testing.
 var AllScheduledActions = []ScheduledAction{
 	CallModel{},
 	RunTool{},
-	ProcessNextToolCall{},
+	CheckToolQueue{},
 }

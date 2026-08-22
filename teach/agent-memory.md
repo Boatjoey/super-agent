@@ -2,7 +2,7 @@
 
 ## 上下文是什么
 
-本项目没有独立的向量数据库或跨会话“长期记忆”。Agent 当前能记住的内容，本质上是交给模型的 `[]Message`。它们保存在 `runtime/machine.EngineState.Messages` 中。
+本项目没有独立的向量数据库或跨会话“长期记忆”。Agent 当前能记住的内容，本质上是交给模型的 `[]Message`。它们保存在 `runtime/machine.RuntimeData.Messages` 中。
 
 `Message` 定义在 `runtime/protocol/types.go`，有四种角色：
 
@@ -67,7 +67,7 @@ assistant(tool_calls)
 
 上下文有两个层次：
 
-- `runtime/machine`中的 `EngineState.Messages` 是当前运行时真值，模型直接使用它。
+- `runtime/machine`中的 `RuntimeData.Messages` 是当前运行时真值，模型直接使用它。
 - `~/.superagent/sessions/<session-id>/events.jsonl` 是持久化的事件日志，用于重建历史。
 
 `runtime/session.snapshotEmitter` 观察 Engine 快照，将新增消息发给 TUI，同时通过 `Repository` 持久化。它用 `emittedMessages` 记录已发送的位置，避免重复写入。
@@ -109,7 +109,7 @@ assistant(tool_calls)
 
 ## 重置上下文：Reset
 
-`Session.Reset` 先写入 `reset` 事件，再调用 `Engine.Reset`。状态机的 `ResetContext` StateChange 会清除非 system 消息，但保留所有 `system` 消息。
+`Session.Reset` 先写入 `reset` 事件，再调用 `Engine.Reset`。状态机的 `ResetConversation` StateChange 会清除非 system 消息，但保留所有 `system` 消息。
 
 ```text
 reset 前：system + user + assistant + tool + ...

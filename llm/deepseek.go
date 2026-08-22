@@ -1,10 +1,10 @@
 package llm
 
 // NewDeepSeek returns an OpenAIModel configured for DeepSeek API.
-func NewDeepSeek(cfg Config) *OpenAIModel {
-	cfg = withDefaults(cfg, Config{
+func NewDeepSeek(cfg ProviderConfig) *OpenAIModel {
+	cfg = withDefaults(cfg, ProviderConfig{
 		BaseURL: "https://api.deepseek.com",
 		Model:   "deepseek-reasoner",
 	})
-	return NewOpenAIModel(cfg)
+	return newOpenAIModel(cfg)
 }

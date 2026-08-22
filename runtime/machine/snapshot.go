@@ -16,71 +16,71 @@ type MachineSnapshot struct {
 	queue       queueView
 }
 
-func SnapshotFrom(state EngineState) (MachineSnapshot, error) {
-	if err := ValidateState(state); err != nil {
+func SnapshotFrom(runtimeData RuntimeData) (MachineSnapshot, error) {
+	if err := ValidateRuntimeData(runtimeData); err != nil {
 		return MachineSnapshot{}, err
 	}
 	snapshot := MachineSnapshot{
-		state:       state.State,
-		pendingTool: cloneToolCall(state.PendingTool),
-		currentTool: cloneToolCall(state.CurrentTool),
-		queue:       queueView{hasBatch: state.ToolBatch != nil},
+		state:       runtimeData.State,
+		pendingTool: cloneToolCall(runtimeData.PendingTool),
+		currentTool: cloneToolCall(runtimeData.CurrentTool),
+		queue:       queueView{hasBatch: runtimeData.ToolBatch != nil},
 	}
-	if state.ToolBatch != nil && state.ToolBatch.Index < len(state.ToolBatch.Calls) {
-		call := state.ToolBatch.Calls[state.ToolBatch.Index]
+	if runtimeData.ToolBatch != nil && runtimeData.ToolBatch.Index < len(runtimeData.ToolBatch.Calls) {
+		call := runtimeData.ToolBatch.Calls[runtimeData.ToolBatch.Index]
 		snapshot.queue.next = &call
 	}
 	return snapshot, nil
 }
 
-func ValidateState(state EngineState) error {
+func ValidateRuntimeData(runtimeData RuntimeData) error {
 	invalid := func(reason string) error { return InvariantViolationError{Reason: reason} }
-	if state.ToolBatch != nil && (state.ToolBatch.Index < 0 || state.ToolBatch.Index > len(state.ToolBatch.Calls)) {
+	if runtimeData.ToolBatch != nil && (runtimeData.ToolBatch.Index < 0 || runtimeData.ToolBatch.Index > len(runtimeData.ToolBatch.Calls)) {
 		return invalid("tool batch index is out of range")
 	}
-	if state.PendingTool == nil && state.PendingPermission != nil {
+	if runtimeData.PendingTool == nil && runtimeData.PendingPermission != nil {
 		return invalid("pending permission has no pending tool")
 	}
-	if state.StreamingContent != "" || state.StreamingReasoning != "" {
-		if state.State != StateWaitingLLM {
+	if runtimeData.StreamingContent != "" || runtimeData.StreamingReasoning != "" {
+		if runtimeData.State != StateWaitingLLM {
 			return invalid("streaming content exists outside WaitingLLM")
 		}
 	}
 
-	switch state.State {
+	switch runtimeData.State {
 	case StateInitializing, StateIdle, StateWaitingLLM:
-		if state.PendingTool != nil || state.PendingPermission != nil || state.CurrentTool != nil || state.ToolBatch != nil {
-			return invalid(fmt.Sprintf("%s contains tool execution context", state.State))
+		if runtimeData.PendingTool != nil || runtimeData.PendingPermission != nil || runtimeData.CurrentTool != nil || runtimeData.ToolBatch != nil {
+			return invalid(fmt.Sprintf("%s contains tool execution context", runtimeData.State))
 		}
 	case StateAdvancingQueue:
-		if state.ToolBatch == nil {
+		if runtimeData.ToolBatch == nil {
 			return invalid("AdvancingQueue has no tool batch")
 		}
-		if state.PendingTool != nil || state.PendingPermission != nil || state.CurrentTool != nil {
+		if runtimeData.PendingTool != nil || runtimeData.PendingPermission != nil || runtimeData.CurrentTool != nil {
 			return invalid("AdvancingQueue contains a pending or current tool")
 		}
 	case StateWaitingApproval:
-		if state.ToolBatch == nil || state.PendingTool == nil || state.PendingPermission == nil {
+		if runtimeData.ToolBatch == nil || runtimeData.PendingTool == nil || runtimeData.PendingPermission == nil {
 			return invalid("WaitingApproval requires a batch, pending tool, and permission")
 		}
-		if state.CurrentTool != nil {
+		if runtimeData.CurrentTool != nil {
 			return invalid("WaitingApproval contains a current tool")
 		}
-		if !batchPreviousCallMatches(state.ToolBatch, state.PendingTool) {
+		if !batchPreviousCallMatches(runtimeData.ToolBatch, runtimeData.PendingTool) {
 			return invalid("pending tool does not match the advanced batch call")
 		}
 	case StateRunningTool:
-		if state.ToolBatch == nil || state.CurrentTool == nil {
+		if runtimeData.ToolBatch == nil || runtimeData.CurrentTool == nil {
 			return invalid("RunningTool requires a batch and current tool")
 		}
-		if state.PendingTool != nil || state.PendingPermission != nil {
+		if runtimeData.PendingTool != nil || runtimeData.PendingPermission != nil {
 			return invalid("RunningTool contains pending approval context")
 		}
-		if !batchPreviousCallMatches(state.ToolBatch, state.CurrentTool) {
+		if !batchPreviousCallMatches(runtimeData.ToolBatch, runtimeData.CurrentTool) {
 			return invalid("current tool does not match the advanced batch call")
 		}
 	default:
-		return invalid("unknown state " + string(state.State))
+		return invalid("unknown state " + string(runtimeData.State))
 	}
 	return nil
 }

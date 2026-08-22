@@ -29,7 +29,7 @@ func TestClaudeModelSendsSystemMessage(t *testing.T) {
 	}))
 	defer server.Close()
 
-	model := NewClaudeModel(Config{BaseURL: server.URL, APIKey: "test-key", Model: "test-model"})
+	model := NewClaude(ProviderConfig{BaseURL: server.URL, APIKey: "test-key", Model: "test-model"})
 	_, err := model.Next(context.Background(), []runtime.Message{
 		{Role: runtime.RoleSystem, Content: "project instructions"},
 		{Role: runtime.RoleUser, Content: "hi"},

@@ -208,7 +208,7 @@ func (a *App) handleReset() {
 }
 
 func (a *App) handleSessions() {
-	summaries, err := a.session.Sessions()
+	summaries, err := a.session.ListSessions()
 	if err != nil {
 		a.err = "Sessions failed: " + err.Error()
 		return
@@ -237,7 +237,7 @@ func (a *App) handleRename(text string, parts []string) {
 		return
 	}
 	title := strings.TrimSpace(strings.TrimPrefix(text, parts[0]+" "+parts[1]))
-	if err := a.session.Rename(parts[1], title); err != nil {
+	if err := a.session.RenameSession(parts[1], title); err != nil {
 		a.err = "Rename failed: " + err.Error()
 		return
 	}

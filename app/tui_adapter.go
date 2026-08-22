@@ -17,8 +17,8 @@ func NewTUIConversation(session *runtime.Session) *TUIConversation {
 	return &TUIConversation{session: session}
 }
 
-func (a *TUIConversation) Snapshot() tui.Snapshot {
-	return toTUISnapshot(a.session.Snapshot())
+func (a *TUIConversation) Snapshot() tui.ConversationView {
+	return toConversationView(a.session.Snapshot())
 }
 
 func (a *TUIConversation) RunTurn(ctx context.Context, query string, events chan<- tui.Event, approvals <-chan tui.ApprovalDecision) error {
@@ -74,8 +74,8 @@ func (a *TUIConversation) AutoApproveTools() bool {
 	return a.session.AutoApproveTools()
 }
 
-func (a *TUIConversation) Sessions() ([]tui.SessionSummary, error) {
-	summaries, err := a.session.Sessions()
+func (a *TUIConversation) ListSessions() ([]tui.SessionSummary, error) {
+	summaries, err := a.session.ListSessions()
 	if err != nil {
 		return nil, err
 	}
@@ -87,8 +87,8 @@ func (a *TUIConversation) Sessions() ([]tui.SessionSummary, error) {
 }
 
 func (a *TUIConversation) Resume(id string) error { return a.session.Resume(runtime.SessionID(id)) }
-func (a *TUIConversation) Rename(id, title string) error {
-	return a.session.Rename(runtime.SessionID(id), title)
+func (a *TUIConversation) RenameSession(id, title string) error {
+	return a.session.RenameSession(runtime.SessionID(id), title)
 }
 func (a *TUIConversation) DeleteSession(id string) error {
 	return a.session.DeleteSession(runtime.SessionID(id))
@@ -115,18 +115,18 @@ func toTUIEvent(event runtime.SessionEvent) tui.Event {
 	}
 }
 
-func toTUISnapshot(snapshot runtime.Snapshot) tui.Snapshot {
-	messages := make([]tui.Message, 0, len(snapshot.Messages))
-	for _, message := range snapshot.Messages {
+func toConversationView(view runtime.EngineView) tui.ConversationView {
+	messages := make([]tui.Message, 0, len(view.Messages))
+	for _, message := range view.Messages {
 		messages = append(messages, toTUIMessage(message))
 	}
-	result := tui.Snapshot{AgentStatus: toTUIStatus(snapshot.State), Messages: messages, PendingToolBatchIndex: snapshot.PendingToolBatchIndex, PendingToolBatchTotal: snapshot.PendingToolBatchTotal, StreamingMessage: toTUIMessagePtr(snapshot.StreamingMessage)}
-	if snapshot.PendingTool != nil {
-		call := toTUIToolCall(*snapshot.PendingTool)
+	result := tui.ConversationView{AgentStatus: toTUIStatus(view.State), Messages: messages, PendingToolBatchIndex: view.PendingToolBatchIndex, PendingToolBatchTotal: view.PendingToolBatchTotal, StreamingMessage: toTUIMessagePtr(view.StreamingMessage)}
+	if view.PendingTool != nil {
+		call := toTUIToolCall(*view.PendingTool)
 		result.PendingTool = &call
 	}
-	if snapshot.PendingPermission != nil {
-		req := toTUIPermission(*snapshot.PendingPermission)
+	if view.PendingPermission != nil {
+		req := toTUIPermission(*view.PendingPermission)
 		result.PendingPermission = &req
 	}
 	return result

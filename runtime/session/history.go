@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func (s *Session) Sessions() ([]Summary, error) {
+func (s *Session) ListSessions() ([]Summary, error) {
 	if s.repository == nil {
 		return nil, errors.New("session store is not configured")
 	}
@@ -34,11 +34,11 @@ func (s *Session) Resume(id SessionID) error {
 	return nil
 }
 
-func (s *Session) Rename(id SessionID, title string) error {
+func (s *Session) RenameSession(id SessionID, title string) error {
 	if s.repository == nil {
 		return errors.New("session store is not configured")
 	}
-	return s.repository.Rename(id, title)
+	return s.repository.RenameSession(id, title)
 }
 
 func (s *Session) DeleteSession(id SessionID) error {
@@ -99,7 +99,7 @@ func (s *Session) Undo() error {
 	if s.workspace == nil {
 		return errors.New("workspace is not configured")
 	}
-	files, messages, index, err := s.repository.CheckpointState(s.metaID())
+	files, messages, index, err := s.repository.LoadUndoPoint(s.metaID())
 	if err != nil {
 		return errors.New("no checkpoint to undo")
 	}

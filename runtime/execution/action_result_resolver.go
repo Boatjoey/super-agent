@@ -5,29 +5,29 @@ import (
 	"fmt"
 )
 
-type OutcomeResolver interface {
-	Resolve(result ExecutionResult, input OutcomeResolveInput) (Event, error)
+type ActionResultResolver interface {
+	Resolve(result ScheduledActionResult, input ActionResultInput) (Event, error)
 }
 
-type OutcomeResolveInput struct {
+type ActionResultInput struct {
 	ToolBatch *ToolCallBatch
 	ToolSpecs []ToolSpec
 }
 
-type DefaultOutcomeResolver struct {
+type DefaultActionResultResolver struct {
 	policy    Policy
 	approvals ApprovalStore
 }
 
-func NewDefaultOutcomeResolver(policy Policy, approvals ApprovalStore) *DefaultOutcomeResolver {
-	return &DefaultOutcomeResolver{policy: policy, approvals: approvals}
+func NewDefaultActionResultResolver(policy Policy, approvals ApprovalStore) *DefaultActionResultResolver {
+	return &DefaultActionResultResolver{policy: policy, approvals: approvals}
 }
 
-func (r *DefaultOutcomeResolver) SetPolicy(policy Policy) {
+func (r *DefaultActionResultResolver) SetPolicy(policy Policy) {
 	r.policy = policy
 }
 
-func (r *DefaultOutcomeResolver) Resolve(result ExecutionResult, input OutcomeResolveInput) (Event, error) {
+func (r *DefaultActionResultResolver) Resolve(result ScheduledActionResult, input ActionResultInput) (Event, error) {
 	switch result := result.(type) {
 	case ModelReplied:
 		if len(result.Response.ToolCalls) == 0 {
@@ -53,7 +53,7 @@ func (r *DefaultOutcomeResolver) Resolve(result ExecutionResult, input OutcomeRe
 	}
 }
 
-func (r *DefaultOutcomeResolver) resolveToolCall(call ToolCall, specs []ToolSpec) (Event, error) {
+func (r *DefaultActionResultResolver) resolveToolCall(call ToolCall, specs []ToolSpec) (Event, error) {
 	decision := r.decision(call, specs)
 	if decision == DecisionDenied {
 		req := r.policy.PermissionRequest(call, ToolPolicyInput{ToolSpecs: specs})
@@ -68,7 +68,7 @@ func (r *DefaultOutcomeResolver) resolveToolCall(call ToolCall, specs []ToolSpec
 	}, nil
 }
 
-func (r *DefaultOutcomeResolver) decision(call ToolCall, specs []ToolSpec) ToolDecision {
+func (r *DefaultActionResultResolver) decision(call ToolCall, specs []ToolSpec) ToolDecision {
 	if r.approvals.AutoApproveTools() || r.approvals.IsAlwaysAllowed(NewApprovalKey(call)) {
 		return DecisionRunDirectly
 	}

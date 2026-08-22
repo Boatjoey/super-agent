@@ -98,7 +98,7 @@ type recordingExecutor struct {
 	actions []ScheduledAction
 }
 
-func (x *recordingExecutor) Execute(_ context.Context, action ScheduledAction, _ ExecutionInput, _ func(StreamChunk)) (ExecutionResult, error) {
+func (x *recordingExecutor) Execute(_ context.Context, action ScheduledAction, _ ScheduledActionInput, _ func(StreamChunk)) (ScheduledActionResult, error) {
 	x.actions = append(x.actions, action)
 	return ModelReplied{Response: ModelResponse{Content: "from executor"}}, nil
 }
@@ -108,7 +108,7 @@ type failingOnceExecutor struct {
 	seen  []Message
 }
 
-func (x *failingOnceExecutor) Execute(_ context.Context, _ ScheduledAction, input ExecutionInput, _ func(StreamChunk)) (ExecutionResult, error) {
+func (x *failingOnceExecutor) Execute(_ context.Context, _ ScheduledAction, input ScheduledActionInput, _ func(StreamChunk)) (ScheduledActionResult, error) {
 	x.calls++
 	x.seen = append([]Message(nil), input.Messages...)
 	if x.calls == 1 {
@@ -297,7 +297,7 @@ func TestEngineRecordsRuntimeErrorInMessagesForNextTurn(t *testing.T) {
 	}
 }
 
-func TestCustomPolicyClassifiesToolCallWithContext(t *testing.T) {
+func TestCustomPolicyClassifiesToolCallWithInput(t *testing.T) {
 	model := &scriptedModel{responses: []ModelResponse{
 		{ToolCalls: []ToolCall{{Name: "bash", Input: "printf ok"}}},
 		{Content: "done"},
@@ -358,7 +358,7 @@ func TestWaitingApprovalKeepsRunContext(t *testing.T) {
 	approvals := NewMemoryApprovalStore()
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(model, tools)),
-		NewDefaultOutcomeResolver(NewDefaultPolicy(), approvals),
+		NewDefaultActionResultResolver(NewDefaultPolicy(), approvals),
 		DefaultStateChangeApplier{},
 		runs,
 		approvals,
@@ -426,7 +426,7 @@ func TestFinalAssistantResponseFinishesRun(t *testing.T) {
 	approvals := NewMemoryApprovalStore()
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(model, &fakeTool{})),
-		NewDefaultOutcomeResolver(NewDefaultPolicy(), approvals),
+		NewDefaultActionResultResolver(NewDefaultPolicy(), approvals),
 		DefaultStateChangeApplier{},
 		runs,
 		approvals,
@@ -459,7 +459,7 @@ func TestCancelAndResetClearRunContext(t *testing.T) {
 	}
 
 	runs.StartRun(context.Background())
-	runs.StartNewGeneration()
+	runs.InvalidateCurrentRun()
 	if _, ok := runs.CurrentContext(); ok {
 		t.Fatal("run context still exists after reset generation")
 	}
@@ -477,7 +477,7 @@ func TestApproveAlwaysWritesStoreWithoutHoldingEngineLock(t *testing.T) {
 	store := newBlockingApprovalStore()
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(model, tools)),
-		NewDefaultOutcomeResolver(NewDefaultPolicy(), store),
+		NewDefaultActionResultResolver(NewDefaultPolicy(), store),
 		DefaultStateChangeApplier{},
 		NewDefaultRunController(),
 		store,
@@ -841,8 +841,8 @@ func TestToolResultAdvancesQueueThroughEngine(t *testing.T) {
 	if len(decision.ScheduledActions) != 1 {
 		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
 	}
-	if _, ok := decision.ScheduledActions[0].(ProcessNextToolCall); !ok {
-		t.Fatalf("action = %T, want ProcessNextToolCall", decision.ScheduledActions[0])
+	if _, ok := decision.ScheduledActions[0].(CheckToolQueue); !ok {
+		t.Fatalf("action = %T, want CheckToolQueue", decision.ScheduledActions[0])
 	}
 }
 
@@ -859,8 +859,8 @@ func TestDenialAdvancesQueueThroughEngine(t *testing.T) {
 	if len(decision.ScheduledActions) != 1 {
 		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
 	}
-	if _, ok := decision.ScheduledActions[0].(ProcessNextToolCall); !ok {
-		t.Fatalf("action = %T, want ProcessNextToolCall", decision.ScheduledActions[0])
+	if _, ok := decision.ScheduledActions[0].(CheckToolQueue); !ok {
+		t.Fatalf("action = %T, want CheckToolQueue", decision.ScheduledActions[0])
 	}
 }
 
@@ -1408,26 +1408,26 @@ func newBlockingSpecsRunner() *blockingSpecsRunner {
 	}
 }
 
-func (r *blockingSpecsRunner) Run(_ context.Context, action QueuedAction, _ ExecutionInput, _ func(StreamChunk)) (ActionOutcome, error) {
-	outcome := ActionOutcome{RunID: action.RunID, ActionID: action.ActionID}
-	switch eff := action.Action.(type) {
+func (r *blockingSpecsRunner) Run(_ context.Context, action QueuedAction, _ ScheduledActionInput, _ func(StreamChunk)) (ActionCompletion, error) {
+	completion := ActionCompletion{RunID: action.RunID, ActionID: action.ActionID}
+	switch scheduledAction := action.Action.(type) {
 	case CallModel:
 		r.modelRuns++
 		if r.modelRuns == 1 {
-			outcome.Result = ModelReplied{Response: ModelResponse{
+			completion.Result = ModelReplied{Response: ModelResponse{
 				ToolCalls: []ToolCall{{ID: "call-1", Name: "bash", Input: "pwd"}},
 			}}
 		} else {
-			outcome.Result = ModelReplied{Response: ModelResponse{Content: "done"}}
+			completion.Result = ModelReplied{Response: ModelResponse{Content: "done"}}
 		}
 	case RunTool:
-		outcome.Result = ToolFinished{Call: eff.Call, Result: "ok"}
-	case ProcessNextToolCall:
-		outcome.Result = ToolQueueChecked{}
+		completion.Result = ToolFinished{Call: scheduledAction.Call, Result: "ok"}
+	case CheckToolQueue:
+		completion.Result = ToolQueueChecked{}
 	default:
-		outcome.Result = ModelReplied{Response: ModelResponse{Content: "done"}}
+		completion.Result = ModelReplied{Response: ModelResponse{Content: "done"}}
 	}
-	return outcome, nil
+	return completion, nil
 }
 
 func (r *blockingSpecsRunner) ToolSpecs() []ToolSpec {
@@ -1449,7 +1449,7 @@ func TestClassifierToolSpecsAreFetchedWithoutHoldingEngineLock(t *testing.T) {
 	store := NewMemoryApprovalStore()
 	engine := NewEngineWithComponents(
 		runner,
-		NewDefaultOutcomeResolver(NewDefaultPolicy(), store),
+		NewDefaultActionResultResolver(NewDefaultPolicy(), store),
 		DefaultStateChangeApplier{},
 		NewDefaultRunController(),
 		store,

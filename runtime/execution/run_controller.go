@@ -11,7 +11,7 @@ type ActionID string
 
 type RunController interface {
 	StartRun(parent context.Context) (RunID, context.Context)
-	StartNewGeneration()
+	InvalidateCurrentRun()
 	CancelRun()
 	FinishRun(runID RunID)
 	CurrentRunID() RunID
@@ -43,7 +43,7 @@ func (c *DefaultRunController) StartRun(parent context.Context) (RunID, context.
 	return c.runID, ctx
 }
 
-func (c *DefaultRunController) StartNewGeneration() {
+func (c *DefaultRunController) InvalidateCurrentRun() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cancelLocked()

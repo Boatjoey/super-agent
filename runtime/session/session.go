@@ -107,7 +107,7 @@ func (s *Session) Metadata() Metadata {
 	return s.meta
 }
 
-func (s *Session) Snapshot() Snapshot {
+func (s *Session) Snapshot() EngineView {
 	return s.engine.Snapshot()
 }
 

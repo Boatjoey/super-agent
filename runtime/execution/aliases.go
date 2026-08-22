@@ -36,5 +36,5 @@ type ToolResultReceived = machine.ToolResultReceived
 type ScheduledAction = machine.ScheduledAction
 type CallModel = machine.CallModel
 type RunTool = machine.RunTool
-type ProcessNextToolCall = machine.ProcessNextToolCall
+type CheckToolQueue = machine.CheckToolQueue
 type AppendStreamingAssistant = machine.AppendStreamingAssistant

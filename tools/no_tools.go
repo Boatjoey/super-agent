@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 
-	runtime "super-agent/runtime/protocol"
+	"super-agent/runtime/protocol"
 )
 
 type NoTools struct{}
 
-func (NoTools) Specs() []runtime.ToolSpec {
+func (NoTools) Specs() []protocol.ToolSpec {
 	return nil
 }
 
-func (NoTools) Run(context.Context, runtime.ToolCall) (string, error) {
+func (NoTools) Run(context.Context, protocol.ToolCall) (string, error) {
 	return "", errors.New("tools are disabled")
 }

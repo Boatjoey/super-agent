@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type TUIInfo struct {
+type StartupInfo struct {
 	Provider         string
 	ModelName        string
 	AutoApprove      bool
@@ -29,7 +29,7 @@ type App struct {
 	viewport          viewport.Model
 	spinner           spinner.Model
 	styles            Styles
-	info              TUIInfo
+	info              StartupInfo
 	history           []string
 	historyIdx        int
 	historyDraft      string
@@ -84,7 +84,7 @@ func waitForEvent(ch <-chan Event, turn int) tea.Cmd {
 	}
 }
 
-func New(session Conversation, info TUIInfo) App {
+func New(session Conversation, info StartupInfo) App {
 	styles := DefaultStyles()
 
 	input := textarea.New()

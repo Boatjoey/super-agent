@@ -136,14 +136,14 @@ func (r Repository) Load(id session.SessionID) ([]protocol.Message, session.Meta
 	return messages, toSessionMetadata(meta), nil
 }
 
-func (r Repository) Rename(id session.SessionID, title string) error {
-	return r.store.Rename(SessionID(id), title)
+func (r Repository) RenameSession(id session.SessionID, title string) error {
+	return r.store.RenameSession(SessionID(id), title)
 }
 func (r Repository) Delete(id session.SessionID) error {
 	return r.store.Delete(SessionID(id))
 }
 
-func (r Repository) CheckpointState(id session.SessionID) ([]session.FileSnapshot, []protocol.Message, int, error) {
+func (r Repository) LoadUndoPoint(id session.SessionID) ([]session.FileSnapshot, []protocol.Message, int, error) {
 	cp, messages, index, err := r.store.CheckpointUndo(SessionID(id))
 	if err != nil {
 		return nil, nil, 0, err

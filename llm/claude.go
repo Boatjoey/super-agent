@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	runtime "super-agent/runtime/protocol"
+	"super-agent/runtime/protocol"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -15,12 +15,12 @@ type ClaudeModel struct {
 	model  string
 }
 
-func NewClaude(cfg Config) *ClaudeModel {
-	cfg = withDefaults(cfg, Config{Model: "claude-3-7-sonnet-20250219"})
-	return NewClaudeModel(cfg)
+func NewClaude(cfg ProviderConfig) *ClaudeModel {
+	cfg = withDefaults(cfg, ProviderConfig{Model: "claude-3-7-sonnet-20250219"})
+	return newClaudeModel(cfg)
 }
 
-func NewClaudeModel(cfg Config) *ClaudeModel {
+func newClaudeModel(cfg ProviderConfig) *ClaudeModel {
 	opts := []option.RequestOption{
 		option.WithAPIKey(cfg.APIKey),
 	}
@@ -34,7 +34,7 @@ func NewClaudeModel(cfg Config) *ClaudeModel {
 	}
 }
 
-func (m *ClaudeModel) Next(ctx context.Context, messages []runtime.Message, tools []runtime.ToolSpec, chunkFunc func(runtime.StreamChunk)) (runtime.ModelResponse, error) {
+func (m *ClaudeModel) Next(ctx context.Context, messages []protocol.Message, tools []protocol.ToolSpec, chunkFunc func(protocol.StreamChunk)) (protocol.ModelResponse, error) {
 	system, conversation := splitSystemMessages(messages)
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(m.model),
@@ -52,7 +52,7 @@ func (m *ClaudeModel) Next(ctx context.Context, messages []runtime.Message, tool
 	stream := m.client.Messages.NewStreaming(ctx, params)
 	var finalAnswer string
 	var reasoningContent string
-	var toolCalls []runtime.ToolCall
+	var toolCalls []protocol.ToolCall
 	var currentToolUseID string
 	var currentToolUseName string
 	var currentToolUseInput string
@@ -71,14 +71,14 @@ func (m *ClaudeModel) Next(ctx context.Context, messages []runtime.Message, tool
 			case "text_delta":
 				finalAnswer += event.Delta.Text
 				if chunkFunc != nil {
-					chunkFunc(runtime.StreamChunk{
+					chunkFunc(protocol.StreamChunk{
 						ContentDelta: event.Delta.Text,
 					})
 				}
 			case "thinking_delta":
 				reasoningContent += event.Delta.Thinking
 				if chunkFunc != nil {
-					chunkFunc(runtime.StreamChunk{
+					chunkFunc(protocol.StreamChunk{
 						ReasoningContentDelta: event.Delta.Thinking,
 					})
 				}
@@ -87,7 +87,7 @@ func (m *ClaudeModel) Next(ctx context.Context, messages []runtime.Message, tool
 			}
 		case "content_block_stop":
 			if currentToolUseID != "" {
-				toolCalls = append(toolCalls, runtime.ToolCall{
+				toolCalls = append(toolCalls, protocol.ToolCall{
 					ID:    currentToolUseID,
 					Name:  currentToolUseName,
 					Input: currentToolUseInput,
@@ -100,28 +100,28 @@ func (m *ClaudeModel) Next(ctx context.Context, messages []runtime.Message, tool
 	}
 
 	if err := stream.Err(); err != nil {
-		return runtime.ModelResponse{}, err
+		return protocol.ModelResponse{}, err
 	}
 
 	if len(toolCalls) > 0 {
-		return runtime.ModelResponse{
+		return protocol.ModelResponse{
 			Content:          finalAnswer,
 			ReasoningContent: reasoningContent,
 			ToolCalls:        toolCalls,
 		}, nil
 	}
 
-	return runtime.ModelResponse{
+	return protocol.ModelResponse{
 		Content:          finalAnswer,
 		ReasoningContent: reasoningContent,
 	}, nil
 }
 
-func splitSystemMessages(messages []runtime.Message) (string, []runtime.Message) {
+func splitSystemMessages(messages []protocol.Message) (string, []protocol.Message) {
 	var system string
-	conversation := make([]runtime.Message, 0, len(messages))
+	conversation := make([]protocol.Message, 0, len(messages))
 	for _, msg := range messages {
-		if msg.Role == runtime.RoleSystem {
+		if msg.Role == protocol.RoleSystem {
 			if system != "" {
 				system += "\n\n"
 			}
@@ -133,13 +133,13 @@ func splitSystemMessages(messages []runtime.Message) (string, []runtime.Message)
 	return system, conversation
 }
 
-func toClaudeMessages(messages []runtime.Message) []anthropic.MessageParam {
+func toClaudeMessages(messages []protocol.Message) []anthropic.MessageParam {
 	var result []anthropic.MessageParam
 	for _, msg := range messages {
 		switch msg.Role {
-		case runtime.RoleUser:
+		case protocol.RoleUser:
 			result = append(result, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
-		case runtime.RoleAssistant:
+		case protocol.RoleAssistant:
 			var blocks []anthropic.ContentBlockParamUnion
 			if msg.Content != "" {
 				blocks = append(blocks, anthropic.NewTextBlock(msg.Content))
@@ -159,7 +159,7 @@ func toClaudeMessages(messages []runtime.Message) []anthropic.MessageParam {
 					Content: blocks,
 				})
 			}
-		case runtime.RoleTool:
+		case protocol.RoleTool:
 			result = append(result, anthropic.MessageParam{
 				Role: anthropic.MessageParamRole("user"),
 				Content: []anthropic.ContentBlockParamUnion{
@@ -195,7 +195,7 @@ func mergeAdjacentMessages(messages []anthropic.MessageParam) []anthropic.Messag
 	return merged
 }
 
-func toClaudeTools(tools []runtime.ToolSpec) []anthropic.ToolUnionParam {
+func toClaudeTools(tools []protocol.ToolSpec) []anthropic.ToolUnionParam {
 	var result []anthropic.ToolUnionParam
 	for _, t := range tools {
 		result = append(result, anthropic.ToolUnionParam{

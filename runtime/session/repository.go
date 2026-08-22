@@ -43,12 +43,12 @@ type Repository interface {
 	SaveCheckpoint(SessionID, ToolCall, []FileSnapshot) error
 	List() ([]Summary, error)
 	Load(SessionID) ([]Message, Metadata, error)
-	Rename(SessionID, string) error
+	RenameSession(SessionID, string) error
 	Delete(SessionID) error
-	// CheckpointState returns the files of the most recent non-empty
+	// LoadUndoPoint returns the files of the most recent non-empty
 	// checkpoint, the transcript as of that checkpoint, and the checkpoint
 	// record index for use with TruncateAfter.
-	CheckpointState(SessionID) ([]FileSnapshot, []Message, int, error)
+	LoadUndoPoint(SessionID) ([]FileSnapshot, []Message, int, error)
 	// TruncateAfter drops every record after the given index, keeping the
 	// checkpoint record itself.
 	TruncateAfter(SessionID, int) error

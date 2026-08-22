@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	runtime "super-agent/runtime/protocol"
+	"super-agent/runtime/protocol"
 )
 
 const maxToolOutputLines = 200
@@ -23,8 +23,8 @@ type SearchTool struct{}
 type ApplyPatchTool struct{}
 type WriteFileTool struct{}
 
-func (ReadFileTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (ReadFileTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "read_file",
 		Description: "Read a workspace file, optionally with start_line and end_line.",
 		Parameters: objectSchema(map[string]any{
@@ -35,7 +35,7 @@ func (ReadFileTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (ReadFileTool) Run(_ context.Context, call runtime.ToolCall) (string, error) {
+func (ReadFileTool) Run(_ context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Path      string `json:"path"`
 		StartLine int    `json:"start_line"`
@@ -58,8 +58,8 @@ func (ReadFileTool) Run(_ context.Context, call runtime.ToolCall) (string, error
 	return numberedLines(string(content), args.StartLine, args.EndLine), nil
 }
 
-func (ListFilesTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (ListFilesTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "list_files",
 		Description: "List workspace files under path, optionally filtered by glob pattern.",
 		Parameters: objectSchema(map[string]any{
@@ -69,7 +69,7 @@ func (ListFilesTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (ListFilesTool) Run(_ context.Context, call runtime.ToolCall) (string, error) {
+func (ListFilesTool) Run(_ context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Path    string `json:"path"`
 		Pattern string `json:"pattern"`
@@ -93,8 +93,8 @@ func (ListFilesTool) Run(_ context.Context, call runtime.ToolCall) (string, erro
 	return strings.Join(limitLines(files), "\n"), nil
 }
 
-func (SearchTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (SearchTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "search",
 		Description: "Search text in workspace files. Query is a regular expression.",
 		Parameters: objectSchema(map[string]any{
@@ -104,7 +104,7 @@ func (SearchTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (SearchTool) Run(_ context.Context, call runtime.ToolCall) (string, error) {
+func (SearchTool) Run(_ context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Query string `json:"query"`
 		Path  string `json:"path"`
@@ -133,8 +133,8 @@ func (SearchTool) Run(_ context.Context, call runtime.ToolCall) (string, error) 
 	return strings.Join(limitLines(matches), "\n"), nil
 }
 
-func (ApplyPatchTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (ApplyPatchTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "apply_patch",
 		Description: "Replace old_text with new_text in a workspace file.",
 		Risky:       true,
@@ -147,7 +147,7 @@ func (ApplyPatchTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (ApplyPatchTool) Run(_ context.Context, call runtime.ToolCall) (string, error) {
+func (ApplyPatchTool) Run(_ context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Path       string `json:"path"`
 		OldText    string `json:"old_text"`
@@ -180,8 +180,8 @@ func (ApplyPatchTool) Run(_ context.Context, call runtime.ToolCall) (string, err
 	return "patched " + rel, nil
 }
 
-func (WriteFileTool) Spec() runtime.ToolSpec {
-	return runtime.ToolSpec{
+func (WriteFileTool) Spec() protocol.ToolSpec {
+	return protocol.ToolSpec{
 		Name:        "write_file",
 		Description: "Write content to a workspace file, creating parent directories.",
 		Risky:       true,
@@ -192,7 +192,7 @@ func (WriteFileTool) Spec() runtime.ToolSpec {
 	}
 }
 
-func (WriteFileTool) Run(_ context.Context, call runtime.ToolCall) (string, error) {
+func (WriteFileTool) Run(_ context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`

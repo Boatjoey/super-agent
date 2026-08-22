@@ -36,9 +36,13 @@ type AdvanceToolCallBatch = machine.AdvanceToolCallBatch
 type ClearPendingTool = machine.ClearPendingTool
 type SetCurrentTool = machine.SetCurrentTool
 type ClearCurrentTool = machine.ClearCurrentTool
-type ClearScheduledActions = machine.ClearScheduledActions
 type ClearToolCallBatch = machine.ClearToolCallBatch
-type ResetContext = machine.ResetContext
+type ResetConversation = machine.ResetConversation
+
+type ActionQueueChange = machine.ActionQueueChange
+type ClearActionQueue = machine.ClearActionQueue
+
+var AllActionQueueChanges = machine.AllActionQueueChanges
 
 type ScheduledAction = machine.ScheduledAction
 
@@ -46,25 +50,23 @@ var AllScheduledActions = machine.AllScheduledActions
 
 type CallModel = machine.CallModel
 type RunTool = machine.RunTool
-type ProcessNextToolCall = machine.ProcessNextToolCall
+type CheckToolQueue = machine.CheckToolQueue
 type TransitionResult = machine.TransitionResult
-type EngineState = machine.EngineState
+type RuntimeData = machine.RuntimeData
 type MachineSnapshot = machine.MachineSnapshot
 type UnexpectedEventError = machine.UnexpectedEventError
 type ProtocolViolationError = machine.ProtocolViolationError
 type InvariantViolationError = machine.InvariantViolationError
-type SchedulerOp = machine.SchedulerOp
-type ClearScheduledActionsOp = machine.ClearScheduledActionsOp
 type StateChangeResult = machine.StateChangeResult
 type StateChangeApplier = machine.StateChangeApplier
 type DefaultStateChangeApplier = machine.DefaultStateChangeApplier
 
-func SnapshotFrom(state EngineState) (MachineSnapshot, error) {
-	return machine.SnapshotFrom(state)
+func SnapshotFrom(runtimeData RuntimeData) (MachineSnapshot, error) {
+	return machine.SnapshotFrom(runtimeData)
 }
 
-func ValidateState(state EngineState) error {
-	return machine.ValidateState(state)
+func ValidateRuntimeData(runtimeData RuntimeData) error {
+	return machine.ValidateRuntimeData(runtimeData)
 }
 
 func Transition(snapshot MachineSnapshot, event Event) (TransitionResult, error) {

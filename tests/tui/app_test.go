@@ -40,7 +40,7 @@ func TestSubmitShowsBusyPresentationWhileModelCommandStarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := runtime.NewSession(engine)
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	for _, r := range "hello" {
@@ -75,7 +75,7 @@ func TestQuestionMarkCanBeTypedInPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := runtime.NewSession(engine)
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	for _, r := range "what?" {
@@ -172,7 +172,7 @@ func TestEscapeClearsInputWithoutQuitting(t *testing.T) {
 
 func TestTabQueuesPromptWhileTurnRuns(t *testing.T) {
 	session := &eventOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model = typeText(model, "first")
@@ -205,7 +205,7 @@ func TestTabQueuesPromptWhileTurnRuns(t *testing.T) {
 
 func TestQueuePreviewIsBounded(t *testing.T) {
 	session := &eventOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "active")
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -227,7 +227,7 @@ func TestQueuePreviewIsBounded(t *testing.T) {
 
 func TestSmallWindowCollapsesQueueDetails(t *testing.T) {
 	session := &eventOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 20, Height: 8})
 	model = typeText(model, "active")
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -246,7 +246,7 @@ func TestSmallWindowCollapsesQueueDetails(t *testing.T) {
 
 func TestEscCancelsTurnAndClearsQueuedFollowUps(t *testing.T) {
 	session := &eventOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "active")
 	model, firstCmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -271,7 +271,7 @@ func TestEscCancelsTurnAndClearsQueuedFollowUps(t *testing.T) {
 
 func TestEnterSteersByCancelingCurrentTurnAndRunningPromptNext(t *testing.T) {
 	session := &eventOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model = typeText(model, "first")
@@ -300,7 +300,7 @@ func TestEnterSteersByCancelingCurrentTurnAndRunningPromptNext(t *testing.T) {
 
 func TestCtrlJInsertsNewlineAndEnterSubmits(t *testing.T) {
 	session := &eventOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model = typeText(model, "first line")
@@ -319,7 +319,7 @@ func TestCtrlJInsertsNewlineAndEnterSubmits(t *testing.T) {
 
 func TestHistoryNavigationRestoresUnsubmittedDraft(t *testing.T) {
 	session := &eventOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model = typeText(model, "previous")
@@ -348,7 +348,7 @@ func typeText(model tea.Model, text string) tea.Model {
 
 func newEventOnlyTUI(t *testing.T) tea.Model {
 	t.Helper()
-	var model tea.Model = tui.New(&eventOnlyConversation{}, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(&eventOnlyConversation{}, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return model
 }
@@ -363,7 +363,7 @@ func TestApprovalUsesShortcutKeys(t *testing.T) {
 	}
 	session := runtime.NewSession(engine)
 
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "run bash" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -405,7 +405,7 @@ func TestToolRunShowsRunningToolState(t *testing.T) {
 	}
 	session := runtime.NewSession(engine)
 
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "run bash")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -452,7 +452,7 @@ func TestApprovalMenuUsesArrowsAndEnter(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := runtime.NewSession(engine)
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "run bash")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -487,7 +487,7 @@ func TestEscCancelsPendingApproval(t *testing.T) {
 	}
 	session := runtime.NewSession(engine)
 
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "run bash" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -522,7 +522,7 @@ func TestEscCancelsPendingApproval(t *testing.T) {
 
 func TestTUIRendersSessionEventsWithoutSnapshotReads(t *testing.T) {
 	session := &eventOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	for _, r := range "hello" {
@@ -566,7 +566,7 @@ func TestTUIRendersSessionEventsWithoutSnapshotReads(t *testing.T) {
 
 func TestPageKeysScrollConversationAndReturnToBottom(t *testing.T) {
 	session := &eventOnlyConversation{extraMessages: 30}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 	model = typeText(model, "hello")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -601,7 +601,7 @@ func TestInstructionsCommandDisplaysLoadedSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := runtime.NewSession(engine)
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.TUIInfo{
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{
 		Provider:         "test",
 		ModelName:        "test-model",
 		InstructionPaths: []string{"/repo/AGENTS.md", "/repo/pkg/CLAUDE.md"},
@@ -622,7 +622,7 @@ func TestInstructionsCommandDisplaysLoadedSources(t *testing.T) {
 
 func TestPermissionsModeCommandRejectsInvalidMode(t *testing.T) {
 	session := &eventOnlyConversation{permissionErr: errors.New("invalid permission mode: root")}
-	var model tea.Model = tui.New(session, tui.TUIInfo{Provider: "test", ModelName: "test-model", PermissionMode: "ask"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", PermissionMode: "ask"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "/permissions mode root" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -688,11 +688,11 @@ type eventOnlyConversation struct {
 	extraMessages   int
 }
 
-func (c *eventOnlyConversation) Snapshot() tui.Snapshot {
+func (c *eventOnlyConversation) Snapshot() tui.ConversationView {
 	if c.rejectSnapshots {
 		panic("unexpected Snapshot read")
 	}
-	return tui.Snapshot{AgentStatus: tui.AgentStatus{Label: "Idle"}}
+	return tui.ConversationView{AgentStatus: tui.AgentStatus{Label: "Idle"}}
 }
 
 func (c *eventOnlyConversation) RunTurn(ctx context.Context, query string, events chan<- tui.Event, _ <-chan tui.ApprovalDecision) error {
@@ -717,7 +717,7 @@ func (c *eventOnlyConversation) Reset() error {
 	return nil
 }
 
-func (c *eventOnlyConversation) Sessions() ([]tui.SessionSummary, error) {
+func (c *eventOnlyConversation) ListSessions() ([]tui.SessionSummary, error) {
 	return nil, nil
 }
 
@@ -725,7 +725,7 @@ func (c *eventOnlyConversation) Resume(string) error {
 	return nil
 }
 
-func (c *eventOnlyConversation) Rename(string, string) error {
+func (c *eventOnlyConversation) RenameSession(string, string) error {
 	return nil
 }
 

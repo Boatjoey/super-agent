@@ -11,7 +11,7 @@ import (
 
 func (e *Engine) DispatchEventThenRunActions(ctx context.Context, event machine.Event, chunks func(protocol.StreamChunk), afterDispatch func()) error {
 	e.mu.Lock()
-	snapshot, err := machine.SnapshotFrom(e.state)
+	snapshot, err := machine.SnapshotFrom(e.runtimeData)
 	if err != nil {
 		e.mu.Unlock()
 		return err
@@ -38,7 +38,7 @@ func (e *Engine) dispatch(event machine.Event) error {
 	return e.dispatchLocked(event)
 }
 func (e *Engine) dispatchLocked(event machine.Event) error {
-	snapshot, err := machine.SnapshotFrom(e.state)
+	snapshot, err := machine.SnapshotFrom(e.runtimeData)
 	if err != nil {
 		return err
 	}
@@ -49,24 +49,24 @@ func (e *Engine) dispatchLocked(event machine.Event) error {
 	return e.applyTransitionLocked(decision)
 }
 func (e *Engine) applyTransitionLocked(decision machine.TransitionResult) error {
-	changeResult, err := e.stateChangeApplier.ApplyStateChanges(e.state, decision)
+	changeResult, err := e.stateChangeApplier.ApplyStateChanges(e.runtimeData, decision)
 	if err != nil {
 		return err
 	}
-	if err := machine.ValidateState(changeResult.State); err != nil {
+	if err := machine.ValidateRuntimeData(changeResult.RuntimeData); err != nil {
 		return err
 	}
-	for _, operation := range changeResult.SchedulerOps {
-		if _, ok := operation.(machine.ClearScheduledActionsOp); !ok {
-			return machine.InvariantViolationError{Reason: "unknown scheduler operation"}
+	for _, change := range decision.ActionQueueChanges {
+		if _, ok := change.(machine.ClearActionQueue); !ok {
+			return machine.InvariantViolationError{Reason: "unknown action queue change"}
 		}
 	}
-	e.state = changeResult.State
-	for range changeResult.SchedulerOps {
-		e.scheduler.Clear()
+	e.runtimeData = changeResult.RuntimeData
+	for range decision.ActionQueueChanges {
+		e.actionQueue.Clear()
 	}
 	for _, action := range decision.ScheduledActions {
-		e.scheduler.Queue(e.runs.CurrentRunID(), action)
+		e.actionQueue.Queue(e.runs.CurrentRunID(), action)
 	}
 	return nil
 }
@@ -75,9 +75,9 @@ func (e *Engine) runScheduledActions(ctx context.Context, chunks func(protocol.S
 	runID := e.runs.CurrentRunID()
 	for {
 		e.mu.Lock()
-		action, ok := e.scheduler.Pop()
+		action, ok := e.actionQueue.Pop()
 		if !ok {
-			if e.state.State == machine.StateIdle {
+			if e.runtimeData.State == machine.StateIdle {
 				e.runs.FinishRun(runID)
 			}
 			e.mu.Unlock()
@@ -105,17 +105,17 @@ func (e *Engine) executeScheduledAction(ctx context.Context, action execution.Qu
 	if chunks != nil {
 		stream = func(chunk protocol.StreamChunk) { e.recordStreamChunk(action.RunID, chunk); chunks(chunk) }
 	}
-	outcome, err := e.runner.Run(ctx, action, execution.ExecutionInput{Messages: e.Messages(), ToolSpecs: e.toolSpecs()}, stream)
+	completion, err := e.runner.Run(ctx, action, execution.ScheduledActionInput{Messages: e.Messages(), ToolSpecs: e.toolSpecs()}, stream)
 	if err != nil {
 		return err
 	}
-	if !e.runs.IsCurrent(outcome.RunID) {
+	if !e.runs.IsCurrent(completion.RunID) {
 		return nil
 	}
 	toolSpecs := e.toolSpecs()
 	e.mu.Lock()
-	batch := cloneToolBatch(e.state.ToolBatch)
-	event, err := e.resolver.Resolve(outcome.Result, execution.OutcomeResolveInput{ToolBatch: batch, ToolSpecs: toolSpecs})
+	batch := cloneToolBatch(e.runtimeData.ToolBatch)
+	event, err := e.resolver.Resolve(completion.Result, execution.ActionResultInput{ToolBatch: batch, ToolSpecs: toolSpecs})
 	if err != nil {
 		// runScheduledActions dispatches ErrorOccurred once for the returned
 		// error; dispatching here too would append the runtime-error tool
@@ -143,7 +143,7 @@ func (e *Engine) recordStreamChunk(runID execution.RunID, chunk protocol.StreamC
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	_ = e.applyTransitionLocked(machine.TransitionResult{
-		NextState:    e.state.State,
+		NextState:    e.runtimeData.State,
 		StateChanges: []machine.StateChange{machine.AppendStreamingAssistant{Chunk: chunk}},
 	})
 }

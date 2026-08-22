@@ -2,16 +2,16 @@ package llm
 
 import (
 	"errors"
-	runtime "super-agent/runtime/protocol"
+	"super-agent/runtime/protocol"
 )
 
-type Config struct {
+type ProviderConfig struct {
 	BaseURL string `json:"base_url"`
 	APIKey  string `json:"api_key"`
 	Model   string `json:"model"`
 }
 
-type ModelFactory func(Config) runtime.Model
+type ModelFactory func(ProviderConfig) protocol.Model
 
 type ModelRegistry struct {
 	factories map[string]ModelFactory
@@ -21,15 +21,15 @@ func NewModelRegistry() *ModelRegistry {
 	return &ModelRegistry{factories: make(map[string]ModelFactory)}
 }
 
-func (r *ModelRegistry) Register(provider string, factory func() runtime.Model) {
-	r.factories[provider] = func(Config) runtime.Model { return factory() }
+func (r *ModelRegistry) Register(provider string, factory func() protocol.Model) {
+	r.factories[provider] = func(ProviderConfig) protocol.Model { return factory() }
 }
 
 func (r *ModelRegistry) RegisterConfigured(provider string, factory ModelFactory) {
 	r.factories[provider] = factory
 }
 
-func (r *ModelRegistry) New(provider string, cfg Config) (runtime.Model, error) {
+func (r *ModelRegistry) Create(provider string, cfg ProviderConfig) (protocol.Model, error) {
 	if provider == "" {
 		provider = "deepseek"
 	}
@@ -42,17 +42,17 @@ func (r *ModelRegistry) New(provider string, cfg Config) (runtime.Model, error) 
 
 func NewDefaultModelRegistry() *ModelRegistry {
 	registry := NewModelRegistry()
-	registry.RegisterConfigured("deepseek", func(cfg Config) runtime.Model { return NewDeepSeek(cfg) })
-	registry.RegisterConfigured("openai", func(cfg Config) runtime.Model { return NewOpenAI(cfg) })
-	registry.RegisterConfigured("claude", func(cfg Config) runtime.Model { return NewClaude(cfg) })
+	registry.RegisterConfigured("deepseek", func(cfg ProviderConfig) protocol.Model { return NewDeepSeek(cfg) })
+	registry.RegisterConfigured("openai", func(cfg ProviderConfig) protocol.Model { return NewOpenAI(cfg) })
+	registry.RegisterConfigured("claude", func(cfg ProviderConfig) protocol.Model { return NewClaude(cfg) })
 	return registry
 }
 
-func NewModel(provider string, cfg Config) (runtime.Model, error) {
-	return defaultRegistry.New(provider, cfg)
+func NewModel(provider string, cfg ProviderConfig) (protocol.Model, error) {
+	return defaultRegistry.Create(provider, cfg)
 }
 
-func ModelDisplayName(provider string, cfg Config) string {
+func ModelDisplayName(provider string, cfg ProviderConfig) string {
 	if cfg.Model != "" {
 		return cfg.Model
 	}

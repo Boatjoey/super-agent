@@ -1,9 +1,10 @@
 package machine
 
 type TransitionResult struct {
-	NextState        State
-	StateChanges     []StateChange
-	ScheduledActions []ScheduledAction
+	NextState          State
+	StateChanges       []StateChange
+	ActionQueueChanges []ActionQueueChange
+	ScheduledActions   []ScheduledAction
 }
 
 type transitionKey struct {
@@ -126,7 +127,7 @@ func handleToolBatchReceived(snapshot MachineSnapshot, event ToolBatchReceived) 
 			}},
 			SetToolCallBatch{ID: toolBatchID(event.Calls), Calls: event.Calls},
 		},
-		ScheduledActions: []ScheduledAction{ProcessNextToolCall{}},
+		ScheduledActions: []ScheduledAction{CheckToolQueue{}},
 	}, nil
 }
 
@@ -165,7 +166,7 @@ func handleApprovalDenied(snapshot MachineSnapshot, event ApprovalDenied) (Trans
 			ClearPendingTool{},
 			AppendToolResult{Call: event.Call, Result: "denied: " + event.Call.Name},
 		},
-		ScheduledActions: []ScheduledAction{ProcessNextToolCall{}},
+		ScheduledActions: []ScheduledAction{CheckToolQueue{}},
 	}, nil
 }
 
@@ -182,7 +183,7 @@ func handleToolResultReceived(snapshot MachineSnapshot, event ToolResultReceived
 			AppendToolResult{Call: event.Call, Result: event.Result},
 			ClearCurrentTool{},
 		},
-		ScheduledActions: []ScheduledAction{ProcessNextToolCall{}},
+		ScheduledActions: []ScheduledAction{CheckToolQueue{}},
 	}, nil
 }
 
@@ -239,8 +240,8 @@ func handleErrorOccurred(_ MachineSnapshot, event ErrorOccurred) (TransitionResu
 			ClearPendingTool{},
 			ClearCurrentTool{},
 			ClearToolCallBatch{},
-			ClearScheduledActions{},
 		},
+		ActionQueueChanges: []ActionQueueChange{ClearActionQueue{}},
 	}, nil
 }
 
@@ -252,13 +253,17 @@ func handleCancelRequested(MachineSnapshot, CancelRequested) (TransitionResult, 
 			ClearPendingTool{},
 			ClearCurrentTool{},
 			ClearToolCallBatch{},
-			ClearScheduledActions{},
 		},
+		ActionQueueChanges: []ActionQueueChange{ClearActionQueue{}},
 	}, nil
 }
 
 func handleResetRequested(MachineSnapshot, ResetRequested) (TransitionResult, error) {
-	return TransitionResult{NextState: StateIdle, StateChanges: []StateChange{ResetContext{}}}, nil
+	return TransitionResult{
+		NextState:          StateIdle,
+		StateChanges:       []StateChange{ResetConversation{}},
+		ActionQueueChanges: []ActionQueueChange{ClearActionQueue{}},
+	}, nil
 }
 
 func toolBatchID(calls []ToolCall) string {

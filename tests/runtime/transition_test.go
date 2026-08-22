@@ -9,19 +9,19 @@ import (
 )
 
 // transitionCase describes one (State, Event) -> TransitionResult expectation.
-// stateChangeCount/scheduledActionCount avoid brittle type-assertion lists while still
-// catching missing or extra outputs. state changeType/scheduled actionType assert the first
-// item's concrete type when there is exactly one.
+// Counts catch missing or extra outputs. Type lists assert exact order.
 type transitionCase struct {
-	name                 string
-	state                State
-	event                Event
-	wantState            State
-	wantErr              bool
-	stateChangeCount     int
-	scheduledActionCount int
-	stateChangeTypes     []StateChange
-	scheduledActionTypes []ScheduledAction
+	name                   string
+	state                  State
+	event                  Event
+	wantState              State
+	wantErr                bool
+	stateChangeCount       int
+	actionQueueChangeCount int
+	scheduledActionCount   int
+	stateChangeTypes       []StateChange
+	actionQueueChangeTypes []ActionQueueChange
+	scheduledActionTypes   []ScheduledAction
 }
 
 func sampleToolCall() ToolCall {
@@ -36,7 +36,7 @@ func sampleToolCalls() []ToolCall {
 }
 
 func transitionSnapshot(state State, event Event) MachineSnapshot {
-	engineState := EngineState{State: state}
+	engineState := RuntimeData{State: state}
 	call := sampleToolCall()
 	switch ev := event.(type) {
 	case ApprovalGranted:
@@ -119,7 +119,7 @@ func TestTransitionTable(t *testing.T) {
 			stateChangeCount:     2, // AppendAssistantMessage + SetToolCallBatch
 			scheduledActionCount: 1,
 			stateChangeTypes:     []StateChange{AppendAssistantMessage{}, SetToolCallBatch{}},
-			scheduledActionTypes: []ScheduledAction{ProcessNextToolCall{}},
+			scheduledActionTypes: []ScheduledAction{CheckToolQueue{}},
 		},
 		{
 			name: "ToolBatchReceived/rejects_when_not_WaitingLLM", state: StateIdle,
@@ -183,7 +183,7 @@ func TestTransitionTable(t *testing.T) {
 			stateChangeCount:     2, // ClearPendingTool + AppendToolResult
 			scheduledActionCount: 1,
 			stateChangeTypes:     []StateChange{ClearPendingTool{}, AppendToolResult{}},
-			scheduledActionTypes: []ScheduledAction{ProcessNextToolCall{}},
+			scheduledActionTypes: []ScheduledAction{CheckToolQueue{}},
 		},
 		{
 			name: "ApprovalDenied/rejects_when_not_WaitingApproval", state: StateIdle,
@@ -199,7 +199,7 @@ func TestTransitionTable(t *testing.T) {
 			stateChangeCount:     2,
 			scheduledActionCount: 1,
 			stateChangeTypes:     []StateChange{AppendToolResult{}, ClearCurrentTool{}},
-			scheduledActionTypes: []ScheduledAction{ProcessNextToolCall{}},
+			scheduledActionTypes: []ScheduledAction{CheckToolQueue{}},
 		},
 		{
 			name: "ToolResultReceived/rejects_when_not_RunningTool", state: StateIdle,
@@ -242,62 +242,71 @@ func TestTransitionTable(t *testing.T) {
 			name: "ErrorOccurred/WaitingLLM->Idle", state: StateWaitingLLM,
 			event:            ErrorOccurred{Err: errors.New("boom")},
 			wantState:        StateIdle,
-			stateChangeCount: 6,
-			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
+			stateChangeCount: 5, actionQueueChangeCount: 1,
+			stateChangeTypes:       []StateChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
+			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "ErrorOccurred/RunningTool->Idle", state: StateRunningTool,
 			event:            ErrorOccurred{Err: errors.New("boom")},
 			wantState:        StateIdle,
-			stateChangeCount: 6,
-			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
+			stateChangeCount: 5, actionQueueChangeCount: 1,
+			stateChangeTypes:       []StateChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
+			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "ErrorOccurred/AdvancingQueue->Idle", state: StateAdvancingQueue,
 			event:            ErrorOccurred{Err: errors.New("boom")},
 			wantState:        StateIdle,
-			stateChangeCount: 6,
-			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
+			stateChangeCount: 5, actionQueueChangeCount: 1,
+			stateChangeTypes:       []StateChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
+			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 
 		// --- CancelRequested ---
 		{
 			name: "CancelRequested/WaitingLLM->Idle", state: StateWaitingLLM,
 			event: CancelRequested{}, wantState: StateIdle,
-			stateChangeCount: 5,
-			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
+			stateChangeCount: 4, actionQueueChangeCount: 1,
+			stateChangeTypes:       []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
+			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "CancelRequested/WaitingApproval->Idle", state: StateWaitingApproval,
 			event: CancelRequested{}, wantState: StateIdle,
-			stateChangeCount: 5,
-			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
+			stateChangeCount: 4, actionQueueChangeCount: 1,
+			stateChangeTypes:       []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
+			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "CancelRequested/RunningTool->Idle", state: StateRunningTool,
 			event: CancelRequested{}, wantState: StateIdle,
-			stateChangeCount: 5,
-			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
+			stateChangeCount: 4, actionQueueChangeCount: 1,
+			stateChangeTypes:       []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
+			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "CancelRequested/AdvancingQueue->Idle", state: StateAdvancingQueue,
 			event: CancelRequested{}, wantState: StateIdle,
-			stateChangeCount: 5,
-			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
+			stateChangeCount: 4, actionQueueChangeCount: 1,
+			stateChangeTypes:       []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
+			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 
 		// --- ResetRequested ---
 		{
 			name: "ResetRequested/Idle->Idle", state: StateIdle,
 			event: ResetRequested{}, wantState: StateIdle,
-			stateChangeCount: 1,
-			stateChangeTypes: []StateChange{ResetContext{}},
+			stateChangeCount: 1, actionQueueChangeCount: 1,
+			stateChangeTypes:       []StateChange{ResetConversation{}},
+			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "ResetRequested/WaitingLLM->Idle", state: StateWaitingLLM,
 			event: ResetRequested{}, wantState: StateIdle,
-			stateChangeCount: 1,
-			stateChangeTypes: []StateChange{ResetContext{}},
+			stateChangeCount: 1, actionQueueChangeCount: 1,
+			stateChangeTypes:       []StateChange{ResetConversation{}},
+			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 	}
 
@@ -319,12 +328,20 @@ func TestTransitionTable(t *testing.T) {
 			if len(result.StateChanges) != tc.stateChangeCount {
 				t.Fatalf("state changes = %d (%+v), want %d", len(result.StateChanges), result.StateChanges, tc.stateChangeCount)
 			}
+			if len(result.ActionQueueChanges) != tc.actionQueueChangeCount {
+				t.Fatalf("action queue changes = %d (%+v), want %d", len(result.ActionQueueChanges), result.ActionQueueChanges, tc.actionQueueChangeCount)
+			}
 			if len(result.ScheduledActions) != tc.scheduledActionCount {
 				t.Fatalf("scheduled actions = %d (%+v), want %d", len(result.ScheduledActions), result.ScheduledActions, tc.scheduledActionCount)
 			}
 			for i, want := range tc.stateChangeTypes {
 				if reflect.TypeOf(result.StateChanges[i]) != reflect.TypeOf(want) {
 					t.Fatalf("state change[%d] = %T, want %T", i, result.StateChanges[i], want)
+				}
+			}
+			for i, want := range tc.actionQueueChangeTypes {
+				if reflect.TypeOf(result.ActionQueueChanges[i]) != reflect.TypeOf(want) {
+					t.Fatalf("action queue change[%d] = %T, want %T", i, result.ActionQueueChanges[i], want)
 				}
 			}
 			for i, want := range tc.scheduledActionTypes {

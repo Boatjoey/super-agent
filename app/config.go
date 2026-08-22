@@ -23,14 +23,14 @@ type Config struct {
 	NoTools            bool
 	PermissionMode     runtime.PermissionMode
 	PermissionRules    runtime.PermissionRules
-	ModelConfig        llm.Config
+	ModelConfig        llm.ProviderConfig
 	InstructionSources []string
 }
 
 type Settings struct {
-	Provider    string                `json:"provider"`
-	Providers   map[string]llm.Config `json:"providers"`
-	Permissions PermissionSettings    `json:"permissions"`
+	Provider    string                        `json:"provider"`
+	Providers   map[string]llm.ProviderConfig `json:"providers"`
+	Permissions PermissionSettings            `json:"permissions"`
 }
 
 type PermissionSettings struct {
@@ -49,7 +49,7 @@ type PermissionSettings struct {
 func DefaultSettings() Settings {
 	return Settings{
 		Provider: "deepseek",
-		Providers: map[string]llm.Config{
+		Providers: map[string]llm.ProviderConfig{
 			"deepseek": {
 				BaseURL: "https://api.deepseek.com",
 				APIKey:  "sk-...",
@@ -150,7 +150,7 @@ func LoadSettingsFile(path string) (Settings, error) {
 			return Settings{}, err
 		}
 		if settings.Providers == nil {
-			settings.Providers = map[string]llm.Config{}
+			settings.Providers = map[string]llm.ProviderConfig{}
 		}
 		normalizeSettings(&settings)
 		return settings, nil

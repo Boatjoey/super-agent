@@ -51,7 +51,7 @@ func formatInstructions(paths []string) string {
 	return strings.TrimSpace(result.String())
 }
 
-func formatPermissions(info TUIInfo) string {
+func formatPermissions(info StartupInfo) string {
 	mode := firstNonEmpty(info.PermissionMode, "ask")
 	return fmt.Sprintf("Permission mode: %s\nTools: %s\nApproval: %s\nCWD: %s", mode, onOff(!info.NoTools), onOff(info.AutoApprove), info.CWD)
 }

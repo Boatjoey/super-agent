@@ -33,7 +33,7 @@
 
 全局事件：
 
-- `ErrorOccurred`：进入 `Idle`，清理工具队列与待执行 ScheduledAction
+- `ErrorOccurred`：进入 `Idle`，清理工具状态与待执行 `ScheduledAction`
 - `CancelRequested`：进入 `Idle`，保留已生成内容并清理当前任务
 - `ResetRequested`：进入 `Idle`，重置对话上下文
 
@@ -72,7 +72,7 @@ StateInitializing State = "Initializing"
 调用 Engine 构造函数时，初始状态被设置为 `Initializing`：
 
 ```go
-state: machine.EngineState{
+state: machine.RuntimeData{
     State:    machine.StateInitializing,
     Messages: messages,
 }
@@ -177,7 +177,7 @@ WaitingLLM + CancelRequested           → Idle
 WaitingLLM + ErrorOccurred             → Idle
 ```
 
-收到 `ToolBatchReceived` 时，状态机会保存 assistant 消息、建立工具调用批次，并产生 `ProcessNextToolCall` ScheduledAction。
+收到 `ToolBatchReceived` 时，状态机会保存 assistant 消息、建立工具调用批次，并产生 `CheckToolQueue` ScheduledAction。
 
 ## 第四个状态：`AdvancingQueue`
 
@@ -201,7 +201,7 @@ RunningTool + ToolResultReceived       → AdvancingQueue
 WaitingApproval + ApprovalDenied       → AdvancingQueue
 ```
 
-进入后通常会产生 `ProcessNextToolCall` ScheduledAction。
+进入后通常会产生 `CheckToolQueue` ScheduledAction。
 
 ### 离开条件
 
@@ -247,7 +247,7 @@ AdvancingQueue + ToolCallNeedsApproval → WaitingApproval
 
 1. 保存待审批工具与权限请求。
 2. 推进工具批次索引。
-3. 暂停 ScheduledAction 调度，等待用户输入。
+3. 不产生新的 `ScheduledAction`，等待用户输入。
 
 ### 离开条件
 
@@ -311,7 +311,7 @@ RunningTool + ErrorOccurred      → Idle
 
 1. 通过 `AppendToolResult` 保存结果。
 2. 清除当前工具。
-3. 产生 `ProcessNextToolCall` ScheduledAction。
+3. 产生 `CheckToolQueue` ScheduledAction。
 
 ### 状态约束
 

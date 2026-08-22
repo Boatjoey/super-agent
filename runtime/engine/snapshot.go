@@ -5,7 +5,7 @@ import (
 	"super-agent/runtime/protocol"
 )
 
-type Snapshot struct {
+type EngineView struct {
 	State                 machine.State
 	Messages              []protocol.Message
 	PendingTool           *protocol.ToolCall

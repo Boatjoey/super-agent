@@ -8,43 +8,43 @@ import (
 func (e *Engine) State() machine.State {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.state.State
+	return e.runtimeData.State
 }
 
 func (e *Engine) Messages() []protocol.Message {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return append([]protocol.Message(nil), e.state.Messages...)
+	return append([]protocol.Message(nil), e.runtimeData.Messages...)
 }
 
 func (e *Engine) PendingTool() (protocol.ToolCall, bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.state.PendingTool == nil {
+	if e.runtimeData.PendingTool == nil {
 		return protocol.ToolCall{}, false
 	}
-	return *e.state.PendingTool, true
+	return *e.runtimeData.PendingTool, true
 }
 
-func (e *Engine) Snapshot() Snapshot {
+func (e *Engine) Snapshot() EngineView {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	snapshot := Snapshot{State: e.state.State, Messages: append([]protocol.Message(nil), e.state.Messages...), IsBusy: e.state.State == machine.StateWaitingLLM || e.state.State == machine.StateRunningTool || e.state.State == machine.StateAdvancingQueue, NeedsInput: e.state.State == machine.StateWaitingApproval}
-	if e.state.PendingTool != nil {
-		call := *e.state.PendingTool
+	snapshot := EngineView{State: e.runtimeData.State, Messages: append([]protocol.Message(nil), e.runtimeData.Messages...), IsBusy: e.runtimeData.State == machine.StateWaitingLLM || e.runtimeData.State == machine.StateRunningTool || e.runtimeData.State == machine.StateAdvancingQueue, NeedsInput: e.runtimeData.State == machine.StateWaitingApproval}
+	if e.runtimeData.PendingTool != nil {
+		call := *e.runtimeData.PendingTool
 		snapshot.PendingTool = &call
-		if e.state.PendingPermission != nil {
-			request := *e.state.PendingPermission
+		if e.runtimeData.PendingPermission != nil {
+			request := *e.runtimeData.PendingPermission
 			snapshot.PendingPermission = &request
 		}
-		if e.state.ToolBatch != nil {
-			snapshot.PendingToolBatchID = e.state.ToolBatch.ID
-			snapshot.PendingToolBatchIndex = e.state.ToolBatch.Index
-			snapshot.PendingToolBatchTotal = len(e.state.ToolBatch.Calls)
+		if e.runtimeData.ToolBatch != nil {
+			snapshot.PendingToolBatchID = e.runtimeData.ToolBatch.ID
+			snapshot.PendingToolBatchIndex = e.runtimeData.ToolBatch.Index
+			snapshot.PendingToolBatchTotal = len(e.runtimeData.ToolBatch.Calls)
 		}
 	}
-	if e.state.StreamingContent != "" || e.state.StreamingReasoning != "" {
-		snapshot.StreamingMessage = &protocol.Message{Role: protocol.RoleAssistant, Content: e.state.StreamingContent, ReasoningContent: e.state.StreamingReasoning}
+	if e.runtimeData.StreamingContent != "" || e.runtimeData.StreamingReasoning != "" {
+		snapshot.StreamingMessage = &protocol.Message{Role: protocol.RoleAssistant, Content: e.runtimeData.StreamingContent, ReasoningContent: e.runtimeData.StreamingReasoning}
 	}
 	return snapshot
 }

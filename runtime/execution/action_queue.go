@@ -2,16 +2,16 @@ package execution
 
 import "strconv"
 
-type ActionScheduler struct {
+type ActionQueue struct {
 	queue []QueuedAction
 	next  int64
 }
 
-func NewActionScheduler() *ActionScheduler {
-	return &ActionScheduler{}
+func NewActionQueue() *ActionQueue {
+	return &ActionQueue{}
 }
 
-func (s *ActionScheduler) Queue(runID RunID, action ScheduledAction) QueuedAction {
+func (s *ActionQueue) Queue(runID RunID, action ScheduledAction) QueuedAction {
 	s.next++
 	queued := QueuedAction{
 		RunID:    runID,
@@ -22,7 +22,7 @@ func (s *ActionScheduler) Queue(runID RunID, action ScheduledAction) QueuedActio
 	return queued
 }
 
-func (s *ActionScheduler) Pop() (QueuedAction, bool) {
+func (s *ActionQueue) Pop() (QueuedAction, bool) {
 	if len(s.queue) == 0 {
 		return QueuedAction{}, false
 	}
@@ -31,10 +31,10 @@ func (s *ActionScheduler) Pop() (QueuedAction, bool) {
 	return action, true
 }
 
-func (s *ActionScheduler) Clear() {
+func (s *ActionQueue) Clear() {
 	s.queue = nil
 }
 
-func (s *ActionScheduler) Len() int {
+func (s *ActionQueue) Len() int {
 	return len(s.queue)
 }

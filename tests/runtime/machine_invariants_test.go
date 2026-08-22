@@ -8,8 +8,8 @@ import (
 	. "super-agent/runtime"
 )
 
-func TestSnapshotFromRejectsInvalidMachineContext(t *testing.T) {
-	cases := []EngineState{
+func TestSnapshotFromRejectsInvalidRuntimeData(t *testing.T) {
+	cases := []RuntimeData{
 		{State: StateAdvancingQueue},
 		{State: StateWaitingApproval},
 		{State: StateRunningTool},
@@ -36,7 +36,7 @@ func TestTransitionClassifiesStateMismatchAsUnexpectedEvent(t *testing.T) {
 func TestTransitionRejectsApprovalForDifferentCall(t *testing.T) {
 	pending := ToolCall{ID: "call-1", Name: "bash", Input: "pwd"}
 	request := PermissionRequest{}
-	state := EngineState{
+	state := RuntimeData{
 		State:             StateWaitingApproval,
 		PendingTool:       &pending,
 		PendingPermission: &request,
@@ -55,7 +55,7 @@ func TestTransitionRejectsApprovalForDifferentCall(t *testing.T) {
 
 func TestTransitionRejectsResultForDifferentCurrentCall(t *testing.T) {
 	current := ToolCall{ID: "call-1", Name: "bash", Input: "pwd"}
-	state := EngineState{
+	state := RuntimeData{
 		State:       StateRunningTool,
 		CurrentTool: &current,
 		ToolBatch:   &ToolCallBatch{Calls: []ToolCall{current}, Index: 1},
@@ -73,7 +73,7 @@ func TestTransitionRejectsResultForDifferentCurrentCall(t *testing.T) {
 
 func TestTransitionRejectsBatchFinishedBeforeQueueEmpty(t *testing.T) {
 	call := ToolCall{ID: "call-1"}
-	state := EngineState{State: StateAdvancingQueue, ToolBatch: &ToolCallBatch{Calls: []ToolCall{call}}}
+	state := RuntimeData{State: StateAdvancingQueue, ToolBatch: &ToolCallBatch{Calls: []ToolCall{call}}}
 	snapshot, err := SnapshotFrom(state)
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +87,7 @@ func TestTransitionRejectsBatchFinishedBeforeQueueEmpty(t *testing.T) {
 
 func TestStateChangeApplierDoesNotMutateOriginalStateWhenValidationFails(t *testing.T) {
 	call := ToolCall{ID: "call-1"}
-	original := EngineState{
+	original := RuntimeData{
 		State:     StateAdvancingQueue,
 		ToolBatch: &ToolCallBatch{Calls: []ToolCall{call}},
 	}
@@ -95,7 +95,6 @@ func TestStateChangeApplierDoesNotMutateOriginalStateWhenValidationFails(t *test
 		NextState: StateRunningTool,
 		StateChanges: []StateChange{
 			AdvanceToolCallBatch{},
-			ClearScheduledActions{},
 		},
 	})
 	var invariant InvariantViolationError
@@ -107,33 +106,13 @@ func TestStateChangeApplierDoesNotMutateOriginalStateWhenValidationFails(t *test
 	}
 }
 
-func TestStateChangeApplierDescribesSchedulerStateChangeAfterValidStateChangeResult(t *testing.T) {
-	original := EngineState{State: StateWaitingLLM}
-	changeResult, err := (DefaultStateChangeApplier{}).ApplyStateChanges(original, TransitionResult{
-		NextState:    StateIdle,
-		StateChanges: []StateChange{ClearScheduledActions{}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(changeResult.SchedulerOps) != 1 {
-		t.Fatalf("action ops = %+v, want one clear operation", changeResult.SchedulerOps)
-	}
-	if _, ok := changeResult.SchedulerOps[0].(ClearScheduledActionsOp); !ok {
-		t.Fatalf("action op = %T, want ClearScheduledActionsOp", changeResult.SchedulerOps[0])
-	}
-	if original.State != StateWaitingLLM {
-		t.Fatalf("original state = %s, want WaitingLLM", original.State)
-	}
-}
-
 type invalidStateChangeApplier struct{}
 
-func (invalidStateChangeApplier) ApplyStateChanges(state EngineState, result TransitionResult) (StateChangeResult, error) {
+func (invalidStateChangeApplier) ApplyStateChanges(state RuntimeData, result TransitionResult) (StateChangeResult, error) {
 	if state.State == StateInitializing {
 		return (DefaultStateChangeApplier{}).ApplyStateChanges(state, result)
 	}
-	return StateChangeResult{State: EngineState{
+	return StateChangeResult{RuntimeData: RuntimeData{
 		State:     StateIdle,
 		ToolBatch: &ToolCallBatch{},
 	}}, nil
@@ -144,7 +123,7 @@ func TestEngineDoesNotCommitInvalidCustomStateChangeResult(t *testing.T) {
 	runs := NewDefaultRunController()
 	engine := NewEngineWithComponents(
 		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(nil, nil)),
-		NewDefaultOutcomeResolver(NewDefaultPolicy(), approvals),
+		NewDefaultActionResultResolver(NewDefaultPolicy(), approvals),
 		invalidStateChangeApplier{},
 		runs,
 		approvals,
@@ -168,7 +147,7 @@ func TestEngineDoesNotCommitInvalidCustomStateChangeResult(t *testing.T) {
 
 func TestToolFlowPreservesMachineInvariants(t *testing.T) {
 	call := ToolCall{ID: "call-1", Name: "bash", Input: "pwd"}
-	state := EngineState{State: StateWaitingLLM}
+	state := RuntimeData{State: StateWaitingLLM}
 	events := []Event{
 		ToolBatchReceived{Calls: []ToolCall{call}},
 		ToolCallNeedsApproval{Call: call, Request: PermissionRequest{ToolName: "bash"}},
@@ -196,7 +175,7 @@ func TestToolFlowPreservesMachineInvariants(t *testing.T) {
 		if err != nil {
 			t.Fatalf("step %d changeResult: %v", i, err)
 		}
-		state = changeResult.State
+		state = changeResult.RuntimeData
 		if state.State != wantStates[i] {
 			t.Fatalf("step %d state = %s, want %s", i, state.State, wantStates[i])
 		}

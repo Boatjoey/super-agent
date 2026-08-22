@@ -21,7 +21,7 @@ type PermissionMode = execution.PermissionMode
 type PermissionRules = execution.PermissionRules
 type StreamChunk = protocol.StreamChunk
 type Engine = enginepkg.Engine
-type Snapshot = enginepkg.Snapshot
+type EngineView = enginepkg.EngineView
 type UserMessageSubmitted = machine.UserMessageSubmitted
 
 const (

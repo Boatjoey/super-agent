@@ -34,7 +34,7 @@ type PermissionRequest struct {
 	Reason       string
 }
 
-type Snapshot struct {
+type ConversationView struct {
 	AgentStatus           AgentStatus
 	Messages              []Message
 	PendingTool           *ToolCall
@@ -85,13 +85,13 @@ func (ConversationError) isEvent() {}
 
 // Conversation is the TUI input port. Its DTOs contain no runtime or storage types.
 type Conversation interface {
-	Snapshot() Snapshot
+	Snapshot() ConversationView
 	RunTurn(context.Context, string, chan<- Event, <-chan ApprovalDecision) error
 	Cancel() error
 	Reset() error
-	Sessions() ([]SessionSummary, error)
+	ListSessions() ([]SessionSummary, error)
 	Resume(string) error
-	Rename(string, string) error
+	RenameSession(string, string) error
 	DeleteSession(string) error
 	Compact(context.Context, string) error
 	Undo() error

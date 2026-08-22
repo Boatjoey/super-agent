@@ -38,7 +38,7 @@ func (se *snapshotEmitter) reset(emittedMessages int) {
 	se.lastApprovalCall = nil
 }
 
-func (se *snapshotEmitter) emit(events chan<- SessionEvent, snapshot Snapshot, onMessage func(Message)) {
+func (se *snapshotEmitter) emit(events chan<- SessionEvent, snapshot EngineView, onMessage func(Message)) {
 	se.mu.Lock()
 	defer se.mu.Unlock()
 	events <- StateChanged{State: snapshot.State}
@@ -75,7 +75,7 @@ func (se *snapshotEmitter) emit(events chan<- SessionEvent, snapshot Snapshot, o
 	se.emittedMessages = len(messages)
 }
 
-func permissionRequest(snapshot Snapshot) PermissionRequest {
+func permissionRequest(snapshot EngineView) PermissionRequest {
 	if snapshot.PendingPermission == nil {
 		return PermissionRequest{}
 	}

@@ -251,7 +251,7 @@ func (s *Store) SetCurrentTurn(id SessionID, turn TurnID) error {
 	return s.writeMeta(meta)
 }
 
-func (s *Store) Rename(id SessionID, title string) error {
+func (s *Store) RenameSession(id SessionID, title string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	title = strings.TrimSpace(title)

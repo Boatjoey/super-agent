@@ -8,14 +8,14 @@ type QueuedAction struct {
 	Action   ScheduledAction
 }
 
-type ActionOutcome struct {
+type ActionCompletion struct {
 	RunID    RunID
 	ActionID ActionID
-	Result   ExecutionResult
+	Result   ScheduledActionResult
 }
 
 type ScheduledActionRunner interface {
-	Run(ctx context.Context, action QueuedAction, input ExecutionInput, chunkFunc func(StreamChunk)) (ActionOutcome, error)
+	Run(ctx context.Context, action QueuedAction, input ScheduledActionInput, chunkFunc func(StreamChunk)) (ActionCompletion, error)
 	ToolSpecs() []ToolSpec
 }
 
@@ -34,12 +34,12 @@ func (r *DefaultScheduledActionRunner) ToolSpecs() []ToolSpec {
 	return nil
 }
 
-func (r *DefaultScheduledActionRunner) Run(ctx context.Context, action QueuedAction, input ExecutionInput, chunkFunc func(StreamChunk)) (ActionOutcome, error) {
+func (r *DefaultScheduledActionRunner) Run(ctx context.Context, action QueuedAction, input ScheduledActionInput, chunkFunc func(StreamChunk)) (ActionCompletion, error) {
 	result, err := r.executor.Execute(ctx, action.Action, input, chunkFunc)
 	if err != nil {
-		return ActionOutcome{}, err
+		return ActionCompletion{}, err
 	}
-	return ActionOutcome{
+	return ActionCompletion{
 		RunID:    action.RunID,
 		ActionID: action.ActionID,
 		Result:   result,

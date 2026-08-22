@@ -11,12 +11,12 @@ import (
 type Engine struct {
 	mu                 sync.Mutex
 	runner             execution.ScheduledActionRunner
-	resolver           execution.OutcomeResolver
+	resolver           execution.ActionResultResolver
 	stateChangeApplier machine.StateChangeApplier
 	runs               execution.RunController
 	approvals          execution.ApprovalStore
-	state              machine.EngineState
-	scheduler          *execution.ActionScheduler
+	runtimeData        machine.RuntimeData
+	actionQueue        *execution.ActionQueue
 
 	// stateObserver is notified after state-changing transitions while
 	// actions drain. It runs outside the engine lock so it can read
@@ -47,7 +47,7 @@ func NewEngineWithExecutor(executor execution.ScheduledActionExecutor, initial [
 	approvals.SetPermissionPolicy(policy.Mode(), policy.Rules())
 	return NewEngineWithComponents(
 		execution.NewDefaultScheduledActionRunner(executor),
-		execution.NewDefaultOutcomeResolver(policy, approvals),
+		execution.NewDefaultActionResultResolver(policy, approvals),
 		machine.DefaultStateChangeApplier{},
 		execution.NewDefaultRunController(),
 		approvals,
@@ -60,10 +60,10 @@ func NewEngineWithExecutorAndPolicy(executor execution.ScheduledActionExecutor, 
 	if snapshot, ok := policy.(policySnapshot); ok {
 		approvals.SetPermissionPolicy(snapshot.Mode(), snapshot.Rules())
 	}
-	return NewEngineWithComponents(execution.NewDefaultScheduledActionRunner(executor), execution.NewDefaultOutcomeResolver(policy, approvals), machine.DefaultStateChangeApplier{}, execution.NewDefaultRunController(), approvals, initial)
+	return NewEngineWithComponents(execution.NewDefaultScheduledActionRunner(executor), execution.NewDefaultActionResultResolver(policy, approvals), machine.DefaultStateChangeApplier{}, execution.NewDefaultRunController(), approvals, initial)
 }
 
-func NewEngineWithComponents(runner execution.ScheduledActionRunner, resolver execution.OutcomeResolver, stateChangeApplier machine.StateChangeApplier, runs execution.RunController, approvals execution.ApprovalStore, initial []protocol.Message) *Engine {
+func NewEngineWithComponents(runner execution.ScheduledActionRunner, resolver execution.ActionResultResolver, stateChangeApplier machine.StateChangeApplier, runs execution.RunController, approvals execution.ApprovalStore, initial []protocol.Message) *Engine {
 	messages := append([]protocol.Message(nil), initial...)
 	return &Engine{
 		runner:             runner,
@@ -71,8 +71,8 @@ func NewEngineWithComponents(runner execution.ScheduledActionRunner, resolver ex
 		stateChangeApplier: stateChangeApplier,
 		runs:               runs,
 		approvals:          approvals,
-		scheduler:          execution.NewActionScheduler(),
-		state: machine.EngineState{
+		actionQueue:        execution.NewActionQueue(),
+		runtimeData: machine.RuntimeData{
 			State:    machine.StateInitializing,
 			Messages: messages,
 		},

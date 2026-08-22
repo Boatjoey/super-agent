@@ -67,17 +67,13 @@ type ClearCurrentTool struct{}
 
 func (ClearCurrentTool) isStateChange() {}
 
-type ClearScheduledActions struct{}
-
-func (ClearScheduledActions) isStateChange() {}
-
 type ClearToolCallBatch struct{}
 
 func (ClearToolCallBatch) isStateChange() {}
 
-type ResetContext struct{}
+type ResetConversation struct{}
 
-func (ResetContext) isStateChange() {}
+func (ResetConversation) isStateChange() {}
 
 // AllStateChanges lists every StateChange type for registration, serialization, and testing.
 var AllStateChanges = []StateChange{
@@ -92,7 +88,6 @@ var AllStateChanges = []StateChange{
 	ClearPendingTool{},
 	SetCurrentTool{},
 	ClearCurrentTool{},
-	ClearScheduledActions{},
 	ClearToolCallBatch{},
-	ResetContext{},
+	ResetConversation{},
 }

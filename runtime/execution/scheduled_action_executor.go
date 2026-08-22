@@ -5,13 +5,13 @@ import (
 	"errors"
 )
 
-type ExecutionInput struct {
+type ScheduledActionInput struct {
 	Messages  []Message
 	ToolSpecs []ToolSpec
 }
 
 type ScheduledActionExecutor interface {
-	Execute(ctx context.Context, action ScheduledAction, env ExecutionInput, chunkFunc func(StreamChunk)) (ExecutionResult, error)
+	Execute(ctx context.Context, action ScheduledAction, env ScheduledActionInput, chunkFunc func(StreamChunk)) (ScheduledActionResult, error)
 }
 
 type DefaultScheduledActionExecutor struct {
@@ -27,7 +27,7 @@ func (x *DefaultScheduledActionExecutor) ToolSpecs() []ToolSpec {
 	return x.tools.Specs()
 }
 
-func (x *DefaultScheduledActionExecutor) Execute(ctx context.Context, action ScheduledAction, env ExecutionInput, chunkFunc func(StreamChunk)) (ExecutionResult, error) {
+func (x *DefaultScheduledActionExecutor) Execute(ctx context.Context, action ScheduledAction, env ScheduledActionInput, chunkFunc func(StreamChunk)) (ScheduledActionResult, error) {
 	switch fx := action.(type) {
 	case CallModel:
 		resp, err := x.model.Next(ctx, env.Messages, env.ToolSpecs, chunkFunc)
@@ -44,7 +44,7 @@ func (x *DefaultScheduledActionExecutor) Execute(ctx context.Context, action Sch
 			return ToolFinished{Call: fx.Call, Result: "Error: " + err.Error()}, nil
 		}
 		return ToolFinished{Call: fx.Call, Result: result}, nil
-	case ProcessNextToolCall:
+	case CheckToolQueue:
 		return ToolQueueChecked{}, nil
 	default:
 		return nil, errors.New("unknown action")

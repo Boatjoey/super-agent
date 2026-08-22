@@ -1,6 +1,6 @@
 package machine
 
-type EngineState struct {
+type RuntimeData struct {
 	State              State
 	Messages           []Message
 	PendingTool        *ToolCall
