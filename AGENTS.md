@@ -29,6 +29,7 @@
 - Keep the TUI as the only interaction surface; do not add headless, server, or alternate UI entry points.
 - LLM and tool adapters may import `runtime/protocol`, not the root `runtime` facade.
 - More detail: `docs/repository-details.md`.
+- Transition teaching guide: `teach/agent-transition.md`.
 - Competitive gap roadmap: `docs/competitive-gap-tasks.md`.
 
 ## Documentation
