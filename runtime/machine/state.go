@@ -1,7 +1,5 @@
 package machine
 
-import "super-agent/runtime/protocol"
-
 type State string
 
 const (
@@ -12,9 +10,3 @@ const (
 	StateRunningTool     State = "RunningTool"
 	StateAdvancingQueue  State = "AdvancingQueue"
 )
-
-type ToolCallBatch struct {
-	ID    string              `json:"id"`
-	Calls []protocol.ToolCall `json:"calls"`
-	Index int                 `json:"index"`
-}

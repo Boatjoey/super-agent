@@ -8,7 +8,8 @@
 - Keep `RunID` stale filtering in the engine. Keep state, call-id, queue guards, and invariants in `runtime/machine`.
 - Reducers must clone, apply, validate, and return descriptive scheduler operations; the engine commits state and scheduler changes under one lock only after validation.
 - The engine notifies a per-turn state observer after state-changing transitions; the session uses it to emit live snapshots so the TUI header tracks states such as `RunningTool`.
-- Keep state-machine logic in `runtime/machine/transition.go`.
+- Keep state-machine logic in `runtime/machine/transition.go`; transitions use one package-private static registry keyed by state and event kind.
+- Keep state definitions in `runtime/machine/state.go` and tool-batch state in `runtime/machine/tool_batch.go`.
 - Keep orchestration in `runtime/engine/`; constructors belong in `engine.go`, commands in `commands.go`, effect draining in `effect_loop.go`, and queries in `query.go`.
 - In `runtime/engine`, reference `machine`, `execution`, and `protocol` owners explicitly; do not re-export them through internal aliases.
 - In `runtime/engine`, reference `machine`, `execution`, and `protocol` owners explicitly; do not re-export them through internal aliases.

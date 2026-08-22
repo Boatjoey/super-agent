@@ -6,6 +6,261 @@ type TransitionResult struct {
 	Effects   []Effect
 }
 
+type transitionKey struct {
+	state State
+	event eventKind
+}
+
+type transitionHandler func(MachineSnapshot, Event) (TransitionResult, error)
+
+type transitionRule struct {
+	key     transitionKey
+	handler transitionHandler
+}
+
+// stateTransitions is the complete static edge registry for the machine graph.
+var stateTransitions = newTransitionRegistry()
+
+func newTransitionRegistry() map[transitionKey]transitionHandler {
+	registry := make(map[transitionKey]transitionHandler)
+	rules := []transitionRule{
+		{transitionKey{StateInitializing, eventEngineReady}, adaptTransition(handleEngineReady)},
+		{transitionKey{StateIdle, eventUserMessageSubmitted}, adaptTransition(handleUserMessageSubmitted)},
+		{transitionKey{StateWaitingLLM, eventAssistantMessageReceived}, adaptTransition(handleAssistantMessageReceived)},
+		{transitionKey{StateWaitingLLM, eventToolBatchReceived}, adaptTransition(handleToolBatchReceived)},
+		{transitionKey{StateWaitingApproval, eventApprovalGranted}, adaptTransition(handleApprovalGranted)},
+		{transitionKey{StateWaitingApproval, eventApprovalAlwaysGranted}, adaptTransition(handleApprovalAlwaysGranted)},
+		{transitionKey{StateWaitingApproval, eventApprovalDenied}, adaptTransition(handleApprovalDenied)},
+		{transitionKey{StateRunningTool, eventToolResultReceived}, adaptTransition(handleToolResultReceived)},
+		{transitionKey{StateAdvancingQueue, eventToolBatchFinished}, adaptTransition(handleToolBatchFinished)},
+		{transitionKey{StateAdvancingQueue, eventToolCallNeedsApproval}, adaptTransition(handleToolCallNeedsApproval)},
+		{transitionKey{StateAdvancingQueue, eventToolCallReadyToRun}, adaptTransition(handleToolCallReadyToRun)},
+		{transitionKey{event: eventErrorOccurred}, adaptTransition(handleErrorOccurred)},
+		{transitionKey{event: eventCancelRequested}, adaptTransition(handleCancelRequested)},
+		{transitionKey{event: eventResetRequested}, adaptTransition(handleResetRequested)},
+	}
+	for _, rule := range rules {
+		registerTransition(registry, rule.key, rule.handler)
+	}
+	return registry
+}
+
+func registerTransition(registry map[transitionKey]transitionHandler, key transitionKey, handler transitionHandler) {
+	if _, exists := registry[key]; exists {
+		panic("duplicate state transition: " + string(key.state) + " + " + string(key.event))
+	}
+	registry[key] = handler
+}
+
+// adaptTransition 函数只有一个参数，通过该参数，可以泛型编译时推导出 E
+func adaptTransition[E Event](
+	handler func(MachineSnapshot, E) (TransitionResult, error),
+) transitionHandler {
+	return func(snapshot MachineSnapshot, event Event) (TransitionResult, error) {
+		typed, ok := event.(E)
+		if !ok {
+			return protocolViolation(snapshot, event, "registered handler has incompatible event type")
+		}
+		return handler(snapshot, typed)
+	}
+}
+
+func Transition(snapshot MachineSnapshot, event Event) (TransitionResult, error) {
+	if event == nil {
+		return unexpectedEvent(snapshot, event)
+	}
+	handler, ok := stateTransitions[transitionKey{state: snapshot.state, event: event.kind()}]
+	if !ok {
+		// The zero State key represents an event accepted from any state.
+		handler, ok = stateTransitions[transitionKey{event: event.kind()}]
+		if !ok {
+			return unexpectedEvent(snapshot, event)
+		}
+	}
+	return handler(snapshot, event)
+}
+
+func unexpectedEvent(snapshot MachineSnapshot, event Event) (TransitionResult, error) {
+	return TransitionResult{}, UnexpectedEventError{State: snapshot.state, Event: event}
+}
+
+func protocolViolation(snapshot MachineSnapshot, event Event, reason string) (TransitionResult, error) {
+	return TransitionResult{}, ProtocolViolationError{State: snapshot.state, Event: event, Reason: reason}
+}
+
+func handleEngineReady(MachineSnapshot, EngineReady) (TransitionResult, error) {
+	return TransitionResult{NextState: StateIdle}, nil
+}
+
+func handleUserMessageSubmitted(_ MachineSnapshot, event UserMessageSubmitted) (TransitionResult, error) {
+	return TransitionResult{
+		NextState: StateWaitingLLM,
+		Mutations: []Mutation{AppendUserMessage{Content: event.Content}},
+		Effects:   []Effect{CallModel{}},
+	}, nil
+}
+
+func handleAssistantMessageReceived(_ MachineSnapshot, event AssistantMessageReceived) (TransitionResult, error) {
+	return TransitionResult{
+		NextState: StateIdle,
+		Mutations: []Mutation{AppendAssistantMessage{Message: Message{
+			Role:             RoleAssistant,
+			Content:          event.Response.Content,
+			ReasoningContent: event.Response.ReasoningContent,
+		}}},
+	}, nil
+}
+
+func handleToolBatchReceived(snapshot MachineSnapshot, event ToolBatchReceived) (TransitionResult, error) {
+	if len(event.Calls) == 0 {
+		return protocolViolation(snapshot, event, "tool batch is empty")
+	}
+	return TransitionResult{
+		NextState: StateAdvancingQueue,
+		Mutations: []Mutation{
+			AppendAssistantMessage{Message: Message{
+				Role:             RoleAssistant,
+				Content:          event.Content,
+				ReasoningContent: event.ReasoningContent,
+				ToolCalls:        toolCallPointers(event.Calls),
+			}},
+			SetToolCallBatch{ID: toolBatchID(event.Calls), Calls: event.Calls},
+		},
+		Effects: []Effect{ProcessNextToolCall{}},
+	}, nil
+}
+
+func handleApprovalGranted(snapshot MachineSnapshot, event ApprovalGranted) (TransitionResult, error) {
+	return approveTool(snapshot, event, event.Call)
+}
+
+func handleApprovalAlwaysGranted(snapshot MachineSnapshot, event ApprovalAlwaysGranted) (TransitionResult, error) {
+	return approveTool(snapshot, event, event.Call)
+}
+
+func approveTool(snapshot MachineSnapshot, event Event, call ToolCall) (TransitionResult, error) {
+	if snapshot.pendingTool == nil {
+		return protocolViolation(snapshot, event, "approval has no pending tool")
+	}
+	if !sameToolCall(call, *snapshot.pendingTool) {
+		return protocolViolation(snapshot, event, "approved call does not match pending tool")
+	}
+	return TransitionResult{
+		NextState: StateRunningTool,
+		Mutations: []Mutation{SetCurrentTool{Call: call}, ClearPendingTool{}},
+		Effects:   []Effect{RunTool{Call: call}},
+	}, nil
+}
+
+func handleApprovalDenied(snapshot MachineSnapshot, event ApprovalDenied) (TransitionResult, error) {
+	if snapshot.pendingTool == nil {
+		return protocolViolation(snapshot, event, "denial has no pending tool")
+	}
+	if !sameToolCall(event.Call, *snapshot.pendingTool) {
+		return protocolViolation(snapshot, event, "denied call does not match pending tool")
+	}
+	return TransitionResult{
+		NextState: StateAdvancingQueue,
+		Mutations: []Mutation{
+			ClearPendingTool{},
+			AppendToolResult{Call: event.Call, Result: "denied: " + event.Call.Name},
+		},
+		Effects: []Effect{ProcessNextToolCall{}},
+	}, nil
+}
+
+func handleToolResultReceived(snapshot MachineSnapshot, event ToolResultReceived) (TransitionResult, error) {
+	if snapshot.currentTool == nil {
+		return protocolViolation(snapshot, event, "tool result has no current tool")
+	}
+	if !sameToolCall(event.Call, *snapshot.currentTool) {
+		return protocolViolation(snapshot, event, "result call does not match current tool")
+	}
+	return TransitionResult{
+		NextState: StateAdvancingQueue,
+		Mutations: []Mutation{
+			AppendToolResult{Call: event.Call, Result: event.Result},
+			ClearCurrentTool{},
+		},
+		Effects: []Effect{ProcessNextToolCall{}},
+	}, nil
+}
+
+func handleToolBatchFinished(snapshot MachineSnapshot, event ToolBatchFinished) (TransitionResult, error) {
+	if !snapshot.queue.empty() {
+		return protocolViolation(snapshot, event, "tool batch finished before the queue was empty")
+	}
+	return TransitionResult{
+		NextState: StateWaitingLLM,
+		Mutations: []Mutation{ClearToolCallBatch{}},
+		Effects:   []Effect{CallModel{}},
+	}, nil
+}
+
+func handleToolCallNeedsApproval(snapshot MachineSnapshot, event ToolCallNeedsApproval) (TransitionResult, error) {
+	if snapshot.queue.next == nil {
+		return protocolViolation(snapshot, event, "approval requested with no next tool")
+	}
+	if !sameToolCall(event.Call, *snapshot.queue.next) {
+		return protocolViolation(snapshot, event, "approval call does not match next tool")
+	}
+	return TransitionResult{
+		NextState: StateWaitingApproval,
+		Mutations: []Mutation{
+			SetPendingTool{Call: event.Call, Request: event.Request},
+			AdvanceToolCallBatch{},
+		},
+	}, nil
+}
+
+func handleToolCallReadyToRun(snapshot MachineSnapshot, event ToolCallReadyToRun) (TransitionResult, error) {
+	if snapshot.queue.next == nil {
+		return protocolViolation(snapshot, event, "ready call has no next tool")
+	}
+	if !sameToolCall(event.Call, *snapshot.queue.next) {
+		return protocolViolation(snapshot, event, "ready call does not match next tool")
+	}
+	return TransitionResult{
+		NextState: StateRunningTool,
+		Mutations: []Mutation{AdvanceToolCallBatch{}, SetCurrentTool{Call: event.Call}},
+		Effects:   []Effect{RunTool{Call: event.Call}},
+	}, nil
+}
+
+func handleErrorOccurred(_ MachineSnapshot, event ErrorOccurred) (TransitionResult, error) {
+	return TransitionResult{
+		NextState: StateIdle,
+		Mutations: []Mutation{
+			FlushStreamingAssistant{Interrupted: true},
+			AppendToolResult{
+				Call:   ToolCall{ID: "runtime_error", Name: "runtime_error"},
+				Result: runtimeErrorMessage(event.Err),
+			},
+			ClearPendingTool{},
+			ClearCurrentTool{},
+			ClearToolCallBatch{},
+			ClearPendingEffects{},
+		},
+	}, nil
+}
+
+func handleCancelRequested(MachineSnapshot, CancelRequested) (TransitionResult, error) {
+	return TransitionResult{
+		NextState: StateIdle,
+		Mutations: []Mutation{
+			FlushStreamingAssistant{Interrupted: true},
+			ClearPendingTool{},
+			ClearCurrentTool{},
+			ClearToolCallBatch{},
+			ClearPendingEffects{},
+		},
+	}, nil
+}
+
+func handleResetRequested(MachineSnapshot, ResetRequested) (TransitionResult, error) {
+	return TransitionResult{NextState: StateIdle, Mutations: []Mutation{ResetContext{}}}, nil
+}
+
 func toolBatchID(calls []ToolCall) string {
 	if len(calls) == 0 || calls[0].ID == "" {
 		return "batch"
@@ -27,202 +282,4 @@ func runtimeErrorMessage(err error) string {
 		return "unknown runtime error"
 	}
 	return err.Error()
-}
-
-func Transition(snapshot MachineSnapshot, event Event) (TransitionResult, error) {
-	state := snapshot.state
-	unexpected := func() (TransitionResult, error) {
-		return TransitionResult{}, UnexpectedEventError{State: state, Event: event}
-	}
-	protocolViolation := func(reason string) (TransitionResult, error) {
-		return TransitionResult{}, ProtocolViolationError{State: state, Event: event, Reason: reason}
-	}
-	switch ev := event.(type) {
-	case UserMessageSubmitted:
-		if state != StateIdle {
-			return unexpected()
-		}
-		return TransitionResult{
-			NextState: StateWaitingLLM,
-			Mutations: []Mutation{AppendUserMessage{Content: ev.Content}},
-			Effects:   []Effect{CallModel{}},
-		}, nil
-	case AssistantMessageReceived:
-		if state != StateWaitingLLM {
-			return unexpected()
-		}
-		return TransitionResult{
-			NextState: StateIdle,
-			Mutations: []Mutation{AppendAssistantMessage{Message: Message{
-				Role:             RoleAssistant,
-				Content:          ev.Response.Content,
-				ReasoningContent: ev.Response.ReasoningContent,
-			}}},
-		}, nil
-	case ToolBatchReceived:
-		if state != StateWaitingLLM {
-			return unexpected()
-		}
-		if len(ev.Calls) == 0 {
-			return protocolViolation("tool batch is empty")
-		}
-		return TransitionResult{
-			NextState: StateAdvancingQueue,
-			Mutations: []Mutation{
-				AppendAssistantMessage{Message: Message{
-					Role:             RoleAssistant,
-					Content:          ev.Content,
-					ReasoningContent: ev.ReasoningContent,
-					ToolCalls:        toolCallPointers(ev.Calls),
-				}},
-				SetToolCallBatch{ID: toolBatchID(ev.Calls), Calls: ev.Calls},
-			},
-			Effects: []Effect{ProcessNextToolCall{}},
-		}, nil
-	case ApprovalGranted:
-		if state != StateWaitingApproval {
-			return unexpected()
-		}
-		if snapshot.pendingTool == nil {
-			return protocolViolation("approval has no pending tool")
-		}
-		if !sameToolCall(ev.Call, *snapshot.pendingTool) {
-			return protocolViolation("approved call does not match pending tool")
-		}
-		return TransitionResult{
-			NextState: StateRunningTool,
-			Mutations: []Mutation{SetCurrentTool{Call: ev.Call}, ClearPendingTool{}},
-			Effects:   []Effect{RunTool{Call: ev.Call}},
-		}, nil
-	case ApprovalAlwaysGranted:
-		if state != StateWaitingApproval {
-			return unexpected()
-		}
-		if snapshot.pendingTool == nil {
-			return protocolViolation("approval has no pending tool")
-		}
-		if !sameToolCall(ev.Call, *snapshot.pendingTool) {
-			return protocolViolation("approved call does not match pending tool")
-		}
-		return TransitionResult{
-			NextState: StateRunningTool,
-			Mutations: []Mutation{SetCurrentTool{Call: ev.Call}, ClearPendingTool{}},
-			Effects:   []Effect{RunTool{Call: ev.Call}},
-		}, nil
-	case ApprovalDenied:
-		if state != StateWaitingApproval {
-			return unexpected()
-		}
-		if snapshot.pendingTool == nil {
-			return protocolViolation("denial has no pending tool")
-		}
-		if !sameToolCall(ev.Call, *snapshot.pendingTool) {
-			return protocolViolation("denied call does not match pending tool")
-		}
-		return TransitionResult{
-			NextState: StateAdvancingQueue,
-			Mutations: []Mutation{
-				ClearPendingTool{},
-				AppendToolResult{Call: ev.Call, Result: "denied: " + ev.Call.Name},
-			},
-			Effects: []Effect{ProcessNextToolCall{}},
-		}, nil
-	case ToolResultReceived:
-		if state != StateRunningTool {
-			return unexpected()
-		}
-		if snapshot.currentTool == nil {
-			return protocolViolation("tool result has no current tool")
-		}
-		if !sameToolCall(ev.Call, *snapshot.currentTool) {
-			return protocolViolation("result call does not match current tool")
-		}
-		return TransitionResult{
-			NextState: StateAdvancingQueue,
-			Mutations: []Mutation{
-				AppendToolResult{Call: ev.Call, Result: ev.Result},
-				ClearCurrentTool{},
-			},
-			Effects: []Effect{ProcessNextToolCall{}},
-		}, nil
-	case ToolBatchFinished:
-		if state != StateAdvancingQueue {
-			return unexpected()
-		}
-		if !snapshot.queue.empty() {
-			return protocolViolation("tool batch finished before the queue was empty")
-		}
-		return TransitionResult{
-			NextState: StateWaitingLLM,
-			Mutations: []Mutation{ClearToolCallBatch{}},
-			Effects:   []Effect{CallModel{}},
-		}, nil
-	case ToolCallNeedsApproval:
-		if state != StateAdvancingQueue {
-			return unexpected()
-		}
-		if snapshot.queue.next == nil {
-			return protocolViolation("approval requested with no next tool")
-		}
-		if !sameToolCall(ev.Call, *snapshot.queue.next) {
-			return protocolViolation("approval call does not match next tool")
-		}
-		return TransitionResult{
-			NextState: StateWaitingApproval,
-			Mutations: []Mutation{
-				SetPendingTool{Call: ev.Call, Request: ev.Request},
-				AdvanceToolCallBatch{},
-			},
-		}, nil
-	case ToolCallReadyToRun:
-		if state != StateAdvancingQueue {
-			return unexpected()
-		}
-		if snapshot.queue.next == nil {
-			return protocolViolation("ready call has no next tool")
-		}
-		if !sameToolCall(ev.Call, *snapshot.queue.next) {
-			return protocolViolation("ready call does not match next tool")
-		}
-		return TransitionResult{
-			NextState: StateRunningTool,
-			Mutations: []Mutation{AdvanceToolCallBatch{}, SetCurrentTool{Call: ev.Call}},
-			Effects:   []Effect{RunTool{Call: ev.Call}},
-		}, nil
-	case ErrorOccurred:
-		return TransitionResult{
-			NextState: StateIdle,
-			Mutations: []Mutation{
-				FlushStreamingAssistant{Interrupted: true},
-				AppendToolResult{
-					Call:   ToolCall{ID: "runtime_error", Name: "runtime_error"},
-					Result: runtimeErrorMessage(ev.Err),
-				},
-				ClearPendingTool{},
-				ClearCurrentTool{},
-				ClearToolCallBatch{},
-				ClearPendingEffects{},
-			},
-		}, nil
-	case CancelRequested:
-		return TransitionResult{
-			NextState: StateIdle,
-			Mutations: []Mutation{
-				FlushStreamingAssistant{Interrupted: true},
-				ClearPendingTool{},
-				ClearCurrentTool{},
-				ClearToolCallBatch{},
-				ClearPendingEffects{},
-			},
-		}, nil
-	case EngineReady:
-		if state != StateInitializing {
-			return unexpected()
-		}
-		return TransitionResult{NextState: StateIdle}, nil
-	case ResetRequested:
-		return TransitionResult{NextState: StateIdle, Mutations: []Mutation{ResetContext{}}}, nil
-	default:
-		return unexpected()
-	}
 }

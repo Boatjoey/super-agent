@@ -109,7 +109,9 @@ QueuedEffect { RunID, EffectID, Effect }
 
 ## Runtime Package Boundaries
 
-- `runtime/machine/transition.go`: pure context-aware transition table.
+- `runtime/machine/transition.go`: pure context-aware transition handlers selected from one package-private static registry keyed by state and event kind; a zero-state key represents events accepted from any state.
+- `runtime/machine/state.go`: runtime state type and constants.
+- `runtime/machine/tool_batch.go`: queued tool-batch state.
 - `runtime/machine/snapshot.go`: machine snapshot construction and state invariants.
 - `runtime/machine/reducer.go`: side-effect-free transactional mutation reduction.
 - `runtime/engine/engine.go`: engine construction and dependencies.

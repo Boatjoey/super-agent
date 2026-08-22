@@ -3,7 +3,7 @@
 
 ## 6 个状态总览
 
-本项目 agent 的状态机共定义了 6 个状态，位于 `runtime/machine/types.go`
+本项目 agent 的状态机共定义了 6 个状态，位于 `runtime/machine/state.go`
 - State 是以 string 为底层类型的自定义类型
 - 各状态是 State 类型的字符串常量
 
