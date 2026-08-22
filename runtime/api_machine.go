@@ -21,9 +21,9 @@ type CancelRequested = machine.CancelRequested
 type ResetRequested = machine.ResetRequested
 type EngineReady = machine.EngineReady
 
-type Mutation = machine.Mutation
+type StateChange = machine.StateChange
 
-var AllMutations = machine.AllMutations
+var AllStateChanges = machine.AllStateChanges
 
 type AppendUserMessage = machine.AppendUserMessage
 type AppendAssistantMessage = machine.AppendAssistantMessage
@@ -36,13 +36,13 @@ type AdvanceToolCallBatch = machine.AdvanceToolCallBatch
 type ClearPendingTool = machine.ClearPendingTool
 type SetCurrentTool = machine.SetCurrentTool
 type ClearCurrentTool = machine.ClearCurrentTool
-type ClearPendingEffects = machine.ClearPendingEffects
+type ClearScheduledActions = machine.ClearScheduledActions
 type ClearToolCallBatch = machine.ClearToolCallBatch
 type ResetContext = machine.ResetContext
 
-type Effect = machine.Effect
+type ScheduledAction = machine.ScheduledAction
 
-var AllEffects = machine.AllEffects
+var AllScheduledActions = machine.AllScheduledActions
 
 type CallModel = machine.CallModel
 type RunTool = machine.RunTool
@@ -53,11 +53,11 @@ type MachineSnapshot = machine.MachineSnapshot
 type UnexpectedEventError = machine.UnexpectedEventError
 type ProtocolViolationError = machine.ProtocolViolationError
 type InvariantViolationError = machine.InvariantViolationError
-type EffectOp = machine.EffectOp
-type ClearPendingEffectsOp = machine.ClearPendingEffectsOp
-type Reduction = machine.Reduction
-type Reducer = machine.Reducer
-type DefaultReducer = machine.DefaultReducer
+type SchedulerOp = machine.SchedulerOp
+type ClearScheduledActionsOp = machine.ClearScheduledActionsOp
+type StateChangeResult = machine.StateChangeResult
+type StateChangeApplier = machine.StateChangeApplier
+type DefaultStateChangeApplier = machine.DefaultStateChangeApplier
 
 func SnapshotFrom(state EngineState) (MachineSnapshot, error) {
 	return machine.SnapshotFrom(state)

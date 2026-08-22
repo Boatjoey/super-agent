@@ -171,9 +171,9 @@ func TestApprovalStoreStoresPermissionPolicy(t *testing.T) {
 
 func TestEngineRejectsInvalidPermissionMode(t *testing.T) {
 	engine := NewEngineWithComponents(
-		NewDefaultEffectRunner(NewDefaultEffectExecutor(nil, nil)),
+		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(nil, nil)),
 		NewDefaultOutcomeResolver(NewDefaultPolicy(), NewMemoryApprovalStore()),
-		DefaultReducer{},
+		DefaultStateChangeApplier{},
 		NewDefaultRunController(),
 		NewMemoryApprovalStore(),
 		nil,

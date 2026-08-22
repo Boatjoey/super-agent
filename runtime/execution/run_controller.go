@@ -7,7 +7,7 @@ import (
 )
 
 type RunID string
-type EffectID string
+type ActionID string
 
 type RunController interface {
 	StartRun(parent context.Context) (RunID, context.Context)

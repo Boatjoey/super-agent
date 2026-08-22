@@ -24,8 +24,8 @@ main.go
 - `runtime/`: public aliases and constructors for runtime packages.
 - `runtime/protocol/`: model and tool adapter contracts (`Message`, `ToolCall`, `Model`, `ToolRunner`).
 - `runtime/permission/`: permission request and command classification vocabulary.
-- `runtime/machine/`: state, events, mutations, effects, reducer, transitions.
-- `runtime/execution/`: effect runner, executor, scheduler, outcome resolver, command analyzer, policy, approvals, run control.
+- `runtime/machine/`: state, events, state changes, scheduled actions, state-change application, transitions.
+- `runtime/execution/`: scheduled-action runner, executor, scheduler, outcome resolver, command analyzer, policy, approvals, run control.
 - `runtime/engine/`: orchestration, state lock, lifecycle, dispatch, stale-result dropping.
 - `runtime/session/`: application use cases, event output, and persistence/workspace ports.
 - `store/`: durable JSONL session metadata, transcripts, checkpoints, compaction records.
@@ -46,7 +46,7 @@ main.go
 
 Sessions are stored under `~/.superagent/sessions/<session-id>/` as `meta.json` plus `events.jsonl`. Metadata includes session id, turn id, timestamps, provider/model, cwd, title, instruction fingerprint, and instruction source paths. `runtime/session` owns durable event emission for messages, approvals, tool results, cancel, reset, errors, checkpoints, and compact records. The top-level `store` adapter replays messages for `/resume`.
 
-During a turn the session emits a snapshot after every state-changing transition while effects drain, so the TUI header follows live states (for example `RunningTool` while a tool executes) instead of only snapshot points. The header shows raw state names such as `Idle` and `WaitingLLM`.
+During a turn the session emits a snapshot after every state-changing transition while scheduled actions drain, so the TUI header follows live states (for example `RunningTool` while a tool executes) instead of only snapshot points. The header shows raw state names such as `Idle` and `WaitingLLM`.
 
 TUI commands:
 
@@ -77,14 +77,14 @@ Tool approval is a selectable menu: arrows or `j`/`k` move, `Enter` confirms, an
 ## Runtime Rule
 
 ```text
-QueuedEffect { RunID, EffectID, Effect }
-  -> EffectRunner.Run -> EffectOutcome
+QueuedAction { RunID, ActionID, ScheduledAction }
+  -> ScheduledActionRunner.Run -> ActionOutcome
   -> stale RunID check
   -> OutcomeResolver.Resolve -> transition Event
   -> SnapshotFrom(EngineState) -> validated MachineSnapshot
   -> Transition(snapshot, event)
-  -> TransitionResult { NextState, Mutations, Effects }
-  -> Reducer.Reduce on cloned state -> ValidateState
+  -> TransitionResult { NextState, StateChanges, ScheduledActions }
+  -> StateChangeApplier.ApplyStateChanges on cloned state -> ValidateState
   -> atomic EngineState + scheduler commit
 ```
 
@@ -94,17 +94,17 @@ QueuedEffect { RunID, EffectID, Effect }
 
 - `State`: current runtime phase.
 - `Event`: fact that triggers a transition.
-- `Mutation`: synchronous internal state change.
-- `Effect`: requested work such as model calls, tool execution, or queue processing.
+- `StateChange`: synchronous internal state change.
+- `ScheduledAction`: requested work such as model calls, tool execution, or queue processing.
 - `MachineSnapshot`: validated read-only view containing only transition guards.
 - `Transition`: pure state-machine decision with state, call, and queue guards.
-- `Reducer`: applies mutations to a cloned `EngineState`, validates it, and describes scheduler operations.
+- `StateChangeApplier`: applies state changes to a cloned `EngineState`, validates it, and describes scheduler operations.
 - `OutcomeResolver`: turns `ExecutionResult` into transition-ready events and applies tool policy.
 - `Policy`: permission mode, allow/deny rules, command classification, and approval decision.
 - `ApprovalStore`: stores always-allow and auto-approve state.
 - `RunController`: owns run id, cancel function, and stale-result checks.
-- `EffectRunner`: executes effects and returns owned outcomes.
-- `Engine`: scheduler, state lock, lifecycle, dispatch, effect drain, stale dropping.
+- `ScheduledActionRunner`: executes scheduled actions and returns owned outcomes.
+- `Engine`: scheduler, state lock, lifecycle, dispatch, scheduled-action drain, stale dropping.
 - `Session`: channel boundary for UI events and approvals.
 
 ## Runtime Package Boundaries
@@ -113,13 +113,15 @@ QueuedEffect { RunID, EffectID, Effect }
 - `runtime/machine/state.go`: runtime state type and constants.
 - `runtime/machine/tool_batch.go`: queued tool-batch state.
 - `runtime/machine/snapshot.go`: machine snapshot construction and state invariants.
-- `runtime/machine/reducer.go`: side-effect-free transactional mutation reduction.
+- `runtime/machine/state_change.go`: internal state-change vocabulary.
+- `runtime/machine/scheduled_action.go`: post-commit scheduled-action vocabulary.
+- `runtime/machine/state_change_applier.go`: transactional state-change application.
 - `runtime/engine/engine.go`: engine construction and dependencies.
 - Engine files name `machine`, `execution`, and `protocol` types explicitly; the package has no internal alias facade.
 - `runtime/engine/commands.go`: lifecycle, approval, policy, and context commands.
-- `runtime/engine/effect_loop.go`: transition dispatch and queued-effect draining.
+- `runtime/engine/action_loop.go`: transition dispatch and queued-action draining.
 - `runtime/engine/query.go`: state queries and snapshots.
-- `runtime/execution/effect_executor.go`: calls the model or tool runner.
+- `runtime/execution/scheduled_action_executor.go`: calls the model or tool runner.
 - `runtime/execution/outcome_resolver.go`: maps execution results to transition-ready events and classifies tool calls.
 - `runtime/session/session.go`: serializes turns and coordinates application use cases.
 - `runtime/session/events.go`: application event protocol.
@@ -140,7 +142,7 @@ QueuedEffect { RunID, EffectID, Effect }
 
 ## Transition Table
 
-| State | Event | Next | Mutations | Effects |
+| State | Event | Next | StateChanges | ScheduledActions |
 |---|---|---|---|---|
 | Initializing | EngineReady | Idle | - | - |
 | Idle | UserMessageSubmitted | WaitingLLM | AppendUserMessage | CallModel |
@@ -153,8 +155,8 @@ QueuedEffect { RunID, EffectID, Effect }
 | AdvancingQueue | ToolBatchFinished | WaitingLLM | ClearToolCallBatch | CallModel |
 | AdvancingQueue | ToolCallNeedsApproval | WaitingApproval | SetPendingTool, AdvanceToolCallBatch | - |
 | AdvancingQueue | ToolCallReadyToRun | RunningTool | AdvanceToolCallBatch, SetCurrentTool | RunTool |
-| any | ErrorOccurred | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch, ClearPendingEffects | - |
-| any | CancelRequested | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch, ClearPendingEffects | - |
+| any | ErrorOccurred | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch, ClearScheduledActions | - |
+| any | CancelRequested | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch, ClearScheduledActions | - |
 | any | ResetRequested | Idle | ResetContext | - |
 
 ## Git And PR Notes

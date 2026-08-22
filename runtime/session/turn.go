@@ -12,7 +12,7 @@ func (s *Session) RunTurn(ctx context.Context, query string, events chan<- Sessi
 	}
 	defer s.mu.Unlock()
 	s.startTurn()
-	// Track live state transitions while effects drain: states such as
+	// Track live state transitions while actions drain: states such as
 	// RunningTool and AdvancingQueue pass between snapshot points, and the
 	// TUI header should follow them as they happen.
 	s.engine.SetStateObserver(func() { s.emitSnapshot(events) })
@@ -26,7 +26,7 @@ func (s *Session) drainRun(ctx context.Context, events chan<- SessionEvent, appr
 	chunks := func(chunk StreamChunk) {
 		events <- StreamChunkReceived{Chunk: chunk, Message: s.Snapshot().StreamingMessage}
 	}
-	if err := s.engine.DispatchEventThenRunEffects(ctx, UserMessageSubmitted{Content: query}, chunks, func() { s.emitSnapshot(events) }); err != nil {
+	if err := s.engine.DispatchEventThenRunActions(ctx, UserMessageSubmitted{Content: query}, chunks, func() { s.emitSnapshot(events) }); err != nil {
 		return s.failTurn(events, err)
 	}
 	s.emitSnapshot(events)
@@ -40,7 +40,7 @@ func (s *Session) drainRun(ctx context.Context, events chan<- SessionEvent, appr
 				return s.failTurn(events, err)
 			}
 			// Mark the approval consumed before applying the decision: the
-			// engine emits snapshots while effects drain, so the next
+			// engine emits snapshots while actions drain, so the next
 			// pending tool is announced from inside applyApproval. Consuming
 			// afterwards would clear the dedup key and re-announce it.
 			s.emitter.markApprovalConsumed()

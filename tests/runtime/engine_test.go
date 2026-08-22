@@ -95,11 +95,11 @@ func TestSessionRunProducesContent(t *testing.T) {
 }
 
 type recordingExecutor struct {
-	effects []Effect
+	actions []ScheduledAction
 }
 
-func (x *recordingExecutor) Execute(_ context.Context, effect Effect, _ ExecutionInput, _ func(StreamChunk)) (ExecutionResult, error) {
-	x.effects = append(x.effects, effect)
+func (x *recordingExecutor) Execute(_ context.Context, action ScheduledAction, _ ExecutionInput, _ func(StreamChunk)) (ExecutionResult, error) {
+	x.actions = append(x.actions, action)
 	return ModelReplied{Response: ModelResponse{Content: "from executor"}}, nil
 }
 
@@ -108,7 +108,7 @@ type failingOnceExecutor struct {
 	seen  []Message
 }
 
-func (x *failingOnceExecutor) Execute(_ context.Context, _ Effect, input ExecutionInput, _ func(StreamChunk)) (ExecutionResult, error) {
+func (x *failingOnceExecutor) Execute(_ context.Context, _ ScheduledAction, input ExecutionInput, _ func(StreamChunk)) (ExecutionResult, error) {
 	x.calls++
 	x.seen = append([]Message(nil), input.Messages...)
 	if x.calls == 1 {
@@ -243,7 +243,7 @@ func TestSessionStreamEventCarriesAccumulatedStreamingMessage(t *testing.T) {
 	t.Fatal("stream event not emitted")
 }
 
-func TestEngineRunsEffectsThroughInjectedExecutor(t *testing.T) {
+func TestEngineRunsScheduledActionsThroughInjectedExecutor(t *testing.T) {
 	executor := &recordingExecutor{}
 	engine := NewEngineWithExecutor(executor, nil)
 	if err := engine.Ready(); err != nil {
@@ -252,11 +252,11 @@ func TestEngineRunsEffectsThroughInjectedExecutor(t *testing.T) {
 
 	runSession(t, engine, "hi")
 
-	if len(executor.effects) != 1 {
-		t.Fatalf("effects = %+v, want one", executor.effects)
+	if len(executor.actions) != 1 {
+		t.Fatalf("actions = %+v, want one", executor.actions)
 	}
-	if _, ok := executor.effects[0].(CallModel); !ok {
-		t.Fatalf("effect = %T, want CallModel", executor.effects[0])
+	if _, ok := executor.actions[0].(CallModel); !ok {
+		t.Fatalf("action = %T, want CallModel", executor.actions[0])
 	}
 	if got := engine.Messages()[1]; got.Content != "from executor" {
 		t.Fatalf("assistant message = %+v", got)
@@ -307,7 +307,7 @@ func TestCustomPolicyClassifiesToolCallWithContext(t *testing.T) {
 		specs:   []ToolSpec{{Name: "bash", Risky: true}},
 	}
 	policy := &recordingPolicy{decision: DecisionRunDirectly}
-	engine := NewEngineWithExecutorAndPolicy(NewDefaultEffectExecutor(model, tools), policy, nil)
+	engine := NewEngineWithExecutorAndPolicy(NewDefaultScheduledActionExecutor(model, tools), policy, nil)
 	if err := engine.Ready(); err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +335,7 @@ func TestAutoApproveBypassesCustomPolicyDecision(t *testing.T) {
 		specs:   []ToolSpec{{Name: "bash", Risky: true}},
 	}
 	policy := &recordingPolicy{decision: DecisionNeedsApproval}
-	engine := NewEngineWithExecutorAndPolicy(NewDefaultEffectExecutor(model, tools), policy, nil)
+	engine := NewEngineWithExecutorAndPolicy(NewDefaultScheduledActionExecutor(model, tools), policy, nil)
 	engine.EnableAutoApproveTools()
 	if err := engine.Ready(); err != nil {
 		t.Fatal(err)
@@ -357,9 +357,9 @@ func TestWaitingApprovalKeepsRunContext(t *testing.T) {
 	runs := NewDefaultRunController()
 	approvals := NewMemoryApprovalStore()
 	engine := NewEngineWithComponents(
-		NewDefaultEffectRunner(NewDefaultEffectExecutor(model, tools)),
+		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(model, tools)),
 		NewDefaultOutcomeResolver(NewDefaultPolicy(), approvals),
-		DefaultReducer{},
+		DefaultStateChangeApplier{},
 		runs,
 		approvals,
 		nil,
@@ -425,9 +425,9 @@ func TestFinalAssistantResponseFinishesRun(t *testing.T) {
 	runs := NewDefaultRunController()
 	approvals := NewMemoryApprovalStore()
 	engine := NewEngineWithComponents(
-		NewDefaultEffectRunner(NewDefaultEffectExecutor(model, &fakeTool{})),
+		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(model, &fakeTool{})),
 		NewDefaultOutcomeResolver(NewDefaultPolicy(), approvals),
-		DefaultReducer{},
+		DefaultStateChangeApplier{},
 		runs,
 		approvals,
 		nil,
@@ -476,9 +476,9 @@ func TestApproveAlwaysWritesStoreWithoutHoldingEngineLock(t *testing.T) {
 	}
 	store := newBlockingApprovalStore()
 	engine := NewEngineWithComponents(
-		NewDefaultEffectRunner(NewDefaultEffectExecutor(model, tools)),
+		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(model, tools)),
 		NewDefaultOutcomeResolver(NewDefaultPolicy(), store),
-		DefaultReducer{},
+		DefaultStateChangeApplier{},
 		NewDefaultRunController(),
 		store,
 		nil,
@@ -531,7 +531,7 @@ func TestApproveAlwaysWritesApprovalStoreNotPolicy(t *testing.T) {
 		specs:   []ToolSpec{{Name: "bash", Risky: true}},
 	}
 	policy := &recordingPolicy{decision: DecisionNeedsApproval}
-	engine := NewEngineWithExecutorAndPolicy(NewDefaultEffectExecutor(model, tools), policy, nil)
+	engine := NewEngineWithExecutorAndPolicy(NewDefaultScheduledActionExecutor(model, tools), policy, nil)
 	if err := engine.Ready(); err != nil {
 		t.Fatal(err)
 	}
@@ -778,7 +778,7 @@ func TestToolRiskComesFromToolSpec(t *testing.T) {
 	}
 }
 
-func TestTransitionProducesMutationsAndEffects(t *testing.T) {
+func TestTransitionProducesStateChangesAndScheduledActions(t *testing.T) {
 	event := UserMessageSubmitted{Content: "hi"}
 	decision, err := Transition(transitionSnapshot(StateIdle, event), event)
 	if err != nil {
@@ -787,17 +787,17 @@ func TestTransitionProducesMutationsAndEffects(t *testing.T) {
 	if decision.NextState != StateWaitingLLM {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateWaitingLLM)
 	}
-	if len(decision.Mutations) != 1 {
-		t.Fatalf("mutations = %+v, want one", decision.Mutations)
+	if len(decision.StateChanges) != 1 {
+		t.Fatalf("stateChanges = %+v, want one", decision.StateChanges)
 	}
-	if _, ok := decision.Mutations[0].(AppendUserMessage); !ok {
-		t.Fatalf("mutation = %T, want AppendUserMessage", decision.Mutations[0])
+	if _, ok := decision.StateChanges[0].(AppendUserMessage); !ok {
+		t.Fatalf("stateChange = %T, want AppendUserMessage", decision.StateChanges[0])
 	}
-	if len(decision.Effects) != 1 {
-		t.Fatalf("effects = %+v, want one", decision.Effects)
+	if len(decision.ScheduledActions) != 1 {
+		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
 	}
-	if _, ok := decision.Effects[0].(CallModel); !ok {
-		t.Fatalf("effect = %T, want CallModel", decision.Effects[0])
+	if _, ok := decision.ScheduledActions[0].(CallModel); !ok {
+		t.Fatalf("action = %T, want CallModel", decision.ScheduledActions[0])
 	}
 }
 
@@ -811,21 +811,21 @@ func TestApprovalGrantedRunsPendingLocalTool(t *testing.T) {
 	if decision.NextState != StateRunningTool {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateRunningTool)
 	}
-	if len(decision.Mutations) != 2 {
-		t.Fatalf("mutations = %+v, want two", decision.Mutations)
+	if len(decision.StateChanges) != 2 {
+		t.Fatalf("stateChanges = %+v, want two", decision.StateChanges)
 	}
-	if _, ok := decision.Mutations[0].(SetCurrentTool); !ok {
-		t.Fatalf("mutation = %T, want SetCurrentTool", decision.Mutations[0])
+	if _, ok := decision.StateChanges[0].(SetCurrentTool); !ok {
+		t.Fatalf("stateChange = %T, want SetCurrentTool", decision.StateChanges[0])
 	}
-	if len(decision.Effects) != 1 {
-		t.Fatalf("effects = %+v, want one", decision.Effects)
+	if len(decision.ScheduledActions) != 1 {
+		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
 	}
-	effect, ok := decision.Effects[0].(RunTool)
+	action, ok := decision.ScheduledActions[0].(RunTool)
 	if !ok {
-		t.Fatalf("effect = %T, want RunTool", decision.Effects[0])
+		t.Fatalf("action = %T, want RunTool", decision.ScheduledActions[0])
 	}
-	if effect.Call.Name != call.Name {
-		t.Fatalf("tool call = %+v, want %+v", effect.Call, call)
+	if action.Call.Name != call.Name {
+		t.Fatalf("tool call = %+v, want %+v", action.Call, call)
 	}
 }
 func TestToolResultAdvancesQueueThroughEngine(t *testing.T) {
@@ -838,11 +838,11 @@ func TestToolResultAdvancesQueueThroughEngine(t *testing.T) {
 	if decision.NextState != StateAdvancingQueue {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateAdvancingQueue)
 	}
-	if len(decision.Effects) != 1 {
-		t.Fatalf("effects = %+v, want one", decision.Effects)
+	if len(decision.ScheduledActions) != 1 {
+		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
 	}
-	if _, ok := decision.Effects[0].(ProcessNextToolCall); !ok {
-		t.Fatalf("effect = %T, want ProcessNextToolCall", decision.Effects[0])
+	if _, ok := decision.ScheduledActions[0].(ProcessNextToolCall); !ok {
+		t.Fatalf("action = %T, want ProcessNextToolCall", decision.ScheduledActions[0])
 	}
 }
 
@@ -856,11 +856,11 @@ func TestDenialAdvancesQueueThroughEngine(t *testing.T) {
 	if decision.NextState != StateAdvancingQueue {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateAdvancingQueue)
 	}
-	if len(decision.Effects) != 1 {
-		t.Fatalf("effects = %+v, want one", decision.Effects)
+	if len(decision.ScheduledActions) != 1 {
+		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
 	}
-	if _, ok := decision.Effects[0].(ProcessNextToolCall); !ok {
-		t.Fatalf("effect = %T, want ProcessNextToolCall", decision.Effects[0])
+	if _, ok := decision.ScheduledActions[0].(ProcessNextToolCall); !ok {
+		t.Fatalf("action = %T, want ProcessNextToolCall", decision.ScheduledActions[0])
 	}
 }
 
@@ -873,12 +873,12 @@ func TestCancelRequestedReturnsRuntimeToIdle(t *testing.T) {
 	if decision.NextState != StateIdle {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateIdle)
 	}
-	if len(decision.Effects) != 0 {
-		t.Fatalf("effects = %+v, want none", decision.Effects)
+	if len(decision.ScheduledActions) != 0 {
+		t.Fatalf("actions = %+v, want none", decision.ScheduledActions)
 	}
 }
 
-func TestCancelClearsPendingToolAndEffects(t *testing.T) {
+func TestCancelClearsPendingToolAndScheduledActions(t *testing.T) {
 	model := &scriptedModel{responses: []ModelResponse{
 		{ToolCalls: []ToolCall{{Name: "bash", Input: "rm -rf /"}}},
 	}}
@@ -1408,9 +1408,9 @@ func newBlockingSpecsRunner() *blockingSpecsRunner {
 	}
 }
 
-func (r *blockingSpecsRunner) Run(_ context.Context, effect QueuedEffect, _ ExecutionInput, _ func(StreamChunk)) (EffectOutcome, error) {
-	outcome := EffectOutcome{RunID: effect.RunID, EffectID: effect.EffectID}
-	switch eff := effect.Effect.(type) {
+func (r *blockingSpecsRunner) Run(_ context.Context, action QueuedAction, _ ExecutionInput, _ func(StreamChunk)) (ActionOutcome, error) {
+	outcome := ActionOutcome{RunID: action.RunID, ActionID: action.ActionID}
+	switch eff := action.Action.(type) {
 	case CallModel:
 		r.modelRuns++
 		if r.modelRuns == 1 {
@@ -1450,7 +1450,7 @@ func TestClassifierToolSpecsAreFetchedWithoutHoldingEngineLock(t *testing.T) {
 	engine := NewEngineWithComponents(
 		runner,
 		NewDefaultOutcomeResolver(NewDefaultPolicy(), store),
-		DefaultReducer{},
+		DefaultStateChangeApplier{},
 		NewDefaultRunController(),
 		store,
 		nil,

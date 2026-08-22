@@ -1,86 +1,86 @@
 package machine
 
-type Mutation interface {
-	isMutation()
+type StateChange interface {
+	isStateChange()
 }
 
 type AppendUserMessage struct {
 	Content string
 }
 
-func (AppendUserMessage) isMutation() {}
+func (AppendUserMessage) isStateChange() {}
 
 type AppendAssistantMessage struct {
 	Message Message
 }
 
-func (AppendAssistantMessage) isMutation() {}
+func (AppendAssistantMessage) isStateChange() {}
 
 type AppendToolResult struct {
 	Call   ToolCall
 	Result string
 }
 
-func (AppendToolResult) isMutation() {}
+func (AppendToolResult) isStateChange() {}
 
 type AppendStreamingAssistant struct {
 	Chunk StreamChunk
 }
 
-func (AppendStreamingAssistant) isMutation() {}
+func (AppendStreamingAssistant) isStateChange() {}
 
 type FlushStreamingAssistant struct {
 	Interrupted bool
 }
 
-func (FlushStreamingAssistant) isMutation() {}
+func (FlushStreamingAssistant) isStateChange() {}
 
 type SetPendingTool struct {
 	Call    ToolCall
 	Request PermissionRequest
 }
 
-func (SetPendingTool) isMutation() {}
+func (SetPendingTool) isStateChange() {}
 
 type SetToolCallBatch struct {
 	ID    string
 	Calls []ToolCall
 }
 
-func (SetToolCallBatch) isMutation() {}
+func (SetToolCallBatch) isStateChange() {}
 
 type AdvanceToolCallBatch struct{}
 
-func (AdvanceToolCallBatch) isMutation() {}
+func (AdvanceToolCallBatch) isStateChange() {}
 
 type ClearPendingTool struct{}
 
-func (ClearPendingTool) isMutation() {}
+func (ClearPendingTool) isStateChange() {}
 
 type SetCurrentTool struct {
 	Call ToolCall
 }
 
-func (SetCurrentTool) isMutation() {}
+func (SetCurrentTool) isStateChange() {}
 
 type ClearCurrentTool struct{}
 
-func (ClearCurrentTool) isMutation() {}
+func (ClearCurrentTool) isStateChange() {}
 
-type ClearPendingEffects struct{}
+type ClearScheduledActions struct{}
 
-func (ClearPendingEffects) isMutation() {}
+func (ClearScheduledActions) isStateChange() {}
 
 type ClearToolCallBatch struct{}
 
-func (ClearToolCallBatch) isMutation() {}
+func (ClearToolCallBatch) isStateChange() {}
 
 type ResetContext struct{}
 
-func (ResetContext) isMutation() {}
+func (ResetContext) isStateChange() {}
 
-// AllMutations lists every Mutation type for registration, serialization, and testing.
-var AllMutations = []Mutation{
+// AllStateChanges lists every StateChange type for registration, serialization, and testing.
+var AllStateChanges = []StateChange{
 	AppendUserMessage{},
 	AppendAssistantMessage{},
 	AppendToolResult{},
@@ -92,7 +92,7 @@ var AllMutations = []Mutation{
 	ClearPendingTool{},
 	SetCurrentTool{},
 	ClearCurrentTool{},
-	ClearPendingEffects{},
+	ClearScheduledActions{},
 	ClearToolCallBatch{},
 	ResetContext{},
 }

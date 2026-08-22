@@ -23,11 +23,11 @@ func TestToolBatchReceivedAdvancesThroughUnifiedApprovalEvents(t *testing.T) {
 	if start.NextState != StateAdvancingQueue {
 		t.Fatalf("state = %s, want %s", start.NextState, StateAdvancingQueue)
 	}
-	if len(start.Effects) != 1 {
-		t.Fatalf("effects = %+v, want one ProcessNextToolCall", start.Effects)
+	if len(start.ScheduledActions) != 1 {
+		t.Fatalf("actions = %+v, want one ProcessNextToolCall", start.ScheduledActions)
 	}
-	if _, ok := start.Effects[0].(ProcessNextToolCall); !ok {
-		t.Fatalf("effect = %T, want ProcessNextToolCall", start.Effects[0])
+	if _, ok := start.ScheduledActions[0].(ProcessNextToolCall); !ok {
+		t.Fatalf("action = %T, want ProcessNextToolCall", start.ScheduledActions[0])
 	}
 
 	firstEvent := ToolCallNeedsApproval{Call: calls[0]}

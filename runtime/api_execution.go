@@ -40,11 +40,11 @@ func NewMemoryApprovalStore() *MemoryApprovalStore { return execution.NewMemoryA
 func NewApprovalKey(call ToolCall) ApprovalKey     { return execution.NewApprovalKey(call) }
 
 type ExecutionInput = execution.ExecutionInput
-type EffectExecutor = execution.EffectExecutor
-type DefaultEffectExecutor = execution.DefaultEffectExecutor
+type ScheduledActionExecutor = execution.ScheduledActionExecutor
+type DefaultScheduledActionExecutor = execution.DefaultScheduledActionExecutor
 
-func NewDefaultEffectExecutor(model Model, tools ToolRunner) *DefaultEffectExecutor {
-	return execution.NewDefaultEffectExecutor(model, tools)
+func NewDefaultScheduledActionExecutor(model Model, tools ToolRunner) *DefaultScheduledActionExecutor {
+	return execution.NewDefaultScheduledActionExecutor(model, tools)
 }
 
 type ExecutionResult = execution.ExecutionResult
@@ -53,19 +53,19 @@ type ToolFinished = execution.ToolFinished
 type ToolQueueChecked = execution.ToolQueueChecked
 
 type RunID = execution.RunID
-type EffectID = execution.EffectID
-type QueuedEffect = execution.QueuedEffect
-type EffectOutcome = execution.EffectOutcome
-type EffectRunner = execution.EffectRunner
-type DefaultEffectRunner = execution.DefaultEffectRunner
+type ActionID = execution.ActionID
+type QueuedAction = execution.QueuedAction
+type ActionOutcome = execution.ActionOutcome
+type ScheduledActionRunner = execution.ScheduledActionRunner
+type DefaultScheduledActionRunner = execution.DefaultScheduledActionRunner
 
-func NewDefaultEffectRunner(executor EffectExecutor) *DefaultEffectRunner {
-	return execution.NewDefaultEffectRunner(executor)
+func NewDefaultScheduledActionRunner(executor ScheduledActionExecutor) *DefaultScheduledActionRunner {
+	return execution.NewDefaultScheduledActionRunner(executor)
 }
 
-type EffectScheduler = execution.EffectScheduler
+type ActionScheduler = execution.ActionScheduler
 
-func NewEffectScheduler() *EffectScheduler { return execution.NewEffectScheduler() }
+func NewActionScheduler() *ActionScheduler { return execution.NewActionScheduler() }
 
 type OutcomeResolver = execution.OutcomeResolver
 type OutcomeResolveInput = execution.OutcomeResolveInput

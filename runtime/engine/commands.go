@@ -77,7 +77,7 @@ func (e *Engine) continueRun(chunks func(protocol.StreamChunk)) error {
 	if !ok {
 		return errors.New("no active run context")
 	}
-	return e.runPendingEffects(runCtx, chunks)
+	return e.runScheduledActions(runCtx, chunks)
 }
 
 func (e *Engine) Cancel() error { e.runs.CancelRun(); return e.dispatch(machine.CancelRequested{}) }
@@ -126,7 +126,7 @@ func (e *Engine) CompactSummary(ctx context.Context) (string, error) {
 		return "", nil
 	}
 	prompt := protocol.Message{Role: protocol.RoleUser, Content: "Summarize this conversation for context compaction. Preserve goals, decisions, files changed, tool results, and unresolved next steps."}
-	outcome, err := e.runner.Run(ctx, execution.QueuedEffect{Effect: machine.CallModel{}}, execution.ExecutionInput{Messages: append(messages, prompt)}, nil)
+	outcome, err := e.runner.Run(ctx, execution.QueuedAction{Action: machine.CallModel{}}, execution.ExecutionInput{Messages: append(messages, prompt)}, nil)
 	if err != nil {
 		return "", err
 	}

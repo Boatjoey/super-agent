@@ -9,19 +9,19 @@ import (
 )
 
 // transitionCase describes one (State, Event) -> TransitionResult expectation.
-// mutationCount/effectCount avoid brittle type-assertion lists while still
-// catching missing or extra outputs. mutationType/effectType assert the first
+// stateChangeCount/scheduledActionCount avoid brittle type-assertion lists while still
+// catching missing or extra outputs. state changeType/scheduled actionType assert the first
 // item's concrete type when there is exactly one.
 type transitionCase struct {
-	name          string
-	state         State
-	event         Event
-	wantState     State
-	wantErr       bool
-	mutationCount int
-	effectCount   int
-	mutationTypes []Mutation
-	effectTypes   []Effect
+	name                 string
+	state                State
+	event                Event
+	wantState            State
+	wantErr              bool
+	stateChangeCount     int
+	scheduledActionCount int
+	stateChangeTypes     []StateChange
+	scheduledActionTypes []ScheduledAction
 }
 
 func sampleToolCall() ToolCall {
@@ -86,9 +86,9 @@ func TestTransitionTable(t *testing.T) {
 		{
 			name: "UserMessageSubmitted/Idle->WaitingLLM", state: StateIdle,
 			event: UserMessageSubmitted{Content: "hi"}, wantState: StateWaitingLLM,
-			mutationCount: 1, effectCount: 1,
-			mutationTypes: []Mutation{AppendUserMessage{}},
-			effectTypes:   []Effect{CallModel{}},
+			stateChangeCount: 1, scheduledActionCount: 1,
+			stateChangeTypes:     []StateChange{AppendUserMessage{}},
+			scheduledActionTypes: []ScheduledAction{CallModel{}},
 		},
 		{
 			name: "UserMessageSubmitted/rejects_when_not_idle", state: StateWaitingLLM,
@@ -98,10 +98,10 @@ func TestTransitionTable(t *testing.T) {
 		// --- AssistantMessageReceived ---
 		{
 			name: "AssistantMessageReceived/WaitingLLM->Idle", state: StateWaitingLLM,
-			event:         AssistantMessageReceived{Response: ModelResponse{Content: "hi"}},
-			wantState:     StateIdle,
-			mutationCount: 1,
-			mutationTypes: []Mutation{AppendAssistantMessage{}},
+			event:            AssistantMessageReceived{Response: ModelResponse{Content: "hi"}},
+			wantState:        StateIdle,
+			stateChangeCount: 1,
+			stateChangeTypes: []StateChange{AppendAssistantMessage{}},
 		},
 		{
 			name: "AssistantMessageReceived/rejects_when_not_WaitingLLM", state: StateIdle,
@@ -115,11 +115,11 @@ func TestTransitionTable(t *testing.T) {
 			event: ToolBatchReceived{
 				Content: "thinking", Calls: sampleToolCalls(), ReasoningContent: "reasoning",
 			},
-			wantState:     StateAdvancingQueue,
-			mutationCount: 2, // AppendAssistantMessage + SetToolCallBatch
-			effectCount:   1,
-			mutationTypes: []Mutation{AppendAssistantMessage{}, SetToolCallBatch{}},
-			effectTypes:   []Effect{ProcessNextToolCall{}},
+			wantState:            StateAdvancingQueue,
+			stateChangeCount:     2, // AppendAssistantMessage + SetToolCallBatch
+			scheduledActionCount: 1,
+			stateChangeTypes:     []StateChange{AppendAssistantMessage{}, SetToolCallBatch{}},
+			scheduledActionTypes: []ScheduledAction{ProcessNextToolCall{}},
 		},
 		{
 			name: "ToolBatchReceived/rejects_when_not_WaitingLLM", state: StateIdle,
@@ -130,12 +130,12 @@ func TestTransitionTable(t *testing.T) {
 		// --- ToolBatchFinished ---
 		{
 			name: "ToolBatchFinished/AdvancingQueue->WaitingLLM", state: StateAdvancingQueue,
-			event:         ToolBatchFinished{},
-			wantState:     StateWaitingLLM,
-			mutationCount: 1,
-			effectCount:   1,
-			mutationTypes: []Mutation{ClearToolCallBatch{}},
-			effectTypes:   []Effect{CallModel{}},
+			event:                ToolBatchFinished{},
+			wantState:            StateWaitingLLM,
+			stateChangeCount:     1,
+			scheduledActionCount: 1,
+			stateChangeTypes:     []StateChange{ClearToolCallBatch{}},
+			scheduledActionTypes: []ScheduledAction{CallModel{}},
 		},
 		{
 			name: "ToolBatchFinished/rejects_when_not_AdvancingQueue", state: StateIdle,
@@ -146,12 +146,12 @@ func TestTransitionTable(t *testing.T) {
 		// --- ApprovalGranted ---
 		{
 			name: "ApprovalGranted/WaitingApproval->RunningTool", state: StateWaitingApproval,
-			event:         ApprovalGranted{Call: sampleToolCall()},
-			wantState:     StateRunningTool,
-			mutationCount: 2,
-			effectCount:   1,
-			mutationTypes: []Mutation{SetCurrentTool{}, ClearPendingTool{}},
-			effectTypes:   []Effect{RunTool{}},
+			event:                ApprovalGranted{Call: sampleToolCall()},
+			wantState:            StateRunningTool,
+			stateChangeCount:     2,
+			scheduledActionCount: 1,
+			stateChangeTypes:     []StateChange{SetCurrentTool{}, ClearPendingTool{}},
+			scheduledActionTypes: []ScheduledAction{RunTool{}},
 		},
 		{
 			name: "ApprovalGranted/rejects_when_not_WaitingApproval", state: StateIdle,
@@ -162,12 +162,12 @@ func TestTransitionTable(t *testing.T) {
 		// --- ApprovalAlwaysGranted ---
 		{
 			name: "ApprovalAlwaysGranted/WaitingApproval->RunningTool", state: StateWaitingApproval,
-			event:         ApprovalAlwaysGranted{Call: sampleToolCall()},
-			wantState:     StateRunningTool,
-			mutationCount: 2,
-			effectCount:   1,
-			mutationTypes: []Mutation{SetCurrentTool{}, ClearPendingTool{}},
-			effectTypes:   []Effect{RunTool{}},
+			event:                ApprovalAlwaysGranted{Call: sampleToolCall()},
+			wantState:            StateRunningTool,
+			stateChangeCount:     2,
+			scheduledActionCount: 1,
+			stateChangeTypes:     []StateChange{SetCurrentTool{}, ClearPendingTool{}},
+			scheduledActionTypes: []ScheduledAction{RunTool{}},
 		},
 		{
 			name: "ApprovalAlwaysGranted/rejects_when_not_WaitingApproval", state: StateIdle,
@@ -178,12 +178,12 @@ func TestTransitionTable(t *testing.T) {
 		// --- ApprovalDenied ---
 		{
 			name: "ApprovalDenied/WaitingApproval->AdvancingQueue", state: StateWaitingApproval,
-			event:         ApprovalDenied{Call: sampleToolCall()},
-			wantState:     StateAdvancingQueue,
-			mutationCount: 2, // ClearPendingTool + AppendToolResult
-			effectCount:   1,
-			mutationTypes: []Mutation{ClearPendingTool{}, AppendToolResult{}},
-			effectTypes:   []Effect{ProcessNextToolCall{}},
+			event:                ApprovalDenied{Call: sampleToolCall()},
+			wantState:            StateAdvancingQueue,
+			stateChangeCount:     2, // ClearPendingTool + AppendToolResult
+			scheduledActionCount: 1,
+			stateChangeTypes:     []StateChange{ClearPendingTool{}, AppendToolResult{}},
+			scheduledActionTypes: []ScheduledAction{ProcessNextToolCall{}},
 		},
 		{
 			name: "ApprovalDenied/rejects_when_not_WaitingApproval", state: StateIdle,
@@ -194,12 +194,12 @@ func TestTransitionTable(t *testing.T) {
 		// --- ToolResultReceived ---
 		{
 			name: "ToolResultReceived/RunningTool->AdvancingQueue", state: StateRunningTool,
-			event:         ToolResultReceived{Call: sampleToolCall(), Result: "ok"},
-			wantState:     StateAdvancingQueue,
-			mutationCount: 2,
-			effectCount:   1,
-			mutationTypes: []Mutation{AppendToolResult{}, ClearCurrentTool{}},
-			effectTypes:   []Effect{ProcessNextToolCall{}},
+			event:                ToolResultReceived{Call: sampleToolCall(), Result: "ok"},
+			wantState:            StateAdvancingQueue,
+			stateChangeCount:     2,
+			scheduledActionCount: 1,
+			stateChangeTypes:     []StateChange{AppendToolResult{}, ClearCurrentTool{}},
+			scheduledActionTypes: []ScheduledAction{ProcessNextToolCall{}},
 		},
 		{
 			name: "ToolResultReceived/rejects_when_not_RunningTool", state: StateIdle,
@@ -210,10 +210,10 @@ func TestTransitionTable(t *testing.T) {
 		// --- ToolCallNeedsApproval ---
 		{
 			name: "ToolCallNeedsApproval/AdvancingQueue->WaitingApproval", state: StateAdvancingQueue,
-			event:         ToolCallNeedsApproval{Call: sampleToolCall()},
-			wantState:     StateWaitingApproval,
-			mutationCount: 2, // SetPendingTool + AdvanceToolCallBatch
-			mutationTypes: []Mutation{SetPendingTool{}, AdvanceToolCallBatch{}},
+			event:            ToolCallNeedsApproval{Call: sampleToolCall()},
+			wantState:        StateWaitingApproval,
+			stateChangeCount: 2, // SetPendingTool + AdvanceToolCallBatch
+			stateChangeTypes: []StateChange{SetPendingTool{}, AdvanceToolCallBatch{}},
 		},
 		{
 			name: "ToolCallNeedsApproval/rejects_when_not_AdvancingQueue", state: StateIdle,
@@ -224,12 +224,12 @@ func TestTransitionTable(t *testing.T) {
 		// --- ToolCallReadyToRun ---
 		{
 			name: "ToolCallReadyToRun/AdvancingQueue->RunningTool", state: StateAdvancingQueue,
-			event:         ToolCallReadyToRun{Call: sampleToolCall()},
-			wantState:     StateRunningTool,
-			mutationCount: 2,
-			effectCount:   1,
-			mutationTypes: []Mutation{AdvanceToolCallBatch{}, SetCurrentTool{}},
-			effectTypes:   []Effect{RunTool{}},
+			event:                ToolCallReadyToRun{Call: sampleToolCall()},
+			wantState:            StateRunningTool,
+			stateChangeCount:     2,
+			scheduledActionCount: 1,
+			stateChangeTypes:     []StateChange{AdvanceToolCallBatch{}, SetCurrentTool{}},
+			scheduledActionTypes: []ScheduledAction{RunTool{}},
 		},
 		{
 			name: "ToolCallReadyToRun/rejects_when_not_AdvancingQueue", state: StateIdle,
@@ -240,64 +240,64 @@ func TestTransitionTable(t *testing.T) {
 		// --- ErrorOccurred ---
 		{
 			name: "ErrorOccurred/WaitingLLM->Idle", state: StateWaitingLLM,
-			event:         ErrorOccurred{Err: errors.New("boom")},
-			wantState:     StateIdle,
-			mutationCount: 6,
-			mutationTypes: []Mutation{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearPendingEffects{}},
+			event:            ErrorOccurred{Err: errors.New("boom")},
+			wantState:        StateIdle,
+			stateChangeCount: 6,
+			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
 		},
 		{
 			name: "ErrorOccurred/RunningTool->Idle", state: StateRunningTool,
-			event:         ErrorOccurred{Err: errors.New("boom")},
-			wantState:     StateIdle,
-			mutationCount: 6,
-			mutationTypes: []Mutation{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearPendingEffects{}},
+			event:            ErrorOccurred{Err: errors.New("boom")},
+			wantState:        StateIdle,
+			stateChangeCount: 6,
+			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
 		},
 		{
 			name: "ErrorOccurred/AdvancingQueue->Idle", state: StateAdvancingQueue,
-			event:         ErrorOccurred{Err: errors.New("boom")},
-			wantState:     StateIdle,
-			mutationCount: 6,
-			mutationTypes: []Mutation{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearPendingEffects{}},
+			event:            ErrorOccurred{Err: errors.New("boom")},
+			wantState:        StateIdle,
+			stateChangeCount: 6,
+			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
 		},
 
 		// --- CancelRequested ---
 		{
 			name: "CancelRequested/WaitingLLM->Idle", state: StateWaitingLLM,
 			event: CancelRequested{}, wantState: StateIdle,
-			mutationCount: 5,
-			mutationTypes: []Mutation{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearPendingEffects{}},
+			stateChangeCount: 5,
+			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
 		},
 		{
 			name: "CancelRequested/WaitingApproval->Idle", state: StateWaitingApproval,
 			event: CancelRequested{}, wantState: StateIdle,
-			mutationCount: 5,
-			mutationTypes: []Mutation{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearPendingEffects{}},
+			stateChangeCount: 5,
+			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
 		},
 		{
 			name: "CancelRequested/RunningTool->Idle", state: StateRunningTool,
 			event: CancelRequested{}, wantState: StateIdle,
-			mutationCount: 5,
-			mutationTypes: []Mutation{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearPendingEffects{}},
+			stateChangeCount: 5,
+			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
 		},
 		{
 			name: "CancelRequested/AdvancingQueue->Idle", state: StateAdvancingQueue,
 			event: CancelRequested{}, wantState: StateIdle,
-			mutationCount: 5,
-			mutationTypes: []Mutation{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearPendingEffects{}},
+			stateChangeCount: 5,
+			stateChangeTypes: []StateChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}, ClearScheduledActions{}},
 		},
 
 		// --- ResetRequested ---
 		{
 			name: "ResetRequested/Idle->Idle", state: StateIdle,
 			event: ResetRequested{}, wantState: StateIdle,
-			mutationCount: 1,
-			mutationTypes: []Mutation{ResetContext{}},
+			stateChangeCount: 1,
+			stateChangeTypes: []StateChange{ResetContext{}},
 		},
 		{
 			name: "ResetRequested/WaitingLLM->Idle", state: StateWaitingLLM,
 			event: ResetRequested{}, wantState: StateIdle,
-			mutationCount: 1,
-			mutationTypes: []Mutation{ResetContext{}},
+			stateChangeCount: 1,
+			stateChangeTypes: []StateChange{ResetContext{}},
 		},
 	}
 
@@ -316,20 +316,20 @@ func TestTransitionTable(t *testing.T) {
 			if result.NextState != tc.wantState {
 				t.Fatalf("nextState = %s, want %s", result.NextState, tc.wantState)
 			}
-			if len(result.Mutations) != tc.mutationCount {
-				t.Fatalf("mutations = %d (%+v), want %d", len(result.Mutations), result.Mutations, tc.mutationCount)
+			if len(result.StateChanges) != tc.stateChangeCount {
+				t.Fatalf("state changes = %d (%+v), want %d", len(result.StateChanges), result.StateChanges, tc.stateChangeCount)
 			}
-			if len(result.Effects) != tc.effectCount {
-				t.Fatalf("effects = %d (%+v), want %d", len(result.Effects), result.Effects, tc.effectCount)
+			if len(result.ScheduledActions) != tc.scheduledActionCount {
+				t.Fatalf("scheduled actions = %d (%+v), want %d", len(result.ScheduledActions), result.ScheduledActions, tc.scheduledActionCount)
 			}
-			for i, want := range tc.mutationTypes {
-				if reflect.TypeOf(result.Mutations[i]) != reflect.TypeOf(want) {
-					t.Fatalf("mutation[%d] = %T, want %T", i, result.Mutations[i], want)
+			for i, want := range tc.stateChangeTypes {
+				if reflect.TypeOf(result.StateChanges[i]) != reflect.TypeOf(want) {
+					t.Fatalf("state change[%d] = %T, want %T", i, result.StateChanges[i], want)
 				}
 			}
-			for i, want := range tc.effectTypes {
-				if reflect.TypeOf(result.Effects[i]) != reflect.TypeOf(want) {
-					t.Fatalf("effect[%d] = %T, want %T", i, result.Effects[i], want)
+			for i, want := range tc.scheduledActionTypes {
+				if reflect.TypeOf(result.ScheduledActions[i]) != reflect.TypeOf(want) {
+					t.Fatalf("scheduled action[%d] = %T, want %T", i, result.ScheduledActions[i], want)
 				}
 			}
 		})

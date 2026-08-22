@@ -33,7 +33,7 @@ type ToolCallNeedsApproval = machine.ToolCallNeedsApproval
 type ToolCallReadyToRun = machine.ToolCallReadyToRun
 type ToolResultReceived = machine.ToolResultReceived
 
-type Effect = machine.Effect
+type ScheduledAction = machine.ScheduledAction
 type CallModel = machine.CallModel
 type RunTool = machine.RunTool
 type ProcessNextToolCall = machine.ProcessNextToolCall

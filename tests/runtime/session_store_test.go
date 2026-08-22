@@ -192,7 +192,7 @@ func (*checkpointWorkspace) Restore([]FileSnapshot) error { return nil }
 
 type staticExecutor struct{}
 
-func (x *staticExecutor) Execute(context.Context, Effect, ExecutionInput, func(StreamChunk)) (ExecutionResult, error) {
+func (x *staticExecutor) Execute(context.Context, ScheduledAction, ExecutionInput, func(StreamChunk)) (ExecutionResult, error) {
 	return ModelReplied{Response: ModelResponse{Content: "model summary"}}, nil
 }
 

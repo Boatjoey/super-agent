@@ -35,7 +35,7 @@ func NewSession(cfg Config) (*runtime.Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	engine := runtime.NewEngineWithExecutorAndPolicy(runtime.NewDefaultEffectExecutor(model, toolRunner), runtime.NewPolicy(cfg.PermissionMode, cfg.PermissionRules), initial)
+	engine := runtime.NewEngineWithExecutorAndPolicy(runtime.NewDefaultScheduledActionExecutor(model, toolRunner), runtime.NewPolicy(cfg.PermissionMode, cfg.PermissionRules), initial)
 	if cfg.AutoApproveTools {
 		engine.EnableAutoApproveTools()
 	}

@@ -2,43 +2,43 @@ package machine
 
 import "fmt"
 
-type EffectOp interface {
-	isEffectOp()
+type SchedulerOp interface {
+	isSchedulerOp()
 }
 
-type ClearPendingEffectsOp struct{}
+type ClearScheduledActionsOp struct{}
 
-func (ClearPendingEffectsOp) isEffectOp() {}
+func (ClearScheduledActionsOp) isSchedulerOp() {}
 
-type Reduction struct {
-	State     EngineState
-	EffectOps []EffectOp
+type StateChangeResult struct {
+	State        EngineState
+	SchedulerOps []SchedulerOp
 }
 
-type Reducer interface {
-	Reduce(state EngineState, result TransitionResult) (Reduction, error)
+type StateChangeApplier interface {
+	ApplyStateChanges(state EngineState, result TransitionResult) (StateChangeResult, error)
 }
 
-type DefaultReducer struct{}
+type DefaultStateChangeApplier struct{}
 
-func (DefaultReducer) Reduce(state EngineState, result TransitionResult) (Reduction, error) {
+func (DefaultStateChangeApplier) ApplyStateChanges(state EngineState, result TransitionResult) (StateChangeResult, error) {
 	next := cloneEngineState(state)
 	next.State = result.NextState
-	reduction := Reduction{State: next}
-	for _, mutation := range result.Mutations {
-		if err := applyMutation(&reduction, mutation); err != nil {
-			return Reduction{}, err
+	changeResult := StateChangeResult{State: next}
+	for _, stateChange := range result.StateChanges {
+		if err := applyStateChange(&changeResult, stateChange); err != nil {
+			return StateChangeResult{}, err
 		}
 	}
-	if err := ValidateState(reduction.State); err != nil {
-		return Reduction{}, err
+	if err := ValidateState(changeResult.State); err != nil {
+		return StateChangeResult{}, err
 	}
-	return reduction, nil
+	return changeResult, nil
 }
 
-func applyMutation(reduction *Reduction, mutation Mutation) error {
-	state := &reduction.State
-	switch m := mutation.(type) {
+func applyStateChange(changeResult *StateChangeResult, stateChange StateChange) error {
+	state := &changeResult.State
+	switch m := stateChange.(type) {
 	case AppendUserMessage:
 		state.StreamingContent = ""
 		state.StreamingReasoning = ""
@@ -87,8 +87,8 @@ func applyMutation(reduction *Reduction, mutation Mutation) error {
 		state.CurrentTool = nil
 	case ClearToolCallBatch:
 		state.ToolBatch = nil
-	case ClearPendingEffects:
-		reduction.EffectOps = append(reduction.EffectOps, ClearPendingEffectsOp{})
+	case ClearScheduledActions:
+		changeResult.SchedulerOps = append(changeResult.SchedulerOps, ClearScheduledActionsOp{})
 	case ResetContext:
 		state.Messages = systemMessages(state.Messages)
 		state.PendingTool = nil
@@ -97,9 +97,9 @@ func applyMutation(reduction *Reduction, mutation Mutation) error {
 		state.ToolBatch = nil
 		state.StreamingContent = ""
 		state.StreamingReasoning = ""
-		reduction.EffectOps = append(reduction.EffectOps, ClearPendingEffectsOp{})
+		changeResult.SchedulerOps = append(changeResult.SchedulerOps, ClearScheduledActionsOp{})
 	default:
-		return InvariantViolationError{Reason: fmt.Sprintf("unknown mutation %T", m)}
+		return InvariantViolationError{Reason: fmt.Sprintf("unknown state change %T", m)}
 	}
 	return nil
 }

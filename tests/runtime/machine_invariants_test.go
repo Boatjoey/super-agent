@@ -85,17 +85,17 @@ func TestTransitionRejectsBatchFinishedBeforeQueueEmpty(t *testing.T) {
 	}
 }
 
-func TestReducerDoesNotMutateOriginalStateWhenValidationFails(t *testing.T) {
+func TestStateChangeApplierDoesNotMutateOriginalStateWhenValidationFails(t *testing.T) {
 	call := ToolCall{ID: "call-1"}
 	original := EngineState{
 		State:     StateAdvancingQueue,
 		ToolBatch: &ToolCallBatch{Calls: []ToolCall{call}},
 	}
-	_, err := (DefaultReducer{}).Reduce(original, TransitionResult{
+	_, err := (DefaultStateChangeApplier{}).ApplyStateChanges(original, TransitionResult{
 		NextState: StateRunningTool,
-		Mutations: []Mutation{
+		StateChanges: []StateChange{
 			AdvanceToolCallBatch{},
-			ClearPendingEffects{},
+			ClearScheduledActions{},
 		},
 	})
 	var invariant InvariantViolationError
@@ -103,49 +103,49 @@ func TestReducerDoesNotMutateOriginalStateWhenValidationFails(t *testing.T) {
 		t.Fatalf("error = %v, want InvariantViolationError", err)
 	}
 	if original.State != StateAdvancingQueue || original.ToolBatch.Index != 0 || original.CurrentTool != nil {
-		t.Fatalf("original state mutated after failed reduction: %+v", original)
+		t.Fatalf("original state mutated after failed changeResult: %+v", original)
 	}
 }
 
-func TestReducerDescribesSchedulerMutationAfterValidReduction(t *testing.T) {
+func TestStateChangeApplierDescribesSchedulerStateChangeAfterValidStateChangeResult(t *testing.T) {
 	original := EngineState{State: StateWaitingLLM}
-	reduction, err := (DefaultReducer{}).Reduce(original, TransitionResult{
-		NextState: StateIdle,
-		Mutations: []Mutation{ClearPendingEffects{}},
+	changeResult, err := (DefaultStateChangeApplier{}).ApplyStateChanges(original, TransitionResult{
+		NextState:    StateIdle,
+		StateChanges: []StateChange{ClearScheduledActions{}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(reduction.EffectOps) != 1 {
-		t.Fatalf("effect ops = %+v, want one clear operation", reduction.EffectOps)
+	if len(changeResult.SchedulerOps) != 1 {
+		t.Fatalf("action ops = %+v, want one clear operation", changeResult.SchedulerOps)
 	}
-	if _, ok := reduction.EffectOps[0].(ClearPendingEffectsOp); !ok {
-		t.Fatalf("effect op = %T, want ClearPendingEffectsOp", reduction.EffectOps[0])
+	if _, ok := changeResult.SchedulerOps[0].(ClearScheduledActionsOp); !ok {
+		t.Fatalf("action op = %T, want ClearScheduledActionsOp", changeResult.SchedulerOps[0])
 	}
 	if original.State != StateWaitingLLM {
 		t.Fatalf("original state = %s, want WaitingLLM", original.State)
 	}
 }
 
-type invalidReducer struct{}
+type invalidStateChangeApplier struct{}
 
-func (invalidReducer) Reduce(state EngineState, result TransitionResult) (Reduction, error) {
+func (invalidStateChangeApplier) ApplyStateChanges(state EngineState, result TransitionResult) (StateChangeResult, error) {
 	if state.State == StateInitializing {
-		return (DefaultReducer{}).Reduce(state, result)
+		return (DefaultStateChangeApplier{}).ApplyStateChanges(state, result)
 	}
-	return Reduction{State: EngineState{
+	return StateChangeResult{State: EngineState{
 		State:     StateIdle,
 		ToolBatch: &ToolCallBatch{},
 	}}, nil
 }
 
-func TestEngineDoesNotCommitInvalidCustomReduction(t *testing.T) {
+func TestEngineDoesNotCommitInvalidCustomStateChangeResult(t *testing.T) {
 	approvals := NewMemoryApprovalStore()
 	runs := NewDefaultRunController()
 	engine := NewEngineWithComponents(
-		NewDefaultEffectRunner(NewDefaultEffectExecutor(nil, nil)),
+		NewDefaultScheduledActionRunner(NewDefaultScheduledActionExecutor(nil, nil)),
 		NewDefaultOutcomeResolver(NewDefaultPolicy(), approvals),
-		invalidReducer{},
+		invalidStateChangeApplier{},
 		runs,
 		approvals,
 		nil,
@@ -153,7 +153,7 @@ func TestEngineDoesNotCommitInvalidCustomReduction(t *testing.T) {
 	if err := engine.Ready(); err != nil {
 		t.Fatal(err)
 	}
-	err := engine.DispatchEventThenRunEffects(context.Background(), UserMessageSubmitted{Content: "hi"}, nil, func() {})
+	err := engine.DispatchEventThenRunActions(context.Background(), UserMessageSubmitted{Content: "hi"}, nil, func() {})
 	var invariant InvariantViolationError
 	if !errors.As(err, &invariant) {
 		t.Fatalf("error = %v, want InvariantViolationError", err)
@@ -162,7 +162,7 @@ func TestEngineDoesNotCommitInvalidCustomReduction(t *testing.T) {
 		t.Fatalf("state = %s, want unchanged Idle", engine.State())
 	}
 	if _, ok := runs.CurrentContext(); ok {
-		t.Fatal("failed reduction left an active run context")
+		t.Fatal("failed changeResult left an active run context")
 	}
 }
 
@@ -192,11 +192,11 @@ func TestToolFlowPreservesMachineInvariants(t *testing.T) {
 		if err != nil {
 			t.Fatalf("step %d transition: %v", i, err)
 		}
-		reduction, err := (DefaultReducer{}).Reduce(state, result)
+		changeResult, err := (DefaultStateChangeApplier{}).ApplyStateChanges(state, result)
 		if err != nil {
-			t.Fatalf("step %d reduction: %v", i, err)
+			t.Fatalf("step %d changeResult: %v", i, err)
 		}
-		state = reduction.State
+		state = changeResult.State
 		if state.State != wantStates[i] {
 			t.Fatalf("step %d state = %s, want %s", i, state.State, wantStates[i])
 		}

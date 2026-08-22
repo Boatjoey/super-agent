@@ -33,7 +33,7 @@
 
 全局事件：
 
-- `ErrorOccurred`：进入 `Idle`，清理工具队列与待执行 Effect
+- `ErrorOccurred`：进入 `Idle`，清理工具队列与待执行 ScheduledAction
 - `CancelRequested`：进入 `Idle`，保留已生成内容并清理当前任务
 - `ResetRequested`：进入 `Idle`，重置对话上下文
 
@@ -124,9 +124,9 @@ Idle + UserMessageSubmitted → WaitingLLM
 
 该转移会：
 
-1. 通过 `AppendUserMessage` Mutation 保存用户消息。
+1. 通过 `AppendUserMessage` StateChange 保存用户消息。
 2. 将状态改为 `WaitingLLM`。
-3. 产生 `CallModel` Effect。
+3. 产生 `CallModel` ScheduledAction。
 
 ### 状态约束
 
@@ -156,11 +156,11 @@ Idle + UserMessageSubmitted          → WaitingLLM
 AdvancingQueue + ToolBatchFinished   → WaitingLLM
 ```
 
-两条转移都会产生 `CallModel` Effect。区别是第一次把用户消息交给模型，第二次把工具结果交回模型继续推理。
+两条转移都会产生 `CallModel` ScheduledAction。区别是第一次把用户消息交给模型，第二次把工具结果交回模型继续推理。
 
 ### 流式输出
 
-模型返回的流式片段通过 `AppendStreamingAssistant` Mutation 累积。流式内容只能存在于 `WaitingLLM`。
+模型返回的流式片段通过 `AppendStreamingAssistant` StateChange 累积。流式内容只能存在于 `WaitingLLM`。
 
 流式片段不会结束当前状态，只有最终模型结果才会触发下一次状态转移。
 
@@ -177,7 +177,7 @@ WaitingLLM + CancelRequested           → Idle
 WaitingLLM + ErrorOccurred             → Idle
 ```
 
-收到 `ToolBatchReceived` 时，状态机会保存 assistant 消息、建立工具调用批次，并产生 `ProcessNextToolCall` Effect。
+收到 `ToolBatchReceived` 时，状态机会保存 assistant 消息、建立工具调用批次，并产生 `ProcessNextToolCall` ScheduledAction。
 
 ## 第四个状态：`AdvancingQueue`
 
@@ -201,7 +201,7 @@ RunningTool + ToolResultReceived       → AdvancingQueue
 WaitingApproval + ApprovalDenied       → AdvancingQueue
 ```
 
-进入后通常会产生 `ProcessNextToolCall` Effect。
+进入后通常会产生 `ProcessNextToolCall` ScheduledAction。
 
 ### 离开条件
 
@@ -247,7 +247,7 @@ AdvancingQueue + ToolCallNeedsApproval → WaitingApproval
 
 1. 保存待审批工具与权限请求。
 2. 推进工具批次索引。
-3. 暂停 Effect 调度，等待用户输入。
+3. 暂停 ScheduledAction 调度，等待用户输入。
 
 ### 离开条件
 
@@ -294,7 +294,7 @@ WaitingApproval + ApprovalGranted         → RunningTool
 WaitingApproval + ApprovalAlwaysGranted   → RunningTool
 ```
 
-进入该状态时，状态机会保存当前工具，并产生 `RunTool` Effect。
+进入该状态时，状态机会保存当前工具，并产生 `RunTool` ScheduledAction。
 
 ### 离开条件
 
@@ -311,7 +311,7 @@ RunningTool + ErrorOccurred      → Idle
 
 1. 通过 `AppendToolResult` 保存结果。
 2. 清除当前工具。
-3. 产生 `ProcessNextToolCall` Effect。
+3. 产生 `ProcessNextToolCall` ScheduledAction。
 
 ### 状态约束
 

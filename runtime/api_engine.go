@@ -7,12 +7,12 @@ type Engine = engine.Engine
 func NewEngine(model Model, tools ToolRunner, initial []Message) *Engine {
 	return engine.NewEngine(model, tools, initial)
 }
-func NewEngineWithExecutor(executor EffectExecutor, initial []Message) *Engine {
+func NewEngineWithExecutor(executor ScheduledActionExecutor, initial []Message) *Engine {
 	return engine.NewEngineWithExecutor(executor, initial)
 }
-func NewEngineWithExecutorAndPolicy(executor EffectExecutor, policy Policy, initial []Message) *Engine {
+func NewEngineWithExecutorAndPolicy(executor ScheduledActionExecutor, policy Policy, initial []Message) *Engine {
 	return engine.NewEngineWithExecutorAndPolicy(executor, policy, initial)
 }
-func NewEngineWithComponents(runner EffectRunner, resolver OutcomeResolver, reducer Reducer, runs RunController, approvals ApprovalStore, initial []Message) *Engine {
-	return engine.NewEngineWithComponents(runner, resolver, reducer, runs, approvals, initial)
+func NewEngineWithComponents(runner ScheduledActionRunner, resolver OutcomeResolver, stateChangeApplier StateChangeApplier, runs RunController, approvals ApprovalStore, initial []Message) *Engine {
+	return engine.NewEngineWithComponents(runner, resolver, stateChangeApplier, runs, approvals, initial)
 }

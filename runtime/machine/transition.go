@@ -1,9 +1,9 @@
 package machine
 
 type TransitionResult struct {
-	NextState State
-	Mutations []Mutation
-	Effects   []Effect
+	NextState        State
+	StateChanges     []StateChange
+	ScheduledActions []ScheduledAction
 }
 
 type transitionKey struct {
@@ -94,16 +94,16 @@ func handleEngineReady(MachineSnapshot, EngineReady) (TransitionResult, error) {
 
 func handleUserMessageSubmitted(_ MachineSnapshot, event UserMessageSubmitted) (TransitionResult, error) {
 	return TransitionResult{
-		NextState: StateWaitingLLM,
-		Mutations: []Mutation{AppendUserMessage{Content: event.Content}},
-		Effects:   []Effect{CallModel{}},
+		NextState:        StateWaitingLLM,
+		StateChanges:     []StateChange{AppendUserMessage{Content: event.Content}},
+		ScheduledActions: []ScheduledAction{CallModel{}},
 	}, nil
 }
 
 func handleAssistantMessageReceived(_ MachineSnapshot, event AssistantMessageReceived) (TransitionResult, error) {
 	return TransitionResult{
 		NextState: StateIdle,
-		Mutations: []Mutation{AppendAssistantMessage{Message: Message{
+		StateChanges: []StateChange{AppendAssistantMessage{Message: Message{
 			Role:             RoleAssistant,
 			Content:          event.Response.Content,
 			ReasoningContent: event.Response.ReasoningContent,
@@ -117,7 +117,7 @@ func handleToolBatchReceived(snapshot MachineSnapshot, event ToolBatchReceived) 
 	}
 	return TransitionResult{
 		NextState: StateAdvancingQueue,
-		Mutations: []Mutation{
+		StateChanges: []StateChange{
 			AppendAssistantMessage{Message: Message{
 				Role:             RoleAssistant,
 				Content:          event.Content,
@@ -126,7 +126,7 @@ func handleToolBatchReceived(snapshot MachineSnapshot, event ToolBatchReceived) 
 			}},
 			SetToolCallBatch{ID: toolBatchID(event.Calls), Calls: event.Calls},
 		},
-		Effects: []Effect{ProcessNextToolCall{}},
+		ScheduledActions: []ScheduledAction{ProcessNextToolCall{}},
 	}, nil
 }
 
@@ -146,9 +146,9 @@ func approveTool(snapshot MachineSnapshot, event Event, call ToolCall) (Transiti
 		return protocolViolation(snapshot, event, "approved call does not match pending tool")
 	}
 	return TransitionResult{
-		NextState: StateRunningTool,
-		Mutations: []Mutation{SetCurrentTool{Call: call}, ClearPendingTool{}},
-		Effects:   []Effect{RunTool{Call: call}},
+		NextState:        StateRunningTool,
+		StateChanges:     []StateChange{SetCurrentTool{Call: call}, ClearPendingTool{}},
+		ScheduledActions: []ScheduledAction{RunTool{Call: call}},
 	}, nil
 }
 
@@ -161,11 +161,11 @@ func handleApprovalDenied(snapshot MachineSnapshot, event ApprovalDenied) (Trans
 	}
 	return TransitionResult{
 		NextState: StateAdvancingQueue,
-		Mutations: []Mutation{
+		StateChanges: []StateChange{
 			ClearPendingTool{},
 			AppendToolResult{Call: event.Call, Result: "denied: " + event.Call.Name},
 		},
-		Effects: []Effect{ProcessNextToolCall{}},
+		ScheduledActions: []ScheduledAction{ProcessNextToolCall{}},
 	}, nil
 }
 
@@ -178,11 +178,11 @@ func handleToolResultReceived(snapshot MachineSnapshot, event ToolResultReceived
 	}
 	return TransitionResult{
 		NextState: StateAdvancingQueue,
-		Mutations: []Mutation{
+		StateChanges: []StateChange{
 			AppendToolResult{Call: event.Call, Result: event.Result},
 			ClearCurrentTool{},
 		},
-		Effects: []Effect{ProcessNextToolCall{}},
+		ScheduledActions: []ScheduledAction{ProcessNextToolCall{}},
 	}, nil
 }
 
@@ -191,9 +191,9 @@ func handleToolBatchFinished(snapshot MachineSnapshot, event ToolBatchFinished) 
 		return protocolViolation(snapshot, event, "tool batch finished before the queue was empty")
 	}
 	return TransitionResult{
-		NextState: StateWaitingLLM,
-		Mutations: []Mutation{ClearToolCallBatch{}},
-		Effects:   []Effect{CallModel{}},
+		NextState:        StateWaitingLLM,
+		StateChanges:     []StateChange{ClearToolCallBatch{}},
+		ScheduledActions: []ScheduledAction{CallModel{}},
 	}, nil
 }
 
@@ -206,7 +206,7 @@ func handleToolCallNeedsApproval(snapshot MachineSnapshot, event ToolCallNeedsAp
 	}
 	return TransitionResult{
 		NextState: StateWaitingApproval,
-		Mutations: []Mutation{
+		StateChanges: []StateChange{
 			SetPendingTool{Call: event.Call, Request: event.Request},
 			AdvanceToolCallBatch{},
 		},
@@ -221,16 +221,16 @@ func handleToolCallReadyToRun(snapshot MachineSnapshot, event ToolCallReadyToRun
 		return protocolViolation(snapshot, event, "ready call does not match next tool")
 	}
 	return TransitionResult{
-		NextState: StateRunningTool,
-		Mutations: []Mutation{AdvanceToolCallBatch{}, SetCurrentTool{Call: event.Call}},
-		Effects:   []Effect{RunTool{Call: event.Call}},
+		NextState:        StateRunningTool,
+		StateChanges:     []StateChange{AdvanceToolCallBatch{}, SetCurrentTool{Call: event.Call}},
+		ScheduledActions: []ScheduledAction{RunTool{Call: event.Call}},
 	}, nil
 }
 
 func handleErrorOccurred(_ MachineSnapshot, event ErrorOccurred) (TransitionResult, error) {
 	return TransitionResult{
 		NextState: StateIdle,
-		Mutations: []Mutation{
+		StateChanges: []StateChange{
 			FlushStreamingAssistant{Interrupted: true},
 			AppendToolResult{
 				Call:   ToolCall{ID: "runtime_error", Name: "runtime_error"},
@@ -239,7 +239,7 @@ func handleErrorOccurred(_ MachineSnapshot, event ErrorOccurred) (TransitionResu
 			ClearPendingTool{},
 			ClearCurrentTool{},
 			ClearToolCallBatch{},
-			ClearPendingEffects{},
+			ClearScheduledActions{},
 		},
 	}, nil
 }
@@ -247,18 +247,18 @@ func handleErrorOccurred(_ MachineSnapshot, event ErrorOccurred) (TransitionResu
 func handleCancelRequested(MachineSnapshot, CancelRequested) (TransitionResult, error) {
 	return TransitionResult{
 		NextState: StateIdle,
-		Mutations: []Mutation{
+		StateChanges: []StateChange{
 			FlushStreamingAssistant{Interrupted: true},
 			ClearPendingTool{},
 			ClearCurrentTool{},
 			ClearToolCallBatch{},
-			ClearPendingEffects{},
+			ClearScheduledActions{},
 		},
 	}, nil
 }
 
 func handleResetRequested(MachineSnapshot, ResetRequested) (TransitionResult, error) {
-	return TransitionResult{NextState: StateIdle, Mutations: []Mutation{ResetContext{}}}, nil
+	return TransitionResult{NextState: StateIdle, StateChanges: []StateChange{ResetContext{}}}, nil
 }
 
 func toolBatchID(calls []ToolCall) string {

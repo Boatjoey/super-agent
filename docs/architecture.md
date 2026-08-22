@@ -22,10 +22,10 @@ flowchart TD
 
 ## Dependency Rule
 
-- `runtime/machine` is the domain core. It owns states, events, mutations, effects, and transitions.
+- `runtime/machine` is the domain core. It owns states, events, state changes, scheduled actions, and transitions.
 - `runtime/protocol` owns model and tool adapter contracts without state-machine policy.
 - `runtime/permission` owns permission request and command classification value types.
-- `runtime/engine` drives the machine. It owns synchronization, effect draining, and run identity.
+- `runtime/engine` drives the machine. It owns synchronization, scheduled-action draining, and run identity.
 - `runtime/execution` implements outbound model, tool, and permission ports.
 - `runtime/session` exposes application use cases. It must not contain terminal behavior.
 - `tui` is an inbound adapter. It depends only on its `Conversation` port and display DTOs.
@@ -66,7 +66,7 @@ The TUI is the only interaction surface. Headless CLI, HTTP server, WebSocket, a
 
 ```mermaid
 flowchart LR
-    Event --> Snapshot[Validated MachineSnapshot] --> Transition --> "Mutation + Effect" --> Reducer[Transactional Reducer] --> Commit[Atomic Engine Commit] --> EffectRunner --> OutcomeResolver --> Event
+    Event --> Snapshot[Validated MachineSnapshot] --> Transition --> "StateChange + ScheduledAction" --> StateChangeApplier[Transactional StateChangeApplier] --> Commit[Atomic Engine Commit] --> ScheduledActionRunner --> OutcomeResolver --> Event
 ```
 
 The state machine this rule produces:
@@ -93,7 +93,7 @@ stateDiagram
 
 `ErrorOccurred`, `CancelRequested`, and `ResetRequested` return to `Idle` from any state; `ResetContext` preserves `system` messages.
 
-The engine drops stale `RunID` outcomes before event resolution. `SnapshotFrom` validates `EngineState` and exposes only state, pending/current tool, and derived queue semantics. `Transition` owns state/event compatibility plus call and queue guards. The reducer clones state, applies mutations without scheduler callbacks, validates the result, and returns descriptive scheduler operations. The engine commits state and scheduler changes under one lock only after validation.
+The engine drops stale `RunID` outcomes before event resolution. `SnapshotFrom` validates `EngineState` and exposes only state, pending/current tool, and derived queue semantics. `Transition` owns state/event compatibility plus call and queue guards. The `StateChangeApplier` clones state, applies state changes without scheduler callbacks, validates the result, and returns descriptive scheduler operations. The engine commits state and scheduler changes under one lock only after validation. Scheduled actions run only after that commit.
 
 Errors distinguish incompatible events (`UnexpectedEventError`), current-run protocol mismatches (`ProtocolViolationError`), and impossible machine state (`InvariantViolationError`).
 
@@ -110,6 +110,6 @@ Engine files follow these responsibilities:
 - `engine.go`: dependencies and construction.
 - `query.go`: immutable snapshots and state queries.
 - `commands.go`: public runtime commands and approval handling.
-- `effect_loop.go`: transition dispatch and effect draining.
+- `action_loop.go`: transition dispatch and scheduled-action draining.
 
 Permission decisions live in `execution/policy.go`; shell inspection lives in `execution/command_analyzer.go`.

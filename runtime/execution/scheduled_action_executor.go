@@ -10,25 +10,25 @@ type ExecutionInput struct {
 	ToolSpecs []ToolSpec
 }
 
-type EffectExecutor interface {
-	Execute(ctx context.Context, effect Effect, env ExecutionInput, chunkFunc func(StreamChunk)) (ExecutionResult, error)
+type ScheduledActionExecutor interface {
+	Execute(ctx context.Context, action ScheduledAction, env ExecutionInput, chunkFunc func(StreamChunk)) (ExecutionResult, error)
 }
 
-type DefaultEffectExecutor struct {
+type DefaultScheduledActionExecutor struct {
 	model Model
 	tools ToolRunner
 }
 
-func NewDefaultEffectExecutor(model Model, tools ToolRunner) *DefaultEffectExecutor {
-	return &DefaultEffectExecutor{model: model, tools: tools}
+func NewDefaultScheduledActionExecutor(model Model, tools ToolRunner) *DefaultScheduledActionExecutor {
+	return &DefaultScheduledActionExecutor{model: model, tools: tools}
 }
 
-func (x *DefaultEffectExecutor) ToolSpecs() []ToolSpec {
+func (x *DefaultScheduledActionExecutor) ToolSpecs() []ToolSpec {
 	return x.tools.Specs()
 }
 
-func (x *DefaultEffectExecutor) Execute(ctx context.Context, effect Effect, env ExecutionInput, chunkFunc func(StreamChunk)) (ExecutionResult, error) {
-	switch fx := effect.(type) {
+func (x *DefaultScheduledActionExecutor) Execute(ctx context.Context, action ScheduledAction, env ExecutionInput, chunkFunc func(StreamChunk)) (ExecutionResult, error) {
+	switch fx := action.(type) {
 	case CallModel:
 		resp, err := x.model.Next(ctx, env.Messages, env.ToolSpecs, chunkFunc)
 		if err != nil {
@@ -47,6 +47,6 @@ func (x *DefaultEffectExecutor) Execute(ctx context.Context, effect Effect, env 
 	case ProcessNextToolCall:
 		return ToolQueueChecked{}, nil
 	default:
-		return nil, errors.New("unknown effect")
+		return nil, errors.New("unknown action")
 	}
 }

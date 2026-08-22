@@ -4,17 +4,18 @@
 
 - Go project: agent runtime, LLM adapters, local tools, Bubble Tea TUI.
 - Design pattern: hexagonal architecture with a functional core and imperative shell. `runtime/machine` is the pure domain core; engine, session, TUI, LLM, tools, and store are ports or adapters around it.
-- State-machine flow is `Event -> validated MachineSnapshot -> Transition -> Mutation + Effect -> transactional Reducer/Executor -> OutcomeResolver -> Event`; dependencies point toward the machine.
+- State-machine flow is `Event -> validated MachineSnapshot -> Transition -> StateChange + ScheduledAction -> transactional StateChangeApplier/Executor -> OutcomeResolver -> Event`; dependencies point toward the machine.
+- A `StateChange` constructs the next state from a clone of the current state. A `ScheduledAction` runs only after that next state is validated and committed.
 - Keep `RunID` stale filtering in the engine. Keep state, call-id, queue guards, and invariants in `runtime/machine`.
-- Reducers must clone, apply, validate, and return descriptive scheduler operations; the engine commits state and scheduler changes under one lock only after validation.
+- StateChangeAppliers must clone, apply, validate, and return descriptive scheduler operations; the engine commits state and scheduler changes under one lock only after validation.
 - The engine notifies a per-turn state observer after state-changing transitions; the session uses it to emit live snapshots so the TUI header tracks states such as `RunningTool`.
 - Keep state-machine logic in `runtime/machine/transition.go`; transitions use one package-private static registry keyed by state and event kind.
 - Keep state definitions in `runtime/machine/state.go` and tool-batch state in `runtime/machine/tool_batch.go`.
-- Keep orchestration in `runtime/engine/`; constructors belong in `engine.go`, commands in `commands.go`, effect draining in `effect_loop.go`, and queries in `query.go`.
+- Keep orchestration in `runtime/engine/`; constructors belong in `engine.go`, commands in `commands.go`, scheduled-action draining in `action_loop.go`, and queries in `query.go`.
 - In `runtime/engine`, reference `machine`, `execution`, and `protocol` owners explicitly; do not re-export them through internal aliases.
 - In `runtime/engine`, reference `machine`, `execution`, and `protocol` owners explicitly; do not re-export them through internal aliases.
-- Keep effect execution in `runtime/execution/`.
-- Map effect results directly to transition events with `runtime/execution.OutcomeResolver`.
+- Keep scheduled-action execution in `runtime/execution/`.
+- Map scheduled-action results directly to transition events with `runtime/execution.OutcomeResolver`.
 - Keep session/UI boundary in `runtime/session/`.
 - Keep turn flow in `runtime/session/turn.go` and history use cases in `runtime/session/history.go`.
 - Keep storage and filesystem access behind `runtime/session.Repository` and `runtime/session.Workspace`.
@@ -25,7 +26,7 @@
 - Load layered instructions with `app/instructions`: user-level spec, root-to-leaf `AGENTS.md`, fallback `CLAUDE.md`.
 - Preserve `system` messages such as project instructions across reset.
 - Do not scatter transition rules into `tui/`, `llm/`, or `tools/`.
-- Use existing vocabulary: `State`, `Event`, `Mutation`, `Effect`, `Transition`.
+- Use existing vocabulary: `State`, `Event`, `StateChange`, `ScheduledAction`, `Transition`.
 - Follow the hexagonal architecture in `docs/architecture.md`; `tui` must not import `runtime`.
 - Keep the TUI as the only interaction surface; do not add headless, server, or alternate UI entry points.
 - LLM and tool adapters may import `runtime/protocol`, not the root `runtime` facade.
@@ -67,7 +68,7 @@
 - Use external test packages such as `runtime_test` or `tui_test`.
 - Name tests by behavior, for example `TestToolCallFeedsResultBackToModel`.
 - Runtime changes should cover transitions and observable engine behavior when practical.
-- Transition tests should assert complete mutation/effect order.
+- Transition tests should assert complete state-change/scheduled-action order.
 - Reset tests should prove system messages are preserved.
 
 ## Security

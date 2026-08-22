@@ -49,7 +49,7 @@ func (r *DefaultOutcomeResolver) Resolve(result ExecutionResult, input OutcomeRe
 		}
 		return r.resolveToolCall(input.ToolBatch.Calls[input.ToolBatch.Index], input.ToolSpecs)
 	default:
-		return nil, fmt.Errorf("unknown effect result type: %T", result)
+		return nil, fmt.Errorf("unknown action result type: %T", result)
 	}
 }
 

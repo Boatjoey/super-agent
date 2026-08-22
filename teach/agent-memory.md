@@ -11,7 +11,7 @@
 - `assistant`：模型回答，也可包含推理内容和工具调用。
 - `tool`：工具执行结果，通过 `ToolCallID` 对应某次工具调用。
 
-每次调用模型时，`runtime/execution.DefaultEffectExecutor` 会将完整的消息列表和当前工具定义交给 `Model.Next`：
+每次调用模型时，`runtime/execution.DefaultScheduledActionExecutor` 会将完整的消息列表和当前工具定义交给 `Model.Next`：
 
 ```text
 Messages + ToolSpecs -> Model.Next -> ModelResponse
@@ -109,7 +109,7 @@ assistant(tool_calls)
 
 ## 重置上下文：Reset
 
-`Session.Reset` 先写入 `reset` 事件，再调用 `Engine.Reset`。状态机的 `ResetContext` Mutation 会清除非 system 消息，但保留所有 `system` 消息。
+`Session.Reset` 先写入 `reset` 事件，再调用 `Engine.Reset`。状态机的 `ResetContext` StateChange 会清除非 system 消息，但保留所有 `system` 消息。
 
 ```text
 reset 前：system + user + assistant + tool + ...
@@ -152,9 +152,9 @@ Cancel 会停止当前 run，清理工具队列并回到 `Idle`，但保留已�
 | 消息与模型接口 | `runtime/protocol/types.go` |
 | 初始 system 消息 | `app/system_prompt.go`、`app/session.go` |
 | 分层指令加载 | `app/instructions/instructions.go` |
-| 消息变更与重置 | `runtime/machine/reducer.go` |
+| 消息变更与重置 | `runtime/machine/state_change_applier.go` |
 | 对话和工具状态转移 | `runtime/machine/transition.go` |
-| 模型/工具执行 | `runtime/execution/effect_executor.go` |
+| 模型/工具执行 | `runtime/execution/scheduled_action_executor.go` |
 | 会话轮次与消息发送 | `runtime/session/turn.go`、`runtime/session/snapshot_emitter.go` |
 | 恢复、压缩与撤销 | `runtime/session/history.go` |
 | 持久化适配器 | `store/repository.go`、`store/store.go` |
