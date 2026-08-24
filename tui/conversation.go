@@ -54,10 +54,10 @@ const (
 	DenyApproval  ApprovalDecision = "deny"
 )
 
-type Event interface{ isEvent() }
+type ConversationNotification interface{ isConversationNotification() }
 type AgentStatusChanged struct{ Status AgentStatus }
 
-func (AgentStatusChanged) isEvent() {}
+func (AgentStatusChanged) isConversationNotification() {}
 
 type ToolApprovalRequested struct {
 	ToolCall               ToolCall
@@ -65,28 +65,28 @@ type ToolApprovalRequested struct {
 	BatchIndex, BatchTotal int
 }
 
-func (ToolApprovalRequested) isEvent() {}
+func (ToolApprovalRequested) isConversationNotification() {}
 
 type ToolApprovalCleared struct{}
 
-func (ToolApprovalCleared) isEvent() {}
+func (ToolApprovalCleared) isConversationNotification() {}
 
 type StreamChunkReceived struct{ Message *Message }
 
-func (StreamChunkReceived) isEvent() {}
+func (StreamChunkReceived) isConversationNotification() {}
 
 type MessageAppended struct{ Message Message }
 
-func (MessageAppended) isEvent() {}
+func (MessageAppended) isConversationNotification() {}
 
 type ConversationError struct{ Err error }
 
-func (ConversationError) isEvent() {}
+func (ConversationError) isConversationNotification() {}
 
 // Conversation is the TUI input port. Its DTOs contain no runtime or storage types.
 type Conversation interface {
 	Snapshot() ConversationView
-	RunTurn(context.Context, string, chan<- Event, <-chan ApprovalDecision) error
+	RunTurn(context.Context, string, chan<- ConversationNotification, <-chan ApprovalDecision) error
 	Cancel() error
 	Reset() error
 	ListSessions() ([]SessionSummary, error)

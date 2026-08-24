@@ -38,13 +38,13 @@ func (se *snapshotEmitter) reset(emittedMessages int) {
 	se.lastApprovalCall = nil
 }
 
-func (se *snapshotEmitter) emit(events chan<- SessionEvent, snapshot EngineView, onMessage func(Message)) {
+func (se *snapshotEmitter) emit(notifications chan<- SessionNotification, snapshot EngineView, onMessage func(Message)) {
 	se.mu.Lock()
 	defer se.mu.Unlock()
-	events <- StateChanged{State: snapshot.State}
+	notifications <- StateChanged{State: snapshot.State}
 	if snapshot.PendingTool != nil {
 		if !se.hasApproval || se.lastApprovalCall == nil || *se.lastApprovalCall != *snapshot.PendingTool {
-			events <- ToolApprovalRequested{
+			notifications <- ToolApprovalRequested{
 				ToolCall:   *snapshot.PendingTool,
 				Request:    permissionRequest(snapshot),
 				BatchID:    snapshot.PendingToolBatchID,
@@ -57,7 +57,7 @@ func (se *snapshotEmitter) emit(events chan<- SessionEvent, snapshot EngineView,
 		}
 	} else {
 		if se.hasApproval {
-			events <- ToolApprovalCleared{}
+			notifications <- ToolApprovalCleared{}
 		}
 		se.hasApproval = false
 		se.lastApprovalCall = nil
@@ -67,7 +67,7 @@ func (se *snapshotEmitter) emit(events chan<- SessionEvent, snapshot EngineView,
 		se.emittedMessages = 0
 	}
 	for _, msg := range messages[se.emittedMessages:] {
-		events <- MessageAppended{Message: msg}
+		notifications <- MessageAppended{Message: msg}
 		if onMessage != nil {
 			onMessage(msg)
 		}

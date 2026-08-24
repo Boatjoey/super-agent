@@ -10,7 +10,7 @@ const (
 	DenyApproval  = session.DenyApproval
 )
 
-type SessionEvent = session.SessionEvent
+type SessionNotification = session.SessionNotification
 type StateChanged = session.StateChanged
 type ToolApprovalRequested = session.ToolApprovalRequested
 type ToolApprovalCleared = session.ToolApprovalCleared

@@ -5,39 +5,40 @@ import (
 	"errors"
 )
 
-func (s *Session) RunTurn(ctx context.Context, query string, events chan<- SessionEvent, approvals <-chan ApprovalDecision) error {
-	defer close(events)
+func (s *Session) RunTurn(ctx context.Context, query string, notifications chan<- SessionNotification, approvals <-chan ApprovalDecision) error {
+	defer close(notifications)
 	if !s.mu.TryLock() {
 		return errors.New("session is already running a turn")
 	}
 	defer s.mu.Unlock()
-	s.startTurn()
+	s.persistTurnBoundary()
 	// Track live state transitions while actions drain: states such as
 	// RunningTool and AdvancingQueue pass between snapshot points, and the
 	// TUI header should follow them as they happen.
-	s.engine.SetStateObserver(func() { s.emitSnapshot(events) })
+	s.engine.SetStateObserver(func() { s.emitSnapshot(notifications) })
 	defer s.engine.SetStateObserver(nil)
-	err := s.drainRun(ctx, events, approvals, query)
-	s.emitter.emit(events, s.Snapshot(), s.persistMessage)
+	err := s.runTurnLoop(ctx, notifications, approvals, query)
+	s.emitter.emit(notifications, s.Snapshot(), s.persistMessage)
 	return err
 }
 
-func (s *Session) drainRun(ctx context.Context, events chan<- SessionEvent, approvals <-chan ApprovalDecision, query string) error {
+func (s *Session) runTurnLoop(ctx context.Context, notifications chan<- SessionNotification, approvals <-chan ApprovalDecision, query string) error {
 	chunks := func(chunk StreamChunk) {
-		events <- StreamChunkReceived{Chunk: chunk, Message: s.Snapshot().StreamingMessage}
+		notifications <- StreamChunkReceived{Chunk: chunk, Message: s.Snapshot().StreamingMessage}
 	}
-	if err := s.engine.DispatchEventThenRunActions(ctx, UserMessageSubmitted{Content: query}, chunks, func() { s.emitSnapshot(events) }); err != nil {
-		return s.failTurn(events, err)
+	// 用户消息提交
+	if err := s.engine.DispatchEventThenRunActions(ctx, UserMessageSubmitted{Content: query}, chunks, func() { s.emitSnapshot(notifications) }); err != nil {
+		return s.failTurn(notifications, err)
 	}
-	s.emitSnapshot(events)
+	s.emitSnapshot(notifications)
 	for {
 		switch s.engine.State() {
 		case StateWaitingApproval:
-			s.emitSnapshot(events)
+			s.emitSnapshot(notifications)
 			decision, err := waitApproval(ctx, approvals)
 			if err != nil {
 				_ = s.engine.Cancel()
-				return s.failTurn(events, err)
+				return s.failTurn(notifications, err)
 			}
 			// Mark the approval consumed before applying the decision: the
 			// engine emits snapshots while actions drain, so the next
@@ -45,19 +46,19 @@ func (s *Session) drainRun(ctx context.Context, events chan<- SessionEvent, appr
 			// afterwards would clear the dedup key and re-announce it.
 			s.emitter.markApprovalConsumed()
 			if err := s.applyApproval(ctx, decision, chunks); err != nil {
-				return s.failTurn(events, err)
+				return s.failTurn(notifications, err)
 			}
-			s.emitSnapshot(events)
+			s.emitSnapshot(notifications)
 		case StateIdle:
 			return nil
 		default:
-			return s.failTurn(events, errors.New("runtime cannot continue from state "+string(s.engine.State())))
+			return s.failTurn(notifications, errors.New("runtime cannot continue from state "+string(s.engine.State())))
 		}
 	}
 }
 
-func (s *Session) failTurn(events chan<- SessionEvent, err error) error {
-	events <- SessionError{Err: err}
+func (s *Session) failTurn(notifications chan<- SessionNotification, err error) error {
+	notifications <- SessionError{Err: err}
 	s.persistError(err)
 	return err
 }

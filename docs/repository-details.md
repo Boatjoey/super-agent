@@ -27,7 +27,7 @@ main.go
 - `runtime/machine/`: state, events, runtime data, runtime-data changes, action-queue changes, scheduled actions, transitions.
 - `runtime/execution/`: scheduled-action runner, executor, action queue, action-result resolver, command analyzer, policy, approvals, run control.
 - `runtime/engine/`: orchestration, state lock, lifecycle, dispatch, stale-result dropping.
-- `runtime/session/`: application use cases, event output, and persistence/workspace ports.
+- `runtime/session/`: application use cases, notification output, and persistence/workspace ports.
 - `store/`: durable JSONL session metadata, transcripts, checkpoints, compaction records.
 - `workspace/`: filesystem checkpoint capture and undo restoration adapter.
 - `llm/`: DeepSeek, OpenAI, Claude adapters.
@@ -107,7 +107,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `RunController`: owns run id, cancel function, and stale-result checks.
 - `ScheduledActionRunner`: executes scheduled actions and returns `ActionCompletion` values.
 - `Engine`: action queue, state lock, lifecycle, dispatch, scheduled-action drain, stale dropping.
-- `Session`: channel boundary for UI events and approvals.
+- `Session`: channel boundary for UI notifications and approvals.
 
 ## Runtime Package Boundaries
 
@@ -130,7 +130,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `runtime/execution/scheduled_action_result.go`: scheduled-action result vocabulary.
 - `runtime/execution/action_result_resolver.go`: maps action results to transition-ready events and classifies tool calls.
 - `runtime/session/session.go`: serializes turns and coordinates application use cases.
-- `runtime/session/events.go`: application event protocol.
+- `runtime/session/notifications.go`: session-to-UI notification protocol.
 - `runtime/session/turn.go`: turn execution and approval flow.
 - `runtime/session/history.go`: resume, rename, delete, compact, and undo use cases.
 - `runtime/session/persistence.go`: repository notifications.
@@ -168,7 +168,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 ## Git And PR Notes
 
 - Use concise conventional commit messages, for example `fix: preserve reasoning replay`.
-- Name branches by scope: `feat/session-events`, `fix/tool-approval`.
+- Name branches by scope: `feat/session-notifications`, `fix/tool-approval`.
 - PRs should include purpose, main files changed, test output, and local config notes.
 - Add screenshots only for visible TUI changes.
 

@@ -111,6 +111,6 @@ func (s *Session) Snapshot() EngineView {
 	return s.engine.Snapshot()
 }
 
-func (s *Session) emitSnapshot(events chan<- SessionEvent) {
-	s.emitter.emit(events, s.Snapshot(), s.persistMessage)
+func (s *Session) emitSnapshot(notifications chan<- SessionNotification) {
+	s.emitter.emit(notifications, s.Snapshot(), s.persistMessage)
 }

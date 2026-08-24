@@ -16,6 +16,7 @@
 - Keep scheduled-action execution in `runtime/execution/`.
 - Map scheduled-action results directly to transition events with `runtime/execution.ActionResultResolver`.
 - Keep session/UI boundary in `runtime/session/`.
+- Use `SessionNotification` for runtime-session output and convert it to `tui.ConversationNotification` at the app boundary; reserve `machine.Event` for state-machine input.
 - Keep turn flow in `runtime/session/turn.go` and history use cases in `runtime/session/history.go`.
 - Keep storage and filesystem access behind `runtime/session.Repository` and `runtime/session.Workspace`.
 - Keep TUI message routing in `tui/update.go`, commands in `tui/commands.go`, and rendering outside the update loop.
@@ -30,6 +31,7 @@
 - LLM and tool adapters may import `runtime/protocol`, not the root `runtime` facade.
 - More detail: `docs/repository-details.md`.
 - Transition teaching guide: `teach/agent-transition.md`.
+- Agent-loop teaching guide: `teach/agent-loop.md`.
 - Competitive gap roadmap: `docs/competitive-gap-tasks.md`.
 
 ## Documentation

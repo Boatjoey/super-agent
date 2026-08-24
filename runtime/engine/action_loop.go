@@ -9,7 +9,7 @@ import (
 	"super-agent/runtime/protocol"
 )
 
-func (e *Engine) DispatchEventThenRunActions(ctx context.Context, event machine.Event, chunks func(protocol.StreamChunk), afterDispatch func()) error {
+func (e *Engine) DispatchEventThenRunActions(ctx context.Context, event machine.Event, chunks func(protocol.StreamChunk), notifyStateChange func()) error {
 	e.mu.Lock()
 	snapshot, err := machine.SnapshotFrom(e.runtimeData)
 	if err != nil {
@@ -22,13 +22,13 @@ func (e *Engine) DispatchEventThenRunActions(ctx context.Context, event machine.
 		return err
 	}
 	_, runCtx := e.runs.StartRun(ctx)
-	if err := e.applyTransitionLocked(decision); err != nil {
+	if err := e.commitTransitionLocked(decision); err != nil {
 		e.runs.CancelRun()
 		e.mu.Unlock()
 		return err
 	}
 	e.mu.Unlock()
-	afterDispatch()
+	notifyStateChange()
 	return e.runScheduledActions(runCtx, chunks)
 }
 
@@ -37,6 +37,7 @@ func (e *Engine) dispatch(event machine.Event) error {
 	defer e.mu.Unlock()
 	return e.dispatchLocked(event)
 }
+
 func (e *Engine) dispatchLocked(event machine.Event) error {
 	snapshot, err := machine.SnapshotFrom(e.runtimeData)
 	if err != nil {
@@ -46,9 +47,10 @@ func (e *Engine) dispatchLocked(event machine.Event) error {
 	if err != nil {
 		return err
 	}
-	return e.applyTransitionLocked(decision)
+	return e.commitTransitionLocked(decision)
 }
-func (e *Engine) applyTransitionLocked(decision machine.TransitionResult) error {
+
+func (e *Engine) commitTransitionLocked(decision machine.TransitionResult) error {
 	changeResult, err := e.runtimeDataChangeApplier.ApplyRuntimeDataChanges(e.runtimeData, decision)
 	if err != nil {
 		return err
@@ -136,13 +138,14 @@ func cloneToolBatch(batch *machine.ToolCallBatch) *machine.ToolCallBatch {
 }
 
 func (e *Engine) toolSpecs() []protocol.ToolSpec { return e.runner.ToolSpecs() }
+
 func (e *Engine) recordStreamChunk(runID execution.RunID, chunk protocol.StreamChunk) {
 	if !e.runs.IsCurrent(runID) {
 		return
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	_ = e.applyTransitionLocked(machine.TransitionResult{
+	_ = e.commitTransitionLocked(machine.TransitionResult{
 		NextState:          e.runtimeData.State,
 		RuntimeDataChanges: []machine.RuntimeDataChange{machine.AppendStreamingAssistant{Chunk: chunk}},
 	})

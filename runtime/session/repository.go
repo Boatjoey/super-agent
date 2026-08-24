@@ -33,7 +33,7 @@ type FileSnapshot struct {
 // Implementations decide how metadata, transcripts, and checkpoints are stored.
 type Repository interface {
 	Create(Metadata, []Message) (Metadata, error)
-	StartTurn(SessionID) error
+	AssignNewTurnID(SessionID) error
 	SaveMessage(SessionID, Message) error
 	SaveApproval(SessionID, ApprovalDecision, *ToolCall) error
 	SaveError(SessionID, error) error

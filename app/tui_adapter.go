@@ -21,17 +21,17 @@ func (a *TUIConversation) Snapshot() tui.ConversationView {
 	return toConversationView(a.session.Snapshot())
 }
 
-func (a *TUIConversation) RunTurn(ctx context.Context, query string, events chan<- tui.Event, approvals <-chan tui.ApprovalDecision) error {
-	runtimeEvents := make(chan runtime.SessionEvent, 100)
+func (a *TUIConversation) RunTurn(ctx context.Context, query string, notifications chan<- tui.ConversationNotification, approvals <-chan tui.ApprovalDecision) error {
+	runtimeNotifications := make(chan runtime.SessionNotification, 100)
 	runtimeApprovals := make(chan runtime.ApprovalDecision, 1)
 	done := make(chan struct{})
 	var bridges sync.WaitGroup
 	bridges.Add(2)
 	go func() {
 		defer bridges.Done()
-		defer close(events)
-		for event := range runtimeEvents {
-			events <- toTUIEvent(event)
+		defer close(notifications)
+		for notification := range runtimeNotifications {
+			notifications <- toConversationNotification(notification)
 		}
 	}()
 	go func() {
@@ -51,7 +51,7 @@ func (a *TUIConversation) RunTurn(ctx context.Context, query string, events chan
 			}
 		}
 	}()
-	err := a.session.RunTurn(ctx, query, runtimeEvents, runtimeApprovals)
+	err := a.session.RunTurn(ctx, query, runtimeNotifications, runtimeApprovals)
 	close(done)
 	bridges.Wait()
 	return err
@@ -94,24 +94,24 @@ func (a *TUIConversation) DeleteSession(id string) error {
 	return a.session.DeleteSession(runtime.SessionID(id))
 }
 
-func toTUIEvent(event runtime.SessionEvent) tui.Event {
-	switch event := event.(type) {
+func toConversationNotification(notification runtime.SessionNotification) tui.ConversationNotification {
+	switch notification := notification.(type) {
 	case runtime.StateChanged:
-		return tui.AgentStatusChanged{Status: toTUIStatus(event.State)}
+		return tui.AgentStatusChanged{Status: toTUIStatus(notification.State)}
 	case runtime.ToolApprovalRequested:
-		return tui.ToolApprovalRequested{ToolCall: toTUIToolCall(event.ToolCall), Request: toTUIPermission(event.Request), BatchIndex: event.BatchIndex, BatchTotal: event.BatchTotal}
+		return tui.ToolApprovalRequested{ToolCall: toTUIToolCall(notification.ToolCall), Request: toTUIPermission(notification.Request), BatchIndex: notification.BatchIndex, BatchTotal: notification.BatchTotal}
 	case runtime.ToolApprovalCleared:
 		return tui.ToolApprovalCleared{}
 	case runtime.StreamChunkReceived:
-		return tui.StreamChunkReceived{Message: toTUIMessagePtr(event.Message)}
+		return tui.StreamChunkReceived{Message: toTUIMessagePtr(notification.Message)}
 	case runtime.MessageAppended:
-		return tui.MessageAppended{Message: toTUIMessage(event.Message)}
+		return tui.MessageAppended{Message: toTUIMessage(notification.Message)}
 	case runtime.SessionError:
-		return tui.ConversationError{Err: event.Err}
+		return tui.ConversationError{Err: notification.Err}
 	default:
 		// Surface instead of silently dropping so new runtime event types
 		// cannot degrade the UI without a trace.
-		return tui.ConversationError{Err: fmt.Errorf("unknown runtime session event: %T", event)}
+		return tui.ConversationError{Err: fmt.Errorf("unknown runtime session notification: %T", notification)}
 	}
 }
 

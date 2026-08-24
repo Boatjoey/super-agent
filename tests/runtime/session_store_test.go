@@ -62,7 +62,7 @@ func TestPersistentResetPreservesSystemMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := persistentSession(engine, st, meta)
-	events := make(chan SessionEvent, 10)
+	events := make(chan SessionNotification, 10)
 	if err := session.RunTurn(context.Background(), "hi", events, make(chan ApprovalDecision)); err != nil {
 		t.Fatal(err)
 	}
@@ -224,14 +224,14 @@ func TestCompactDoesNotDuplicateTranscriptOnResume(t *testing.T) {
 	session := persistentSession(engine, st, meta)
 
 	for _, query := range []string{"one", "two", "three"} {
-		if err := session.RunTurn(context.Background(), query, make(chan SessionEvent, 20), make(chan ApprovalDecision)); err != nil {
+		if err := session.RunTurn(context.Background(), query, make(chan SessionNotification, 20), make(chan ApprovalDecision)); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if err := session.Compact(context.Background(), "summary", 2); err != nil {
 		t.Fatal(err)
 	}
-	if err := session.RunTurn(context.Background(), "four", make(chan SessionEvent, 20), make(chan ApprovalDecision)); err != nil {
+	if err := session.RunTurn(context.Background(), "four", make(chan SessionNotification, 20), make(chan ApprovalDecision)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -330,14 +330,14 @@ func TestConcurrentRunTurnFailsWithoutBlockingEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events1 := make(chan SessionEvent, 20)
+	events1 := make(chan SessionNotification, 20)
 	done1 := make(chan error, 1)
 	go func() {
 		done1 <- session.RunTurn(context.Background(), "one", events1, make(chan ApprovalDecision))
 	}()
 	<-model.started
 
-	events2 := make(chan SessionEvent, 20)
+	events2 := make(chan SessionNotification, 20)
 	err := session.RunTurn(context.Background(), "two", events2, make(chan ApprovalDecision))
 	if err == nil || err.Error() != "session is already running a turn" {
 		t.Fatalf("second RunTurn error = %v, want busy error", err)
@@ -399,7 +399,7 @@ func TestResolverErrorAppendsSingleRuntimeErrorMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	err := session.RunTurn(context.Background(), "use tool", events, make(chan ApprovalDecision))
 	if err == nil {
 		t.Fatal("RunTurn error = nil, want tools-disabled error")

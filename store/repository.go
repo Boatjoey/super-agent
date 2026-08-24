@@ -28,7 +28,7 @@ func (r Repository) Create(meta session.Metadata, messages []protocol.Message) (
 	return toSessionMetadata(created), nil
 }
 
-func (r Repository) StartTurn(id session.SessionID) error {
+func (r Repository) AssignNewTurnID(id session.SessionID) error {
 	if err := r.store.SetCurrentTurn(SessionID(id), NewTurnID(time.Now())); err != nil {
 		logPersistenceFailure("start turn", id, err)
 		return err

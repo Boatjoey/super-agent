@@ -171,7 +171,7 @@ func TestEscapeClearsInputWithoutQuitting(t *testing.T) {
 }
 
 func TestTabQueuesPromptWhileTurnRuns(t *testing.T) {
-	session := &eventOnlyConversation{}
+	session := &notificationOnlyConversation{}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -204,7 +204,7 @@ func TestTabQueuesPromptWhileTurnRuns(t *testing.T) {
 }
 
 func TestQueuePreviewIsBounded(t *testing.T) {
-	session := &eventOnlyConversation{}
+	session := &notificationOnlyConversation{}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "active")
@@ -226,7 +226,7 @@ func TestQueuePreviewIsBounded(t *testing.T) {
 }
 
 func TestSmallWindowCollapsesQueueDetails(t *testing.T) {
-	session := &eventOnlyConversation{}
+	session := &notificationOnlyConversation{}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 20, Height: 8})
 	model = typeText(model, "active")
@@ -245,7 +245,7 @@ func TestSmallWindowCollapsesQueueDetails(t *testing.T) {
 }
 
 func TestEscCancelsTurnAndClearsQueuedFollowUps(t *testing.T) {
-	session := &eventOnlyConversation{}
+	session := &notificationOnlyConversation{}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "active")
@@ -270,7 +270,7 @@ func TestEscCancelsTurnAndClearsQueuedFollowUps(t *testing.T) {
 }
 
 func TestEnterSteersByCancelingCurrentTurnAndRunningPromptNext(t *testing.T) {
-	session := &eventOnlyConversation{}
+	session := &notificationOnlyConversation{}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -299,7 +299,7 @@ func TestEnterSteersByCancelingCurrentTurnAndRunningPromptNext(t *testing.T) {
 }
 
 func TestCtrlJInsertsNewlineAndEnterSubmits(t *testing.T) {
-	session := &eventOnlyConversation{}
+	session := &notificationOnlyConversation{}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -318,7 +318,7 @@ func TestCtrlJInsertsNewlineAndEnterSubmits(t *testing.T) {
 }
 
 func TestHistoryNavigationRestoresUnsubmittedDraft(t *testing.T) {
-	session := &eventOnlyConversation{}
+	session := &notificationOnlyConversation{}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -348,7 +348,7 @@ func typeText(model tea.Model, text string) tea.Model {
 
 func newEventOnlyTUI(t *testing.T) tea.Model {
 	t.Helper()
-	var model tea.Model = tui.New(&eventOnlyConversation{}, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(&notificationOnlyConversation{}, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return model
 }
@@ -520,8 +520,8 @@ func TestEscCancelsPendingApproval(t *testing.T) {
 	}
 }
 
-func TestTUIRendersSessionEventsWithoutSnapshotReads(t *testing.T) {
-	session := &eventOnlyConversation{}
+func TestTUIRendersSessionNotificationsWithoutSnapshotReads(t *testing.T) {
+	session := &notificationOnlyConversation{}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
@@ -559,13 +559,13 @@ func TestTUIRendersSessionEventsWithoutSnapshotReads(t *testing.T) {
 	}
 
 	view := model.View()
-	if !strings.Contains(view, "ASSISTANT") || !strings.Contains(view, "from event") {
-		t.Fatalf("view = %q, want assistant message from event", view)
+	if !strings.Contains(view, "ASSISTANT") || !strings.Contains(view, "from notification") {
+		t.Fatalf("view = %q, want assistant message from notification", view)
 	}
 }
 
 func TestPageKeysScrollConversationAndReturnToBottom(t *testing.T) {
-	session := &eventOnlyConversation{extraMessages: 30}
+	session := &notificationOnlyConversation{extraMessages: 30}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 	model = typeText(model, "hello")
@@ -621,7 +621,7 @@ func TestInstructionsCommandDisplaysLoadedSources(t *testing.T) {
 }
 
 func TestPermissionsModeCommandRejectsInvalidMode(t *testing.T) {
-	session := &eventOnlyConversation{permissionErr: errors.New("invalid permission mode: root")}
+	session := &notificationOnlyConversation{permissionErr: errors.New("invalid permission mode: root")}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", PermissionMode: "ask"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "/permissions mode root" {
@@ -679,7 +679,7 @@ func (t *blockingTools) Specs() []runtime.ToolSpec {
 	return []runtime.ToolSpec{{Name: "bash", Risky: true}}
 }
 
-type eventOnlyConversation struct {
+type notificationOnlyConversation struct {
 	rejectSnapshots bool
 	permissionMode  string
 	permissionErr   error
@@ -688,69 +688,69 @@ type eventOnlyConversation struct {
 	extraMessages   int
 }
 
-func (c *eventOnlyConversation) Snapshot() tui.ConversationView {
+func (c *notificationOnlyConversation) Snapshot() tui.ConversationView {
 	if c.rejectSnapshots {
 		panic("unexpected Snapshot read")
 	}
 	return tui.ConversationView{AgentStatus: tui.AgentStatus{Label: "Idle"}}
 }
 
-func (c *eventOnlyConversation) RunTurn(ctx context.Context, query string, events chan<- tui.Event, _ <-chan tui.ApprovalDecision) error {
+func (c *notificationOnlyConversation) RunTurn(ctx context.Context, query string, notifications chan<- tui.ConversationNotification, _ <-chan tui.ApprovalDecision) error {
 	c.queries = append(c.queries, query)
 	c.contextCanceled = append(c.contextCanceled, ctx.Err() != nil)
-	events <- tui.AgentStatusChanged{Status: tui.AgentStatus{Label: "WaitingLLM", Busy: true}}
-	events <- tui.MessageAppended{Message: tui.Message{Role: "user", Content: query}}
-	events <- tui.MessageAppended{Message: tui.Message{Role: tui.RoleAssistant, Content: "from event"}}
+	notifications <- tui.AgentStatusChanged{Status: tui.AgentStatus{Label: "WaitingLLM", Busy: true}}
+	notifications <- tui.MessageAppended{Message: tui.Message{Role: "user", Content: query}}
+	notifications <- tui.MessageAppended{Message: tui.Message{Role: tui.RoleAssistant, Content: "from notification"}}
 	for index := 0; index < c.extraMessages; index++ {
-		events <- tui.MessageAppended{Message: tui.Message{Role: tui.RoleAssistant, Content: strings.Repeat("message ", 12)}}
+		notifications <- tui.MessageAppended{Message: tui.Message{Role: tui.RoleAssistant, Content: strings.Repeat("message ", 12)}}
 	}
-	events <- tui.AgentStatusChanged{Status: tui.AgentStatus{Label: "Idle"}}
-	close(events)
+	notifications <- tui.AgentStatusChanged{Status: tui.AgentStatus{Label: "Idle"}}
+	close(notifications)
 	return nil
 }
 
-func (c *eventOnlyConversation) Cancel() error {
+func (c *notificationOnlyConversation) Cancel() error {
 	return nil
 }
 
-func (c *eventOnlyConversation) Reset() error {
+func (c *notificationOnlyConversation) Reset() error {
 	return nil
 }
 
-func (c *eventOnlyConversation) ListSessions() ([]tui.SessionSummary, error) {
+func (c *notificationOnlyConversation) ListSessions() ([]tui.SessionSummary, error) {
 	return nil, nil
 }
 
-func (c *eventOnlyConversation) Resume(string) error {
+func (c *notificationOnlyConversation) Resume(string) error {
 	return nil
 }
 
-func (c *eventOnlyConversation) RenameSession(string, string) error {
+func (c *notificationOnlyConversation) RenameSession(string, string) error {
 	return nil
 }
 
-func (c *eventOnlyConversation) DeleteSession(string) error {
+func (c *notificationOnlyConversation) DeleteSession(string) error {
 	return nil
 }
 
-func (c *eventOnlyConversation) Compact(context.Context, string) error {
+func (c *notificationOnlyConversation) Compact(context.Context, string) error {
 	return nil
 }
 
-func (c *eventOnlyConversation) Undo() error {
+func (c *notificationOnlyConversation) Undo() error {
 	return nil
 }
 
-func (c *eventOnlyConversation) SetPermissionMode(mode string) error {
+func (c *notificationOnlyConversation) SetPermissionMode(mode string) error {
 	c.permissionMode = mode
 	return c.permissionErr
 }
 
-func (c *eventOnlyConversation) PermissionMode() string {
+func (c *notificationOnlyConversation) PermissionMode() string {
 	return c.permissionMode
 }
 
-func (c *eventOnlyConversation) AutoApproveTools() bool {
+func (c *notificationOnlyConversation) AutoApproveTools() bool {
 	return c.permissionMode == "bypass"
 }
 

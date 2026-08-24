@@ -8,11 +8,11 @@ const (
 	DenyApproval  ApprovalDecision = "deny"
 )
 
-type SessionEvent interface{ isSessionEvent() }
+type SessionNotification interface{ isSessionNotification() }
 
 type StateChanged struct{ State State }
 
-func (StateChanged) isSessionEvent() {}
+func (StateChanged) isSessionNotification() {}
 
 type ToolApprovalRequested struct {
 	ToolCall   ToolCall
@@ -22,23 +22,23 @@ type ToolApprovalRequested struct {
 	BatchTotal int
 }
 
-func (ToolApprovalRequested) isSessionEvent() {}
+func (ToolApprovalRequested) isSessionNotification() {}
 
 type ToolApprovalCleared struct{}
 
-func (ToolApprovalCleared) isSessionEvent() {}
+func (ToolApprovalCleared) isSessionNotification() {}
 
 type StreamChunkReceived struct {
 	Chunk   StreamChunk
 	Message *Message
 }
 
-func (StreamChunkReceived) isSessionEvent() {}
+func (StreamChunkReceived) isSessionNotification() {}
 
 type MessageAppended struct{ Message Message }
 
-func (MessageAppended) isSessionEvent() {}
+func (MessageAppended) isSessionNotification() {}
 
 type SessionError struct{ Err error }
 
-func (SessionError) isSessionEvent() {}
+func (SessionError) isSessionNotification() {}

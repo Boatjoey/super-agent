@@ -25,14 +25,14 @@ func (a App) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return a, command
 	case tea.KeyMsg:
 		return a.updateKey(message)
-	case sessionEventMsg:
+	case conversationNotificationMsg:
 		if message.turn != a.turn {
 			// A stale listener on a replaced turn channel delivered a
-			// leftover event after a new turn started. Drop it and keep
+			// leftover notification after a new turn started. Drop it and keep
 			// listening on the current channel.
-			return a, waitForEvent(a.eventsCh, a.turn)
+			return a, waitForNotification(a.notificationsCh, a.turn)
 		}
-		return a.updateSessionEvent(message.event)
+		return a.updateConversationNotification(message.notification)
 	case submitDoneMsg:
 		return a.finishSubmit(message.err)
 	case compactDoneMsg:
@@ -231,35 +231,35 @@ func (a *App) resizeInput() {
 	a.input.SetHeight(height)
 }
 
-func (a App) updateSessionEvent(event Event) (tea.Model, tea.Cmd) {
-	switch event := event.(type) {
+func (a App) updateConversationNotification(notification ConversationNotification) (tea.Model, tea.Cmd) {
+	switch notification := notification.(type) {
 	case AgentStatusChanged:
-		a.agentStatus = event.Status
-		a.recordState(event.Status.Label)
+		a.agentStatus = notification.Status
+		a.recordState(notification.Status.Label)
 		if !a.needsInput() {
 			a.clearPendingTool()
 		}
 	case ToolApprovalRequested:
-		call := event.ToolCall
-		a.pendingTool, a.pendingRequest = &call, event.Request
-		a.pendingToolIndex, a.pendingToolTotal = event.BatchIndex, event.BatchTotal
+		call := notification.ToolCall
+		a.pendingTool, a.pendingRequest = &call, notification.Request
+		a.pendingToolIndex, a.pendingToolTotal = notification.BatchIndex, notification.BatchTotal
 		a.approvalSelection, a.approvalSubmitted = 0, false
 	case ToolApprovalCleared:
 		a.clearPendingTool()
 	case MessageAppended:
-		a.messages = append(a.messages, event.Message)
-		if event.Message.Role == RoleAssistant {
+		a.messages = append(a.messages, notification.Message)
+		if notification.Message.Role == RoleAssistant {
 			a.streamingMessage = nil
 		}
 	case ConversationError:
-		if event.Err != nil && !errors.Is(event.Err, context.Canceled) {
-			a.err = event.Err.Error()
+		if notification.Err != nil && !errors.Is(notification.Err, context.Canceled) {
+			a.err = notification.Err.Error()
 		}
 	case StreamChunkReceived:
-		a.streamingMessage = event.Message
+		a.streamingMessage = notification.Message
 	}
 	a.refreshContent()
-	return a, waitForEvent(a.eventsCh, a.turn)
+	return a, waitForNotification(a.notificationsCh, a.turn)
 }
 
 func (a App) finishSubmit(err error) (tea.Model, tea.Cmd) {
@@ -271,7 +271,7 @@ func (a App) finishSubmit(err error) (tea.Model, tea.Cmd) {
 	if len(a.queuedInputs) > 0 {
 		next := a.queuedInputs[0]
 		a.queuedInputs = a.queuedInputs[1:]
-		return a.startTurn(next)
+		return a.submitPrompt(next)
 	}
 	return a, nil
 }

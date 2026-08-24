@@ -43,7 +43,7 @@ type App struct {
 	status            string
 	lastActivity      string
 	cancel            context.CancelFunc
-	eventsCh          chan Event
+	notificationsCh   chan ConversationNotification
 	approvalsCh       chan ApprovalDecision
 	agentStatus       AgentStatus
 	stateHistory      []string
@@ -67,20 +67,20 @@ type compactDoneMsg struct {
 	err error
 }
 
-type sessionEventMsg struct {
-	event Event
-	turn  int
+type conversationNotificationMsg struct {
+	notification ConversationNotification
+	turn         int
 }
 
-// waitForEvent listens on ch and tags the delivered event with turn so
-// that events left over from a replaced turn channel can be discarded.
-func waitForEvent(ch <-chan Event, turn int) tea.Cmd {
+// waitForNotification listens on ch and tags the delivered notification with
+// its turn so stale notifications from a replaced channel can be discarded.
+func waitForNotification(ch <-chan ConversationNotification, turn int) tea.Cmd {
 	return func() tea.Msg {
-		event, ok := <-ch
+		notification, ok := <-ch
 		if !ok {
 			return nil
 		}
-		return sessionEventMsg{event: event, turn: turn}
+		return conversationNotificationMsg{notification: notification, turn: turn}
 	}
 }
 
@@ -107,21 +107,21 @@ func New(session Conversation, info StartupInfo) App {
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 
 	return App{
-		session:     session,
-		input:       input,
-		spinner:     s,
-		styles:      styles,
-		info:        info,
-		history:     []string{},
-		eventsCh:    make(chan Event, 100),
-		approvalsCh: make(chan ApprovalDecision, 1),
-		agentStatus: AgentStatus{Label: "Idle"},
+		session:         session,
+		input:           input,
+		spinner:         s,
+		styles:          styles,
+		info:            info,
+		history:         []string{},
+		notificationsCh: make(chan ConversationNotification, 100),
+		approvalsCh:     make(chan ApprovalDecision, 1),
+		agentStatus:     AgentStatus{Label: "Idle"},
 	}
 }
 
 func (a App) Init() tea.Cmd {
 	// The initial events channel has no producer; arming a listener on it
-	// would leak a goroutine for the app's lifetime. startTurn arms the
+	// would leak a goroutine for the app's lifetime. submitPrompt arms the
 	// first listener on the real turn channel.
 	return tea.Batch(
 		a.input.Cursor.BlinkCmd(),
@@ -341,8 +341,8 @@ func (a *App) refreshSnapshot() {
 		a.pendingRequest = PermissionRequest{}
 	}
 	a.streamingMessage = snapshot.StreamingMessage
-	// Match the event path: the runtime advances the batch index before
-	// the pending tool is set, so the value is already one-based.
+	// Match the notification path: entering WaitingApproval advances the
+	// batch index in the same committed transition, so it is already one-based.
 	a.pendingToolIndex = snapshot.PendingToolBatchIndex
 	a.pendingToolTotal = snapshot.PendingToolBatchTotal
 	a.viewport.SetContent(a.contentString())

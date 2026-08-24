@@ -41,7 +41,7 @@ func (t *fakeTool) Specs() []ToolSpec {
 func runSession(t *testing.T, engine *Engine, content string) {
 	t.Helper()
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	if err := session.RunTurn(context.Background(), content, events, approvals); err != nil {
 		t.Fatalf("Run failed: %v", err)
@@ -182,7 +182,7 @@ func TestCancelFlushesStreamingAssistantMessage(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -216,7 +216,7 @@ func TestSessionStreamEventCarriesAccumulatedStreamingMessage(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -271,7 +271,7 @@ func TestEngineRecordsRuntimeErrorInMessagesForNextTurn(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	if err := session.RunTurn(context.Background(), "hi", events, approvals); err == nil {
 		t.Fatal("RunTurn succeeded, want provider error")
@@ -369,7 +369,7 @@ func TestWaitingApprovalKeepsRunContext(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvalDecisions := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -399,7 +399,7 @@ func TestSessionEmitsToolApprovalClearedAfterApproval(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -488,7 +488,7 @@ func TestApproveAlwaysWritesStoreWithoutHoldingEngineLock(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -537,7 +537,7 @@ func TestApproveAlwaysWritesApprovalStoreNotPolicy(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -640,7 +640,7 @@ func TestQueuedRiskyToolWaitsForApproval(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -709,7 +709,7 @@ func TestRiskyToolWaitsForShortcutApproval(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -760,7 +760,7 @@ func TestToolRiskComesFromToolSpec(t *testing.T) {
 	}
 
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -889,7 +889,7 @@ func TestCancelClearsPendingToolAndScheduledActions(t *testing.T) {
 
 	session := NewSession(engine)
 	ctx, cancel := context.WithCancel(context.Background())
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -928,7 +928,7 @@ func TestApprovalWaitContextCancelCancelsEngine(t *testing.T) {
 
 	session := NewSession(engine)
 	ctx, cancel := context.WithCancel(context.Background())
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -949,7 +949,7 @@ func TestApprovalWaitContextCancelCancelsEngine(t *testing.T) {
 	}
 }
 
-func waitForApproval(t *testing.T, events <-chan SessionEvent, approvals chan<- ApprovalDecision, check func()) {
+func waitForApproval(t *testing.T, events <-chan SessionNotification, approvals chan<- ApprovalDecision, check func()) {
 	t.Helper()
 	for ev := range events {
 		if _, ok := ev.(ToolApprovalRequested); ok {
@@ -971,7 +971,7 @@ func TestSessionRunStartsAndFinishesRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 10)
+	events := make(chan SessionNotification, 10)
 	approvals := make(chan ApprovalDecision, 1)
 
 	if err := session.RunTurn(context.Background(), "hi", events, approvals); err != nil {
@@ -993,7 +993,7 @@ func TestSessionRunEmitsStateAndFinalMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 10)
+	events := make(chan SessionNotification, 10)
 	approvals := make(chan ApprovalDecision, 1)
 
 	if err := session.RunTurn(context.Background(), "hi", events, approvals); err != nil {
@@ -1030,7 +1030,7 @@ func TestSessionRunEmitsEachAppendedMessageOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 10)
+	events := make(chan SessionNotification, 10)
 	approvals := make(chan ApprovalDecision, 1)
 
 	if err := session.RunTurn(context.Background(), "hi", events, approvals); err != nil {
@@ -1069,7 +1069,7 @@ func TestSessionRunWaitsForApprovalChannel(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 
 	done := make(chan error, 1)
@@ -1109,7 +1109,7 @@ func TestSessionRunReturnsErrorWhenApprovalChannelCloses(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision)
 
 	done := make(chan error, 1)
@@ -1148,7 +1148,7 @@ func TestSessionEmitsAdvancingQueueBetweenToolCalls(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 64)
+	events := make(chan SessionNotification, 64)
 	approvals := make(chan ApprovalDecision, 1)
 
 	done := make(chan error, 1)
@@ -1193,7 +1193,7 @@ func TestApproveAlwaysIsScopedToToolNameAndInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 
 	done := make(chan error, 1)
@@ -1243,7 +1243,7 @@ func TestCancelDropsStaleModelResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 
@@ -1277,7 +1277,7 @@ func TestResetDropsStaleModelResultAndClearsMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 
@@ -1339,7 +1339,7 @@ func TestNoToolsToolCallIsProtocolError(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 
 	err := session.RunTurn(context.Background(), "use bash", events, approvals)
@@ -1361,7 +1361,7 @@ func TestInvalidSecondTurnDoesNotCancelActiveRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := NewSession(engine)
-	firstEvents := make(chan SessionEvent, 20)
+	firstEvents := make(chan SessionNotification, 20)
 	firstApprovals := make(chan ApprovalDecision, 1)
 	firstDone := make(chan error, 1)
 	go func() {
@@ -1370,7 +1370,7 @@ func TestInvalidSecondTurnDoesNotCancelActiveRun(t *testing.T) {
 	<-model.started
 
 	second := NewSession(engine)
-	secondEvents := make(chan SessionEvent, 20)
+	secondEvents := make(chan SessionNotification, 20)
 	secondApprovals := make(chan ApprovalDecision, 1)
 	if err := second.RunTurn(context.Background(), "second", secondEvents, secondApprovals); err == nil {
 		t.Fatal("second RunTurn succeeded while first run was active")
@@ -1459,7 +1459,7 @@ func TestClassifierToolSpecsAreFetchedWithoutHoldingEngineLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := NewSession(engine)
-	events := make(chan SessionEvent, 20)
+	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
 	done := make(chan error, 1)
 	go func() {

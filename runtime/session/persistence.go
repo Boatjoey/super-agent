@@ -1,8 +1,8 @@
 package session
 
-func (s *Session) startTurn() {
+func (s *Session) persistTurnBoundary() {
 	if s.repository != nil {
-		_ = s.repository.StartTurn(s.metaID())
+		_ = s.repository.AssignNewTurnID(s.metaID())
 	}
 }
 

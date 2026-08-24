@@ -96,7 +96,7 @@ func (a App) submit() (tea.Model, tea.Cmd) {
 	if strings.HasPrefix(text, "/") {
 		return a.runSlashCommand(text)
 	}
-	return a.startTurn(text)
+	return a.submitPrompt(text)
 }
 
 func (a App) queueInput() (tea.Model, tea.Cmd) {
@@ -279,7 +279,7 @@ func (a *App) handleUndo() {
 	a.refreshSnapshot()
 }
 
-func (a App) startTurn(text string) (tea.Model, tea.Cmd) {
+func (a App) submitPrompt(text string) (tea.Model, tea.Cmd) {
 	a.err = ""
 	a.status = ""
 	a.lastActivity = text
@@ -290,15 +290,17 @@ func (a App) startTurn(text string) (tea.Model, tea.Cmd) {
 	a.pendingRequest = PermissionRequest{}
 	a.input.SetValue("")
 	a.resizeInput()
-	a.eventsCh = make(chan Event, 100)
+	a.notificationsCh = make(chan ConversationNotification, 100)
 	a.approvalsCh = make(chan ApprovalDecision, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 	a.turn++
 	a.viewport.SetContent(a.contentString())
 	a.viewport.GotoBottom()
-	run := func() tea.Msg { return submitDoneMsg{err: a.session.RunTurn(ctx, text, a.eventsCh, a.approvalsCh)} }
-	return a, tea.Batch(waitForEvent(a.eventsCh, a.turn), run)
+	run := func() tea.Msg {
+		return submitDoneMsg{err: a.session.RunTurn(ctx, text, a.notificationsCh, a.approvalsCh)}
+	}
+	return a, tea.Batch(waitForNotification(a.notificationsCh, a.turn), run)
 }
 
 func (a App) handleApprovalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
