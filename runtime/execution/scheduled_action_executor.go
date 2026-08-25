@@ -6,8 +6,19 @@ import (
 )
 
 type ScheduledActionInput struct {
-	Messages  []Message
-	ToolSpecs []ToolSpec
+	Messages       []Message
+	ToolSpecs      []ToolSpec
+	ApprovalWaiter ApprovalWaiter
+}
+
+type ApprovalWaiter interface {
+	WaitApproval(context.Context, ToolCall, PermissionRequest) (ApprovalDecision, error)
+}
+
+type ApprovalWaitFunc func(context.Context, ToolCall, PermissionRequest) (ApprovalDecision, error)
+
+func (f ApprovalWaitFunc) WaitApproval(ctx context.Context, call ToolCall, request PermissionRequest) (ApprovalDecision, error) {
+	return f(ctx, call, request)
 }
 
 type ScheduledActionExecutor interface {
@@ -46,6 +57,15 @@ func (x *DefaultScheduledActionExecutor) Execute(ctx context.Context, action Sch
 		return ToolFinished{Call: fx.Call, Result: result}, nil
 	case CheckToolQueue:
 		return ToolQueueChecked{}, nil
+	case AwaitApproval:
+		if env.ApprovalWaiter == nil {
+			return nil, errors.New("approval waiter is not configured")
+		}
+		decision, err := env.ApprovalWaiter.WaitApproval(ctx, fx.Call, fx.Request)
+		if err != nil {
+			return nil, err
+		}
+		return ApprovalReceived{Call: fx.Call, Decision: decision}, nil
 	default:
 		return nil, errors.New("unknown action")
 	}

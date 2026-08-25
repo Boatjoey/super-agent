@@ -1,48 +1,19 @@
 # 本项目的 Agent Loop
 
-## Agent Loop 在哪里
+## 唯一循环在哪里
 
-本项目没有名为 `AgentLoop` 的单一函数。完整循环由两层组成：
-
-| 层级 | 函数 | 职责 |
-|---|---|---|
-| Engine 动作循环 | `runtime/engine/action_loop.go` 的 `runScheduledActions` | 执行动作、把结果转成事件、继续状态转移 |
-| Session 交互循环 | `runtime/session/turn.go` 的 `runTurnLoop` | 启动一轮任务，并在需要审批时等待用户 |
-
-其中，`runScheduledActions` 是核心 Agent Loop。
-
-## 循环的起点
-
-从用户操作开始，调用链是：
+核心 Agent Loop 是 `runtime/engine/action_loop.go` 的 `runScheduledActions`。Engine 独占动作调度、RunID、错误恢复和运行结束判断；Session 只提供审批输入、流式输出、通知和持久化端口。
 
 ```text
-用户按 Enter
-  -> tui.App.submit
-  -> tui.App.submitPrompt
-  -> TUIConversation.RunTurn
-  -> session.Session.RunTurn
-  -> session.runTurnLoop
-  -> engine.DispatchEvent(UserMessageSubmitted)
+Session.RunTurn
+  -> Engine.RunTurn(UserMessageSubmitted, ApprovalWaiter)
+  -> Engine.dispatchEvent
   -> Transition
-  -> ActionQueue 加入 CallModel
-  -> engine.runScheduledActions
+  -> ActionQueue
+  -> Engine.runScheduledActions
 ```
 
-因此可以分别确定三个入口：
-
-- 交互入口：`tui/commands.go` 的 `submitPrompt`。
-- 一轮对话入口：`runtime/session/turn.go` 的 `RunTurn`。
-- 自动循环入口：`runtime/engine/action_loop.go` 的 `runScheduledActions`。
-
-真正启动第一轮循环的是这一行：
-
-```go
-return e.runScheduledActions(runCtx, onStreamChunk)
-```
-
-在调用它之前，`DispatchEvent` 已经派发 `UserMessageSubmitted`，状态转移已经把第一个 `CallModel` 放入 `ActionQueue`。所以循环第一次 `Pop` 得到的通常是 `CallModel`。
-
-所有外部状态机事件都通过 `DispatchEvent` 提交。只有 `UserMessageSubmitted` 创建新 Run；取消、重置和错误事件没有计划动作，因此提交后动作循环会立即返回。
+Session 没有第二个 turn 循环，也不读取状态来决定是否执行下一个 action。
 
 ## 完整闭环
 
@@ -50,29 +21,25 @@ return e.runScheduledActions(runCtx, onStreamChunk)
 flowchart TD
     User[用户消息] --> Event[UserMessageSubmitted]
     Event --> Transition
-    Transition --> Commit[提交 RuntimeData]
+    Transition --> Commit[提交 RuntimeData 和 ActionPlan]
     Commit --> Queue[ActionQueue]
     Queue --> Action[执行 ScheduledAction]
     Action --> Result[ScheduledActionResult]
     Result --> Resolver[ActionResultResolver]
     Resolver --> NextEvent[新 Event]
     NextEvent --> Transition
-    Queue -->|队列为空| State{当前 State}
-    State -->|Idle| Done[本轮结束]
-    State -->|WaitingApproval| Approval[等待用户审批]
-    Approval --> Transition
+    Queue -->|Idle 且队列为空| Done[本轮结束]
 ```
 
-核心关系是：
+核心关系：
 
 ```text
 Event
   -> Transition
   -> RuntimeDataChange + ActionPlan
-  -> 执行 ScheduledAction
+  -> ScheduledAction
   -> ScheduledActionResult
-  -> 新 Event
-  -> Transition
+  -> Event
 ```
 
 ## Engine 动作循环
@@ -83,51 +50,53 @@ Event
 func (e *Engine) runScheduledActions(
 	ctx context.Context,
 	onStreamChunk func(protocol.StreamChunk),
+	approvalWaiter execution.ApprovalWaiter,
 ) error {
 	for {
 		action, ok := e.actionQueue.Pop()
 		if !ok {
-			return nil
+			if e.runtimeData.State == machine.StateIdle {
+				return nil
+			}
+			return machine.InvariantViolationError{}
 		}
-		if err := e.executeScheduledAction(ctx, action, onStreamChunk); err != nil {
+		if err := e.executeScheduledAction(ctx, action, onStreamChunk, approvalWaiter); err != nil {
 			return err
 		}
 	}
 }
 ```
 
-真实代码还负责加锁、取消、错误转移、`RunID` 检查和状态通知。
+真实代码还负责加锁、完成 Run、取消、错误转移、`RunID` 过滤和状态通知。
 
-`executeScheduledAction` 完成三个步骤：
+`executeScheduledAction` 执行以下闭环：
 
-1. 使用 `ScheduledActionRunner` 执行动作。
-2. 使用 `ActionResultResolver` 把结果转换成新事件。
-3. 用新事件计算并提交下一次 `TransitionResult`；它可能继续向队列加入动作。
+1. `ScheduledActionRunner` 执行动作。
+2. `ActionResultResolver` 把结果转换成事件。
+3. `Transition` 计算下一状态与 `ActionPlan`。
+4. Engine 原子提交结果，新动作进入队列。
 
-因此，循环不是直接调用自己，而是通过队列形成：
+## ScheduledAction 类型
+
+- `CallModel`：调用模型。
+- `RunTool`：执行一个工具调用。
+- `CheckToolQueue`：检查工具批次中的下一项。
+- `AwaitApproval`：通过注入的 `ApprovalWaiter` 等待用户决定。
+
+模型、工具和用户审批都使用同一个 action-result-event 流程。
+
+## 普通回答
 
 ```text
-取动作 -> 执行动作 -> 产生事件 -> 状态转移 -> 加入新动作 -> 再次取动作
-```
-
-## 一次普通回答
-
-用户提交消息后：
-
-```text
-Idle + UserMessageSubmitted
-  -> WaitingLLM
+UserMessageSubmitted
   -> CallModel
   -> ModelReplied
   -> AssistantMessageReceived
   -> Idle
+  -> 队列为空，FinishRun
 ```
 
-`AssistantMessageReceived` 不再产生新动作，队列为空且状态为 `Idle`，本轮结束。
-
-## 一次工具调用
-
-模型返回工具调用时，循环会继续：
+## 工具调用
 
 ```text
 CallModel
@@ -146,44 +115,45 @@ ToolBatchFinished
   -> CallModel
 ```
 
-工具结果会作为消息再次发送给模型。模型可以继续调用工具，也可以返回最终回答。
+## 审批属于同一个循环
 
-## 审批为什么需要 Session 循环
-
-如果工具需要用户审批，状态机会进入 `WaitingApproval`，但不会产生 `ScheduledAction`：
+需要审批时，状态机进入 `WaitingApproval` 并调度 `AwaitApproval`：
 
 ```text
 CheckToolQueue
   -> ToolCallNeedsApproval
   -> WaitingApproval
-  -> 动作队列为空
+  -> AwaitApproval
 ```
 
-此时 Engine 动作循环返回，`Session.runTurnLoop` 检查到 `WaitingApproval`，等待用户输入：
+`AwaitApproval` 通过 Session 注入的端口读取审批 channel，但动作仍由 Engine 循环执行：
 
-```go
-for {
-	switch s.engine.State() {
-	case StateWaitingApproval:
-		decision, err := waitApproval(ctx, approvals)
-		// 根据决定调用 Approve、ApproveAlways 或 Deny
-	case StateIdle:
-		return nil
-	}
-}
+```text
+AwaitApproval
+  -> ApprovalReceived
+  -> ApprovalGranted / ApprovalAlwaysGranted / ApprovalDenied
+  -> RunTool / CheckToolQueue
 ```
 
-审批完成后，Engine 产生 `RunTool` 或 `CheckToolQueue`，再调用 `runScheduledActions` 恢复自动循环。
+审批等待期间 Run context 保持有效；取消 context 会终止等待并触发 `CancelRequested`。
+
+## Session 的职责
+
+`runtime/session/turn.go` 不调度 action，只为 Engine 提供：
+
+- `ApprovalWaiter`：读取审批、持久化决定。
+- `onStreamChunk`：发送流式通知。
+- state observer：把 Engine 快照转换成 `SessionNotification`。
+
+这种结构保持依赖方向：Session 启动用例，Engine 拥有 Agent Loop，Execution 执行动作，Machine 决定转移。
 
 ## 循环何时结束
 
-Agent Loop 会在以下位置停下：
-
-- `Idle` 且动作队列为空：正常完成。
-- `WaitingApproval` 且动作队列为空：暂停并等待用户。
-- 收到取消：清空动作队列并回到 `Idle`。
-- 执行动作失败：转成 `ErrorOccurred`，清理队列并回到 `Idle`。
-- `RunID` 已过期：丢弃迟到结果；队列随后为空时循环返回。
+- `Idle` 且动作队列为空：正常完成并结束 Run。
+- action 返回错误：提交 `ErrorOccurred` 后返回错误。
+- context 取消或审批输入中断：提交 `CancelRequested` 后返回。
+- `RunID` 过期：丢弃迟到结果；循环随后根据当前队列和状态结束。
+- 非 `Idle` 状态下队列为空：返回 `InvariantViolationError`，因为活动状态必须有待执行或正在执行的 action。
 
 ## 代码阅读顺序
 
@@ -196,4 +166,4 @@ runtime/session/turn.go
   -> runtime/machine/transition.go
 ```
 
-一句话总结：`Transition` 决定下一步，`ActionQueue` 驱动自动循环，`Session` 负责需要人工输入的暂停与恢复。
+一句话总结：`Transition` 决定下一步，Engine 的唯一动作循环持续推进，Session 只连接用户输入与通知。

@@ -25,7 +25,7 @@ flowchart TD
 - `runtime/machine` is the domain core. It owns states, events, runtime-data changes, action plans, scheduled actions, and transitions.
 - `runtime/protocol` owns model and tool adapter contracts without state-machine policy.
 - `runtime/permission` owns permission request and command classification value types.
-- `runtime/engine` drives the machine. It owns synchronization, scheduled-action draining, and run identity.
+- `runtime/engine` drives the machine. It owns the single agent loop, synchronization, scheduled-action draining, and run identity.
 - `runtime/execution` implements outbound model, tool, and permission ports.
 - `runtime/session` exposes application use cases. It must not contain terminal behavior.
 - `tui` is an inbound adapter. It depends only on its `Conversation` port and display DTOs.
@@ -93,7 +93,7 @@ stateDiagram
 
 `ErrorOccurred`, `CancelRequested`, and `ResetRequested` return to `Idle` from any state; `ResetConversation` preserves `system` messages.
 
-The engine drops stale `RunID` results before event resolution. External machine events enter through `Engine.DispatchEvent`; only `UserMessageSubmitted` creates a run, while the transition's action plan determines whether the action loop has work. `State` names the current execution state; `RuntimeData` contains the complete mutable machine data. `SnapshotFrom` validates runtime data and exposes only transition guards. `Transition` owns state/event compatibility plus call and queue guards. The `RuntimeDataChangeApplier` clones runtime data, applies runtime-data changes, and validates the result. The engine then commits runtime data and the `ActionPlan` under one lock. Scheduled actions run only after that commit.
+The engine drops stale `RunID` results before event resolution. `Engine.RunTurn` starts a run with `UserMessageSubmitted`; other external machine events enter through `Engine.DispatchEvent`. The transition's action plan determines whether the loop has work. `AwaitApproval` uses a Session-provided approval port, so human input follows the same scheduled-action/result/event path as model and tool work without moving scheduling into Session. `State` names the current execution state; `RuntimeData` contains the complete mutable machine data. `SnapshotFrom` validates runtime data and exposes only transition guards. `Transition` owns state/event compatibility plus call and queue guards. The `RuntimeDataChangeApplier` clones runtime data, applies runtime-data changes, and validates the result. The engine then commits runtime data and the `ActionPlan` under one lock. Scheduled actions run only after that commit.
 
 Errors distinguish incompatible events (`UnexpectedEventError`), current-run protocol mismatches (`ProtocolViolationError`), and impossible machine state (`InvariantViolationError`).
 

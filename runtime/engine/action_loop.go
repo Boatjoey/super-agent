@@ -10,10 +10,17 @@ import (
 )
 
 func (e *Engine) DispatchEvent(ctx context.Context, event machine.Event, onStreamChunk func(protocol.StreamChunk)) error {
+	if _, startsTurn := event.(machine.UserMessageSubmitted); startsTurn {
+		return errors.New("user messages must be submitted through Engine.RunTurn")
+	}
 	return e.dispatchEvent(ctx, event, onStreamChunk, nil)
 }
 
-func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, onStreamChunk func(protocol.StreamChunk), beforeActions func()) error {
+func (e *Engine) RunTurn(ctx context.Context, event machine.UserMessageSubmitted, onStreamChunk func(protocol.StreamChunk), approvalWaiter execution.ApprovalWaiter) error {
+	return e.dispatchEvent(ctx, event, onStreamChunk, approvalWaiter)
+}
+
+func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, onStreamChunk func(protocol.StreamChunk), approvalWaiter execution.ApprovalWaiter) error {
 	e.mu.Lock()
 	decision, err := e.calculateTransitionLocked(event) // transition 函数执行
 	if err != nil {
@@ -41,11 +48,8 @@ func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, onStrea
 		return err
 	}
 	e.mu.Unlock()
-	if beforeActions != nil {
-		beforeActions()
-	}
 	e.notifyStateObserver()
-	return e.runScheduledActions(runCtx, onStreamChunk)
+	return e.runScheduledActions(runCtx, onStreamChunk, approvalWaiter)
 }
 
 func (e *Engine) calculateTransitionLocked(event machine.Event) (machine.TransitionResult, error) {
@@ -74,7 +78,7 @@ func (e *Engine) commitTransitionLocked(decision machine.TransitionResult) error
 	return nil
 }
 
-func (e *Engine) runScheduledActions(ctx context.Context, onStreamChunk func(protocol.StreamChunk)) error {
+func (e *Engine) runScheduledActions(ctx context.Context, onStreamChunk func(protocol.StreamChunk), approvalWaiter execution.ApprovalWaiter) error {
 	runID := e.runs.CurrentRunID()
 	for {
 		e.mu.Lock()
@@ -82,13 +86,17 @@ func (e *Engine) runScheduledActions(ctx context.Context, onStreamChunk func(pro
 		if !ok {
 			if e.runtimeData.State == machine.StateIdle {
 				e.runs.FinishRun(runID)
+				e.mu.Unlock()
+				return nil
 			}
+			state := e.runtimeData.State
 			e.mu.Unlock()
-			return nil
+			return machine.InvariantViolationError{Reason: "action queue is empty in state " + string(state)}
 		}
 		e.mu.Unlock()
-		if err := e.executeScheduledAction(ctx, action, onStreamChunk); err != nil {
-			if errors.Is(err, context.Canceled) {
+		if err := e.executeScheduledAction(ctx, action, onStreamChunk, approvalWaiter); err != nil {
+			_, awaitingApproval := action.Action.(machine.AwaitApproval)
+			if errors.Is(err, context.Canceled) || awaitingApproval {
 				e.runs.CancelRun()
 				_ = e.DispatchEvent(ctx, machine.CancelRequested{}, nil)
 			} else {
@@ -103,12 +111,12 @@ func (e *Engine) runScheduledActions(ctx context.Context, onStreamChunk func(pro
 	}
 }
 
-func (e *Engine) executeScheduledAction(ctx context.Context, action execution.QueuedAction, onStreamChunk func(protocol.StreamChunk)) error {
+func (e *Engine) executeScheduledAction(ctx context.Context, action execution.QueuedAction, onStreamChunk func(protocol.StreamChunk), approvalWaiter execution.ApprovalWaiter) error {
 	stream := onStreamChunk
 	if onStreamChunk != nil {
 		stream = func(chunk protocol.StreamChunk) { e.recordStreamChunk(action.RunID, chunk); onStreamChunk(chunk) }
 	}
-	completion, err := e.runner.Run(ctx, action, execution.ScheduledActionInput{Messages: e.Messages(), ToolSpecs: e.toolSpecs()}, stream)
+	completion, err := e.runner.Run(ctx, action, execution.ScheduledActionInput{Messages: e.Messages(), ToolSpecs: e.toolSpecs(), ApprovalWaiter: approvalWaiter}, stream)
 	if err != nil {
 		return err
 	}
@@ -131,6 +139,11 @@ func (e *Engine) executeScheduledAction(ctx context.Context, action execution.Qu
 		err = e.commitTransitionLocked(decision)
 	}
 	e.mu.Unlock()
+	if err == nil {
+		if approved, ok := event.(machine.ApprovalAlwaysGranted); ok {
+			e.approvals.AllowAlways(execution.NewApprovalKey(approved.Call))
+		}
+	}
 	return err
 }
 

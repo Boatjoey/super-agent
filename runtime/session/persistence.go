@@ -12,15 +12,11 @@ func (s *Session) persistMessage(message Message) {
 	}
 }
 
-func (s *Session) persistApproval(decision ApprovalDecision) {
+func (s *Session) persistApproval(decision ApprovalDecision, call ToolCall) {
 	if s.repository == nil {
 		return
 	}
-	var call *ToolCall
-	if pending, ok := s.engine.PendingTool(); ok {
-		call = &pending
-	}
-	_ = s.repository.SaveApproval(s.metaID(), decision, call)
+	_ = s.repository.SaveApproval(s.metaID(), decision, &call)
 }
 
 func (s *Session) persistError(err error) {

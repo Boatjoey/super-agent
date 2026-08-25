@@ -132,7 +132,7 @@ func TestEngineDoesNotCommitInvalidCustomRuntimeDataChangeResult(t *testing.T) {
 	if err := engine.Ready(); err != nil {
 		t.Fatal(err)
 	}
-	err := engine.DispatchEvent(context.Background(), UserMessageSubmitted{Content: "hi"}, nil)
+	err := engine.RunTurn(context.Background(), UserMessageSubmitted{Content: "hi"}, nil, nil)
 	var invariant InvariantViolationError
 	if !errors.As(err, &invariant) {
 		t.Fatalf("error = %v, want InvariantViolationError", err)

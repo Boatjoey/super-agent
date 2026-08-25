@@ -212,7 +212,9 @@ func TestTransitionTable(t *testing.T) {
 			event:                  ToolCallNeedsApproval{Call: sampleToolCall()},
 			wantState:              StateWaitingApproval,
 			runtimeDataChangeCount: 2, // SetPendingTool + AdvanceToolCallBatch
+			scheduledActionCount:   1,
 			runtimeDataChangeTypes: []RuntimeDataChange{SetPendingTool{}, AdvanceToolCallBatch{}},
+			scheduledActionTypes:   []ScheduledAction{AwaitApproval{}},
 		},
 		{
 			name: "ToolCallNeedsApproval/rejects_when_not_AdvancingQueue", state: StateIdle,

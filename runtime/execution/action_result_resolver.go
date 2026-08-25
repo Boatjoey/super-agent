@@ -48,6 +48,17 @@ func (r *DefaultActionResultResolver) Resolve(result ScheduledActionResult, inpu
 			return ToolBatchFinished{}, nil
 		}
 		return r.resolveToolCall(input.ToolBatch.Calls[input.ToolBatch.Index], input.ToolSpecs)
+	case ApprovalReceived:
+		switch result.Decision {
+		case ApproveOnce:
+			return ApprovalGranted{Call: result.Call}, nil
+		case ApproveAlways:
+			return ApprovalAlwaysGranted{Call: result.Call}, nil
+		case DenyApproval:
+			return ApprovalDenied{Call: result.Call}, nil
+		default:
+			return nil, errors.New("unknown approval decision")
+		}
 	default:
 		return nil, fmt.Errorf("unknown action result type: %T", result)
 	}

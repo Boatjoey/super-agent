@@ -9,14 +9,11 @@ import (
 
 type State = machine.State
 
-const (
-	StateIdle            = machine.StateIdle
-	StateWaitingApproval = machine.StateWaitingApproval
-)
-
 type Message = protocol.Message
 type ToolCall = protocol.ToolCall
 type PermissionRequest = machine.PermissionRequest
+type ApprovalDecision = machine.ApprovalDecision
+type ApprovalWaitFunc = execution.ApprovalWaitFunc
 type PermissionMode = execution.PermissionMode
 type PermissionRules = execution.PermissionRules
 type StreamChunk = protocol.StreamChunk
@@ -25,6 +22,10 @@ type EngineView = enginepkg.EngineView
 type UserMessageSubmitted = machine.UserMessageSubmitted
 
 const (
+	ApproveOnce   = machine.ApproveOnce
+	ApproveAlways = machine.ApproveAlways
+	DenyApproval  = machine.DenyApproval
+
 	PermissionModeAsk    = execution.PermissionModeAsk
 	PermissionModeBypass = execution.PermissionModeBypass
 )

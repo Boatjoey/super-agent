@@ -247,7 +247,7 @@ AdvancingQueue + ToolCallNeedsApproval → WaitingApproval
 
 1. 保存待审批工具与权限请求。
 2. 推进工具批次索引。
-3. 不产生新的 `ScheduledAction`，等待用户输入。
+3. 产生 `AwaitApproval` ScheduledAction，通过 Session 注入的审批端口等待用户输入。
 
 ### 离开条件
 

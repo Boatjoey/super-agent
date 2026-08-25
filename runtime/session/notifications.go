@@ -1,13 +1,5 @@
 package session
 
-type ApprovalDecision string
-
-const (
-	ApproveOnce   ApprovalDecision = "once"
-	ApproveAlways ApprovalDecision = "always"
-	DenyApproval  ApprovalDecision = "deny"
-)
-
 type SessionNotification interface{ isSessionNotification() }
 
 type StateChanged struct{ State State }

@@ -16,51 +16,6 @@ func (e *Engine) Ready() error {
 	return e.DispatchEvent(context.Background(), machine.EngineReady{}, nil)
 }
 
-func (e *Engine) Approve(ctx context.Context, onStreamChunk func(protocol.StreamChunk)) error {
-	return e.resolveApproval(ctx, machine.ApprovalGranted{}, onStreamChunk)
-}
-
-func (e *Engine) Deny(ctx context.Context, onStreamChunk func(protocol.StreamChunk)) error {
-	return e.resolveApproval(ctx, machine.ApprovalDenied{}, onStreamChunk)
-}
-
-func (e *Engine) ApproveAlways(ctx context.Context, onStreamChunk func(protocol.StreamChunk)) error {
-	e.mu.Lock()
-	call, err := e.pendingApprovalCallLocked()
-	e.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	return e.dispatchEvent(ctx, machine.ApprovalAlwaysGranted{Call: call}, onStreamChunk, func() {
-		e.approvals.AllowAlways(execution.NewApprovalKey(call))
-	})
-}
-
-func (e *Engine) resolveApproval(ctx context.Context, decision machine.Event, onStreamChunk func(protocol.StreamChunk)) error {
-	e.mu.Lock()
-	call, err := e.pendingApprovalCallLocked()
-	if err == nil {
-		switch decision.(type) {
-		case machine.ApprovalGranted:
-			decision = machine.ApprovalGranted{Call: call}
-		case machine.ApprovalDenied:
-			decision = machine.ApprovalDenied{Call: call}
-		}
-	}
-	e.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	return e.DispatchEvent(ctx, decision, onStreamChunk)
-}
-
-func (e *Engine) pendingApprovalCallLocked() (protocol.ToolCall, error) {
-	if e.runtimeData.State != machine.StateWaitingApproval || e.runtimeData.PendingTool == nil {
-		return protocol.ToolCall{}, errors.New("no tool is waiting for approval")
-	}
-	return *e.runtimeData.PendingTool, nil
-}
-
 func (e *Engine) Cancel() error {
 	e.runs.CancelRun()
 	return e.DispatchEvent(context.Background(), machine.CancelRequested{}, nil)

@@ -48,6 +48,7 @@ var AllScheduledActions = machine.AllScheduledActions
 type CallModel = machine.CallModel
 type RunTool = machine.RunTool
 type CheckToolQueue = machine.CheckToolQueue
+type AwaitApproval = machine.AwaitApproval
 type TransitionResult = machine.TransitionResult
 type RuntimeData = machine.RuntimeData
 type MachineSnapshot = machine.MachineSnapshot

@@ -8,8 +8,8 @@
 - `State` is the current execution state. `RuntimeData` is the complete mutable machine data. A `RuntimeDataChange` constructs the next runtime data; an `ActionPlan` atomically clears obsolete queued work and schedules actions that run only after commit.
 - Keep `RunID` stale filtering in the engine. Keep state, call-id, queue guards, and invariants in `runtime/machine`.
 - RuntimeDataChangeAppliers must clone, apply, and validate runtime data; the engine commits runtime data and the transition's action plan under one lock only after validation.
-- The engine notifies a per-turn state observer after state-changing transitions; the session uses it to emit live snapshots so the TUI header tracks states such as `RunningTool`.
-- Route external machine events through `Engine.DispatchEvent`; only `UserMessageSubmitted` starts a new run, and the transition's action plan determines whether the action loop has work.
+- The engine owns the single agent loop and notifies a per-turn state observer after state-changing transitions; the session supplies approval, streaming, notification, and persistence ports without scheduling actions.
+- Start turns through `Engine.RunTurn`; route other external machine events through `Engine.DispatchEvent`. Only `UserMessageSubmitted` starts a run, and `AwaitApproval` keeps approval waiting inside the scheduled-action loop.
 - Keep state-machine logic in `runtime/machine/transition.go`; transitions use one package-private static registry keyed by state and event kind.
 - Keep state definitions in `runtime/machine/state.go`, complete machine data in `runtime/machine/runtime_data.go`, runtime-data changes in `runtime/machine/runtime_data_change.go`, action plans in `runtime/machine/action_plan.go`, and tool-batch data in `runtime/machine/tool_batch.go`.
 - Keep orchestration in `runtime/engine/`; constructors belong in `engine.go`, commands in `commands.go`, scheduled-action draining in `action_loop.go`, and queries in `query.go`.
@@ -18,7 +18,7 @@
 - Map scheduled-action results directly to transition events with `runtime/execution.ActionResultResolver`.
 - Keep session/UI boundary in `runtime/session/`.
 - Use `SessionNotification` for runtime-session output and convert it to `tui.ConversationNotification` at the app boundary; reserve `machine.Event` for state-machine input.
-- Keep turn flow in `runtime/session/turn.go` and history use cases in `runtime/session/history.go`.
+- Keep turn I/O wiring in `runtime/session/turn.go` and history use cases in `runtime/session/history.go`.
 - Keep storage and filesystem access behind `runtime/session.Repository` and `runtime/session.Workspace`.
 - Keep TUI message routing in `tui/update.go`, commands in `tui/commands.go`, and rendering outside the update loop.
 - Map runtime states to presentation-only `tui.AgentStatus` values in `app/tui_adapter.go`; TUI must not define runtime state enums.

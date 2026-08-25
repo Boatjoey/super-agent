@@ -46,7 +46,7 @@ main.go
 
 Sessions are stored under `~/.superagent/sessions/<session-id>/` as `meta.json` plus `events.jsonl`. Metadata includes session id, turn id, timestamps, provider/model, cwd, title, instruction fingerprint, and instruction source paths. `runtime/session` owns durable event emission for messages, approvals, tool results, cancel, reset, errors, checkpoints, and compact records. The top-level `store` adapter replays messages for `/resume`.
 
-During a turn the session emits a snapshot after every state-changing transition while scheduled actions drain, so the TUI header follows live states (for example `RunningTool` while a tool executes) instead of only snapshot points. The header shows raw state names such as `Idle` and `WaitingLLM`.
+During a turn the Engine owns the single scheduled-action loop. Session injects the approval waiter and emits a snapshot after every state-changing transition, so the TUI header follows live states (for example `WaitingApproval` and `RunningTool`) without taking over action scheduling. The header shows raw state names such as `Idle` and `WaitingLLM`.
 
 TUI commands:
 
@@ -96,7 +96,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `Event`: fact that triggers a transition.
 - `RuntimeDataChange`: synchronous transformation of cloned `RuntimeData`.
 - `ActionPlan`: one queue plan committed with runtime data; it can clear obsolete work and schedule new work.
-- `ScheduledAction`: requested work such as model calls, tool execution, or queue processing.
+- `ScheduledAction`: requested work such as model calls, tool execution, queue processing, or approval waiting.
 - `MachineSnapshot`: validated read-only view containing only transition guards.
 - `Transition`: pure state-machine decision with state, call, and queue guards.
 - `RuntimeDataChangeApplier`: applies runtime-data changes to cloned `RuntimeData` and validates it.
@@ -106,8 +106,8 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `ApprovalStore`: stores always-allow and auto-approve state.
 - `RunController`: owns run id, cancel function, and stale-result checks.
 - `ScheduledActionRunner`: executes scheduled actions and returns `ActionCompletion` values.
-- `Engine`: unified external event dispatch, action queue, state lock, run lifecycle, scheduled-action drain, stale dropping.
-- `Session`: channel boundary for UI notifications and approvals.
+- `Engine`: unified external event dispatch, the single agent loop, action queue, state lock, run lifecycle, scheduled-action drain, stale dropping.
+- `Session`: channel boundary that supplies approval input, streaming output, notifications, and persistence without scheduling actions.
 
 ## Runtime Package Boundaries
 
@@ -131,7 +131,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `runtime/execution/action_result_resolver.go`: maps action results to transition-ready events and classifies tool calls.
 - `runtime/session/session.go`: serializes turns and coordinates application use cases.
 - `runtime/session/notifications.go`: session-to-UI notification protocol.
-- `runtime/session/turn.go`: turn execution and approval flow.
+- `runtime/session/turn.go`: turn I/O wiring and approval waiter.
 - `runtime/session/history.go`: resume, rename, delete, compact, and undo use cases.
 - `runtime/session/persistence.go`: repository notifications.
 - `runtime/session/repository.go`: persistence and workspace ports, including checkpoint creation, `LoadUndoPoint`, and `TruncateAfter`.
@@ -159,7 +159,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 | WaitingApproval | ApprovalDenied | AdvancingQueue | ClearPendingTool, AppendToolResult | Schedule CheckToolQueue |
 | RunningTool | ToolResultReceived | AdvancingQueue | AppendToolResult, ClearCurrentTool | Schedule CheckToolQueue |
 | AdvancingQueue | ToolBatchFinished | WaitingLLM | ClearToolCallBatch | Schedule CallModel |
-| AdvancingQueue | ToolCallNeedsApproval | WaitingApproval | SetPendingTool, AdvanceToolCallBatch | - |
+| AdvancingQueue | ToolCallNeedsApproval | WaitingApproval | SetPendingTool, AdvanceToolCallBatch | Schedule AwaitApproval |
 | AdvancingQueue | ToolCallReadyToRun | RunningTool | AdvanceToolCallBatch, SetCurrentTool | Schedule RunTool |
 | any | ErrorOccurred | Idle | FlushStreamingAssistant, AppendToolResult, ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | Clear existing |
 | any | CancelRequested | Idle | FlushStreamingAssistant, ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | Clear existing |

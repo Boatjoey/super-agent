@@ -1,6 +1,7 @@
 package runtime_test
 
 import (
+	"reflect"
 	"testing"
 
 	. "super-agent/runtime"
@@ -34,6 +35,29 @@ func TestDefaultActionResultResolverTurnsRiskyQueuedToolIntoApprovalEvent(t *tes
 	}
 	if _, ok := event.(ToolCallNeedsApproval); !ok {
 		t.Fatalf("event = %T, want ToolCallNeedsApproval", event)
+	}
+}
+
+func TestDefaultActionResultResolverTurnsApprovalResultsIntoEvents(t *testing.T) {
+	resolver := NewDefaultActionResultResolver(NewDefaultPolicy(), NewMemoryApprovalStore())
+	call := ToolCall{ID: "call-1", Name: "bash"}
+	cases := []struct {
+		decision ApprovalDecision
+		want     Event
+	}{
+		{ApproveOnce, ApprovalGranted{}},
+		{ApproveAlways, ApprovalAlwaysGranted{}},
+		{DenyApproval, ApprovalDenied{}},
+	}
+
+	for _, tc := range cases {
+		event, err := resolver.Resolve(ApprovalReceived{Call: call, Decision: tc.decision}, ActionResultInput{})
+		if err != nil {
+			t.Fatalf("Resolve(%q) failed: %v", tc.decision, err)
+		}
+		if reflect.TypeOf(event) != reflect.TypeOf(tc.want) {
+			t.Fatalf("Resolve(%q) = %T, want %T", tc.decision, event, tc.want)
+		}
 	}
 }
 

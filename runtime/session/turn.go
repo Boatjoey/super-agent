@@ -17,44 +17,24 @@ func (s *Session) RunTurn(ctx context.Context, query string, notifications chan<
 	// TUI header should follow them as they happen.
 	s.engine.SetStateObserver(func() { s.emitSnapshot(notifications) })
 	defer s.engine.SetStateObserver(nil)
-	err := s.runTurnLoop(ctx, notifications, approvals, query)
-	s.emitter.emit(notifications, s.Snapshot(), s.persistMessage)
-	return err
-}
-
-func (s *Session) runTurnLoop(ctx context.Context, notifications chan<- SessionNotification, approvals <-chan ApprovalDecision, query string) error {
 	onStreamChunk := func(chunk StreamChunk) {
 		notifications <- StreamChunkReceived{Chunk: chunk, Message: s.Snapshot().StreamingMessage}
 	}
-	// 用户消息提交
-	if err := s.engine.DispatchEvent(ctx, UserMessageSubmitted{Content: query}, onStreamChunk); err != nil {
-		return s.failTurn(notifications, err)
-	}
-	s.emitSnapshot(notifications)
-	for {
-		switch s.engine.State() {
-		case StateWaitingApproval:
-			s.emitSnapshot(notifications)
-			decision, err := waitApproval(ctx, approvals)
-			if err != nil {
-				_ = s.engine.Cancel()
-				return s.failTurn(notifications, err)
-			}
-			// Mark the approval consumed before applying the decision: the
-			// engine emits snapshots while actions drain, so the next
-			// pending tool is announced from inside applyApproval. Consuming
-			// afterwards would clear the dedup key and re-announce it.
-			s.emitter.markApprovalConsumed()
-			if err := s.applyApproval(ctx, decision, onStreamChunk); err != nil {
-				return s.failTurn(notifications, err)
-			}
-			s.emitSnapshot(notifications)
-		case StateIdle:
-			return nil
-		default:
-			return s.failTurn(notifications, errors.New("runtime cannot continue from state "+string(s.engine.State())))
+	approvalWaiter := ApprovalWaitFunc(func(waitCtx context.Context, call ToolCall, _ PermissionRequest) (ApprovalDecision, error) {
+		decision, err := waitApproval(waitCtx, approvals)
+		if err != nil {
+			return "", err
 		}
+		s.persistApproval(decision, call)
+		s.emitter.markApprovalConsumed()
+		return decision, nil
+	})
+	err := s.engine.RunTurn(ctx, UserMessageSubmitted{Content: query}, onStreamChunk, approvalWaiter)
+	if err != nil {
+		err = s.failTurn(notifications, err)
 	}
+	s.emitter.emit(notifications, s.Snapshot(), s.persistMessage)
+	return err
 }
 
 func (s *Session) failTurn(notifications chan<- SessionNotification, err error) error {
@@ -75,19 +55,5 @@ func waitApproval(ctx context.Context, approvals <-chan ApprovalDecision) (Appro
 			return "", errors.New("approval channel closed")
 		}
 		return decision, nil
-	}
-}
-
-func (s *Session) applyApproval(ctx context.Context, decision ApprovalDecision, onStreamChunk func(StreamChunk)) error {
-	s.persistApproval(decision)
-	switch decision {
-	case ApproveOnce:
-		return s.engine.Approve(ctx, onStreamChunk)
-	case ApproveAlways:
-		return s.engine.ApproveAlways(ctx, onStreamChunk)
-	case DenyApproval:
-		return s.engine.Deny(ctx, onStreamChunk)
-	default:
-		return errors.New("unknown approval decision")
 	}
 }

@@ -20,3 +20,10 @@ func (ToolFinished) isScheduledActionResult() {}
 type ToolQueueChecked struct{}
 
 func (ToolQueueChecked) isScheduledActionResult() {}
+
+type ApprovalReceived struct {
+	Call     ToolCall
+	Decision ApprovalDecision
+}
+
+func (ApprovalReceived) isScheduledActionResult() {}

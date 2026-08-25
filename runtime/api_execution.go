@@ -42,6 +42,8 @@ func NewApprovalKey(call ToolCall) ApprovalKey     { return execution.NewApprova
 type ScheduledActionInput = execution.ScheduledActionInput
 type ScheduledActionExecutor = execution.ScheduledActionExecutor
 type DefaultScheduledActionExecutor = execution.DefaultScheduledActionExecutor
+type ApprovalWaiter = execution.ApprovalWaiter
+type ApprovalWaitFunc = execution.ApprovalWaitFunc
 
 func NewDefaultScheduledActionExecutor(model Model, tools ToolRunner) *DefaultScheduledActionExecutor {
 	return execution.NewDefaultScheduledActionExecutor(model, tools)
@@ -51,6 +53,7 @@ type ScheduledActionResult = execution.ScheduledActionResult
 type ModelReplied = execution.ModelReplied
 type ToolFinished = execution.ToolFinished
 type ToolQueueChecked = execution.ToolQueueChecked
+type ApprovalReceived = execution.ApprovalReceived
 
 type RunID = execution.RunID
 type ActionID = execution.ActionID

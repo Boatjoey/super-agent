@@ -210,6 +210,7 @@ func handleToolCallNeedsApproval(snapshot MachineSnapshot, event ToolCallNeedsAp
 			SetPendingTool{Call: event.Call, Request: event.Request},
 			AdvanceToolCallBatch{},
 		},
+		ActionPlan: ActionPlan{Schedule: []ScheduledAction{AwaitApproval{Call: event.Call, Request: event.Request}}},
 	}, nil
 }
 
