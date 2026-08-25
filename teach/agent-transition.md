@@ -159,5 +159,5 @@ Event
 1. 在 `event.go` 定义事件和 `eventKind`。
 2. 在 `transition.go` 编写 handler。
 3. 在 `newTransitionRegistry` 注册规则。
-4. 返回所需的状态变更、队列变更和计划动作。
+4. 返回所需的状态变更和 `ActionPlan`。
 5. 在 `tests/runtime/transition_test.go` 测试合法转移、拒绝路径和输出顺序。

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -28,7 +29,11 @@ func TestBuildLocalScriptProducesRunnableBinary(t *testing.T) {
 	}
 
 	help := exec.Command(binary, "-h")
-	if output, err := help.CombinedOutput(); err != nil {
+	output, err := help.CombinedOutput()
+	if err != nil {
 		t.Fatalf("binary -h failed: %v\n%s", err, output)
+	}
+	if strings.Contains(string(output), "Auto-approve tool execution (default true)") {
+		t.Fatalf("binary enables yolo by default:\n%s", output)
 	}
 }

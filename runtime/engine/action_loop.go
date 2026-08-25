@@ -33,7 +33,7 @@ func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, onStrea
 		}
 		runCtx = currentCtx
 	}
-	if err := e.commitTransitionLocked(decision); err != nil {
+	if err := e.commitTransitionLocked(decision); err != nil { // 原子提交 transition 的状态变化和动作计划
 		if startedRun {
 			e.runs.CancelRun()
 		}
@@ -96,7 +96,7 @@ func (e *Engine) runScheduledActions(ctx context.Context, onStreamChunk func(pro
 			}
 			return err
 		}
-		// The action may have dispatched a transition event; notify so
+		// The action may have committed a transition; notify so
 		// observers see states that pass between snapshot points, such as
 		// RunningTool while a tool executes.
 		e.notifyStateObserver()

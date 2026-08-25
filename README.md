@@ -9,8 +9,9 @@ Go agent runtime with a state-machine core, LLM providers, local tools, and a Bu
 - `go run .`: start the TUI. Default provider: DeepSeek.
 - `go run . --no-tools`: disable tool calling.
 - `go run . --yolo`: allow autonomous tool execution.
+- `go run . --approval-mode <ask|accept-edits|plan|bypass>`: choose the permission mode.
 - `NO_TOOLS=true go run .`: disable tools by env.
-- `YOLO=true go run .`: enable YOLO mode by env.
+- `YOLO=true go run .`: enable bypass when no explicit approval mode is supplied.
 
 ## Test
 
@@ -21,8 +22,9 @@ Go agent runtime with a state-machine core, LLM providers, local tools, and a Bu
 
 - `./scripts/build-local.sh`: install `/usr/local/bin/super-agent`.
 
-The binary is self-contained and can be run from any working directory. If your
-user cannot write `/usr/local/bin`, run the script with `sudo`.
+The binary is self-contained and can be run from any working directory. Set
+`SUPER_AGENT_INSTALL_DIR` to choose another install directory. If your user
+cannot write `/usr/local/bin`, run the script with `sudo`.
 
 ## Configuration
 
@@ -53,6 +55,18 @@ app creates this template if the file does not exist:
       "api_key": "sk-ant-...",
       "model": "claude-3-7-sonnet-20250219"
     }
+  },
+  "permissions": {
+    "mode": "ask",
+    "network": "deny",
+    "allow_tools": [],
+    "deny_tools": [],
+    "allow_command_prefixes": [],
+    "deny_command_prefixes": [],
+    "allow_paths": [],
+    "deny_paths": [],
+    "allow_env": [],
+    "deny_env": []
   }
 }
 ```
@@ -60,8 +74,16 @@ app creates this template if the file does not exist:
 The built-in system prompt lives in `app/system_prompt.go` and is compiled into
 the binary.
 
-If `AGENTS.md` exists in the working directory, its content is also injected as
-system instructions.
+Instructions are loaded from optional `~/.superagent/AGENTS.md`, then from
+project `AGENTS.md` files from root to the working directory. `CLAUDE.md` is the
+fallback when a directory has no non-empty `AGENTS.md`.
+
+## Sessions
+
+The TUI persists sessions under `~/.superagent/sessions/`. Use `/sessions`,
+`/resume`, `/rename`, and `/delete-session` to manage them. `/compact` reduces
+model context, while `/undo` restores the latest workspace checkpoint and
+truncates the corresponding transcript.
 
 ## Tools
 
@@ -83,6 +105,5 @@ Default tools:
 
 - MCP compatibility.
 - Skill compatibility.
-- Memory.
-- Persistent sessions.
+- Cross-session memory.
 - UI cleanup.

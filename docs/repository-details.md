@@ -24,7 +24,7 @@ main.go
 - `runtime/`: public aliases and constructors for runtime packages.
 - `runtime/protocol/`: model and tool adapter contracts (`Message`, `ToolCall`, `Model`, `ToolRunner`).
 - `runtime/permission/`: permission request and command classification vocabulary.
-- `runtime/machine/`: state, events, runtime data, runtime-data changes, action-queue changes, scheduled actions, transitions.
+- `runtime/machine/`: state, events, runtime data, runtime-data changes, action plans, scheduled actions, transitions.
 - `runtime/execution/`: scheduled-action runner, executor, action queue, action-result resolver, command analyzer, policy, approvals, run control.
 - `runtime/engine/`: orchestration, state lock, lifecycle, dispatch, stale-result dropping.
 - `runtime/session/`: application use cases, notification output, and persistence/workspace ports.
@@ -113,8 +113,8 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 
 - `runtime/machine/transition.go`: pure context-aware transition handlers selected from one package-private static registry keyed by state and event kind; a zero-state key represents events accepted from any state.
 - `runtime/machine/state.go`: runtime state type and constants.
-- `runtime/machine/runtime_data.go`: complete mutable runtime data.
-- `runtime/machine/action_queue_change.go`: action-queue change vocabulary.
+- `runtime/machine/runtime_data.go`: complete mutable machine data.
+- `runtime/machine/action_plan.go`: post-transition action-queue plan.
 - `runtime/machine/tool_batch.go`: queued tool-batch state.
 - `runtime/machine/snapshot.go`: machine snapshot construction and state invariants.
 - `runtime/machine/runtime_data_change.go`: runtime-data change vocabulary.
@@ -161,8 +161,8 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 | AdvancingQueue | ToolBatchFinished | WaitingLLM | ClearToolCallBatch | Schedule CallModel |
 | AdvancingQueue | ToolCallNeedsApproval | WaitingApproval | SetPendingTool, AdvanceToolCallBatch | - |
 | AdvancingQueue | ToolCallReadyToRun | RunningTool | AdvanceToolCallBatch, SetCurrentTool | Schedule RunTool |
-| any | ErrorOccurred | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | Clear existing |
-| any | CancelRequested | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | Clear existing |
+| any | ErrorOccurred | Idle | FlushStreamingAssistant, AppendToolResult, ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | Clear existing |
+| any | CancelRequested | Idle | FlushStreamingAssistant, ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | Clear existing |
 | any | ResetRequested | Idle | ResetConversation | Clear existing |
 
 ## Git And PR Notes

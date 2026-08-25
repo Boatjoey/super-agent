@@ -117,6 +117,9 @@ func TestLoadConfigCreatesDefaultSettingsWhenMissing(t *testing.T) {
 	if cfg.ModelConfig.Model != "deepseek-reasoner" {
 		t.Fatalf("ModelConfig = %+v", cfg.ModelConfig)
 	}
+	if cfg.PermissionMode != "ask" || cfg.AutoApproveTools {
+		t.Fatalf("default permissions = mode %q, auto-approve %t; want ask, false", cfg.PermissionMode, cfg.AutoApproveTools)
+	}
 }
 
 func TestLoadSettingsFileCreatesTemplateWhenMissing(t *testing.T) {

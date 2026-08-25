@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	autoApproveToolsFlag := flag.Bool("yolo", true, "Auto-approve tool execution") // 读取命令行参数
+	autoApproveToolsFlag := flag.Bool("yolo", false, "Auto-approve tool execution") // 读取命令行参数
 	noToolsFlag := flag.Bool("no-tools", false, "Disable tool calling")
 	approvalModeFlag := flag.String("approval-mode", "", "Permission mode: ask, accept-edits, plan, bypass")
 	flag.Parse()

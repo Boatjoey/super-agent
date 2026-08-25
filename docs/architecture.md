@@ -22,7 +22,7 @@ flowchart TD
 
 ## Dependency Rule
 
-- `runtime/machine` is the domain core. It owns states, events, runtime-data changes, action-queue changes, scheduled actions, and transitions.
+- `runtime/machine` is the domain core. It owns states, events, runtime-data changes, action plans, scheduled actions, and transitions.
 - `runtime/protocol` owns model and tool adapter contracts without state-machine policy.
 - `runtime/permission` owns permission request and command classification value types.
 - `runtime/engine` drives the machine. It owns synchronization, scheduled-action draining, and run identity.

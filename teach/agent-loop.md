@@ -102,7 +102,7 @@ func (e *Engine) runScheduledActions(
 
 1. 使用 `ScheduledActionRunner` 执行动作。
 2. 使用 `ActionResultResolver` 把结果转换成新事件。
-3. 派发新事件；新的 `TransitionResult` 可能继续向队列加入动作。
+3. 用新事件计算并提交下一次 `TransitionResult`；它可能继续向队列加入动作。
 
 因此，循环不是直接调用自己，而是通过队列形成：
 
@@ -183,7 +183,7 @@ Agent Loop 会在以下位置停下：
 - `WaitingApproval` 且动作队列为空：暂停并等待用户。
 - 收到取消：清空动作队列并回到 `Idle`。
 - 执行动作失败：转成 `ErrorOccurred`，清理队列并回到 `Idle`。
-- `RunID` 已过期：丢弃迟到结果，防止污染新任务。
+- `RunID` 已过期：丢弃迟到结果；队列随后为空时循环返回。
 
 ## 代码阅读顺序
 

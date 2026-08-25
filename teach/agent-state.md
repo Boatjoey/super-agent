@@ -72,7 +72,7 @@ StateInitializing State = "Initializing"
 调用 Engine 构造函数时，初始状态被设置为 `Initializing`：
 
 ```go
-state: machine.RuntimeData{
+runtimeData: machine.RuntimeData{
     State:    machine.StateInitializing,
     Messages: messages,
 }
