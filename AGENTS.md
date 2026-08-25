@@ -9,6 +9,7 @@
 - Keep `RunID` stale filtering in the engine. Keep state, call-id, queue guards, and invariants in `runtime/machine`.
 - RuntimeDataChangeAppliers must clone, apply, and validate runtime data; the engine commits runtime data and action-queue changes under one lock only after validation.
 - The engine notifies a per-turn state observer after state-changing transitions; the session uses it to emit live snapshots so the TUI header tracks states such as `RunningTool`.
+- Route external machine events through `Engine.DispatchEvent`; only `UserMessageSubmitted` starts a new run, and the transition's scheduled actions determine whether the action loop has work.
 - Keep state-machine logic in `runtime/machine/transition.go`; transitions use one package-private static registry keyed by state and event kind.
 - Keep state definitions in `runtime/machine/state.go`, complete runtime data in `runtime/machine/runtime_data.go`, runtime-data changes in `runtime/machine/runtime_data_change.go`, action-queue changes in `runtime/machine/action_queue_change.go`, and tool-batch data in `runtime/machine/tool_batch.go`.
 - Keep orchestration in `runtime/engine/`; constructors belong in `engine.go`, commands in `commands.go`, scheduled-action draining in `action_loop.go`, and queries in `query.go`.

@@ -13,9 +13,7 @@ import (
 func (e *Engine) EnableAutoApproveTools() { e.approvals.SetAutoApproveTools(true) }
 
 func (e *Engine) Ready() error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.dispatchLocked(machine.EngineReady{})
+	return e.DispatchEvent(context.Background(), machine.EngineReady{}, nil)
 }
 
 func (e *Engine) Approve(ctx context.Context, chunks func(protocol.StreamChunk)) error {
@@ -29,21 +27,16 @@ func (e *Engine) Deny(ctx context.Context, chunks func(protocol.StreamChunk)) er
 func (e *Engine) ApproveAlways(ctx context.Context, chunks func(protocol.StreamChunk)) error {
 	e.mu.Lock()
 	call, err := e.pendingApprovalCallLocked()
-	if err == nil {
-		err = e.dispatchLocked(machine.ApprovalAlwaysGranted{Call: call})
-	}
 	e.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	e.approvals.AllowAlways(execution.NewApprovalKey(call))
-	// The transition moved to StateRunningTool before the tool executes;
-	// notify so observers see it during the run.
-	e.notifyStateObserver()
-	return e.continueRun(chunks)
+	return e.dispatchEvent(ctx, machine.ApprovalAlwaysGranted{Call: call}, chunks, func() {
+		e.approvals.AllowAlways(execution.NewApprovalKey(call))
+	})
 }
 
-func (e *Engine) resolveApproval(_ context.Context, decision machine.Event, chunks func(protocol.StreamChunk)) error {
+func (e *Engine) resolveApproval(ctx context.Context, decision machine.Event, chunks func(protocol.StreamChunk)) error {
 	e.mu.Lock()
 	call, err := e.pendingApprovalCallLocked()
 	if err == nil {
@@ -53,16 +46,12 @@ func (e *Engine) resolveApproval(_ context.Context, decision machine.Event, chun
 		case machine.ApprovalDenied:
 			decision = machine.ApprovalDenied{Call: call}
 		}
-		err = e.dispatchLocked(decision)
 	}
 	e.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	// The transition moved to StateRunningTool before the tool executes;
-	// notify so observers see it during the run.
-	e.notifyStateObserver()
-	return e.continueRun(chunks)
+	return e.DispatchEvent(ctx, decision, chunks)
 }
 
 func (e *Engine) pendingApprovalCallLocked() (protocol.ToolCall, error) {
@@ -72,19 +61,14 @@ func (e *Engine) pendingApprovalCallLocked() (protocol.ToolCall, error) {
 	return *e.runtimeData.PendingTool, nil
 }
 
-func (e *Engine) continueRun(chunks func(protocol.StreamChunk)) error {
-	runCtx, ok := e.runs.CurrentContext()
-	if !ok {
-		return errors.New("no active run context")
-	}
-	return e.runScheduledActions(runCtx, chunks)
+func (e *Engine) Cancel() error {
+	e.runs.CancelRun()
+	return e.DispatchEvent(context.Background(), machine.CancelRequested{}, nil)
 }
-
-func (e *Engine) Cancel() error { e.runs.CancelRun(); return e.dispatch(machine.CancelRequested{}) }
 func (e *Engine) Reset() error {
 	e.runs.CancelRun()
 	e.runs.InvalidateCurrentRun()
-	return e.dispatch(machine.ResetRequested{})
+	return e.DispatchEvent(context.Background(), machine.ResetRequested{}, nil)
 }
 
 func (e *Engine) ReplaceMessages(messages []protocol.Message) {

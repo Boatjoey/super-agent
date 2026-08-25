@@ -27,7 +27,7 @@ func (s *Session) runTurnLoop(ctx context.Context, notifications chan<- SessionN
 		notifications <- StreamChunkReceived{Chunk: chunk, Message: s.Snapshot().StreamingMessage}
 	}
 	// 用户消息提交
-	if err := s.engine.DispatchEventThenRunActions(ctx, UserMessageSubmitted{Content: query}, chunks, func() { s.emitSnapshot(notifications) }); err != nil {
+	if err := s.engine.DispatchEvent(ctx, UserMessageSubmitted{Content: query}, chunks); err != nil {
 		return s.failTurn(notifications, err)
 	}
 	s.emitSnapshot(notifications)

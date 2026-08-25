@@ -106,7 +106,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `ApprovalStore`: stores always-allow and auto-approve state.
 - `RunController`: owns run id, cancel function, and stale-result checks.
 - `ScheduledActionRunner`: executes scheduled actions and returns `ActionCompletion` values.
-- `Engine`: action queue, state lock, lifecycle, dispatch, scheduled-action drain, stale dropping.
+- `Engine`: unified external event dispatch, action queue, state lock, run lifecycle, scheduled-action drain, stale dropping.
 - `Session`: channel boundary for UI notifications and approvals.
 
 ## Runtime Package Boundaries

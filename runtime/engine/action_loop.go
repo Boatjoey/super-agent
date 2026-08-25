@@ -9,45 +9,51 @@ import (
 	"super-agent/runtime/protocol"
 )
 
-func (e *Engine) DispatchEventThenRunActions(ctx context.Context, event machine.Event, chunks func(protocol.StreamChunk), notifyStateChange func()) error {
+func (e *Engine) DispatchEvent(ctx context.Context, event machine.Event, chunks func(protocol.StreamChunk)) error {
+	return e.dispatchEvent(ctx, event, chunks, nil)
+}
+
+func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, chunks func(protocol.StreamChunk), beforeActions func()) error {
 	e.mu.Lock()
-	snapshot, err := machine.SnapshotFrom(e.runtimeData)
+	decision, err := e.calculateTransitionLocked(event) // transition 函数执行
 	if err != nil {
 		e.mu.Unlock()
 		return err
 	}
-	decision, err := machine.Transition(snapshot, event)
-	if err != nil {
-		e.mu.Unlock()
-		return err
+	runCtx := ctx
+	startedRun := false
+	if _, startsRun := event.(machine.UserMessageSubmitted); startsRun {
+		_, runCtx = e.runs.StartRun(ctx)
+		startedRun = true
+	} else if len(decision.ScheduledActions) > 0 {
+		currentCtx, ok := e.runs.CurrentContext()
+		if !ok {
+			e.mu.Unlock()
+			return errors.New("event scheduled actions without an active run")
+		}
+		runCtx = currentCtx
 	}
-	_, runCtx := e.runs.StartRun(ctx)
 	if err := e.commitTransitionLocked(decision); err != nil {
-		e.runs.CancelRun()
+		if startedRun {
+			e.runs.CancelRun()
+		}
 		e.mu.Unlock()
 		return err
 	}
 	e.mu.Unlock()
-	notifyStateChange()
+	if beforeActions != nil {
+		beforeActions()
+	}
+	e.notifyStateObserver()
 	return e.runScheduledActions(runCtx, chunks)
 }
 
-func (e *Engine) dispatch(event machine.Event) error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.dispatchLocked(event)
-}
-
-func (e *Engine) dispatchLocked(event machine.Event) error {
+func (e *Engine) calculateTransitionLocked(event machine.Event) (machine.TransitionResult, error) {
 	snapshot, err := machine.SnapshotFrom(e.runtimeData)
 	if err != nil {
-		return err
+		return machine.TransitionResult{}, err
 	}
-	decision, err := machine.Transition(snapshot, event)
-	if err != nil {
-		return err
-	}
-	return e.commitTransitionLocked(decision)
+	return machine.Transition(snapshot, event)
 }
 
 func (e *Engine) commitTransitionLocked(decision machine.TransitionResult) error {
@@ -89,9 +95,9 @@ func (e *Engine) runScheduledActions(ctx context.Context, chunks func(protocol.S
 		if err := e.executeScheduledAction(ctx, action, chunks); err != nil {
 			if errors.Is(err, context.Canceled) {
 				e.runs.CancelRun()
-				_ = e.dispatch(machine.CancelRequested{})
+				_ = e.DispatchEvent(ctx, machine.CancelRequested{}, nil)
 			} else {
-				_ = e.dispatch(machine.ErrorOccurred{Err: err})
+				_ = e.DispatchEvent(ctx, machine.ErrorOccurred{Err: err}, nil)
 			}
 			return err
 		}
@@ -125,7 +131,10 @@ func (e *Engine) executeScheduledAction(ctx context.Context, action execution.Qu
 		e.mu.Unlock()
 		return err
 	}
-	err = e.dispatchLocked(event)
+	decision, err := e.calculateTransitionLocked(event)
+	if err == nil {
+		err = e.commitTransitionLocked(decision)
+	}
 	e.mu.Unlock()
 	return err
 }

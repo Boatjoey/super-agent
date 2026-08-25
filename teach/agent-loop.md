@@ -22,7 +22,7 @@
   -> TUIConversation.RunTurn
   -> session.Session.RunTurn
   -> session.runTurnLoop
-  -> engine.DispatchEventThenRunActions(UserMessageSubmitted)
+  -> engine.DispatchEvent(UserMessageSubmitted)
   -> Transition
   -> ActionQueue 加入 CallModel
   -> engine.runScheduledActions
@@ -40,7 +40,9 @@
 return e.runScheduledActions(runCtx, chunks)
 ```
 
-在调用它之前，`DispatchEventThenRunActions` 已经派发 `UserMessageSubmitted`，状态转移已经把第一个 `CallModel` 放入 `ActionQueue`。所以循环第一次 `Pop` 得到的通常是 `CallModel`。
+在调用它之前，`DispatchEvent` 已经派发 `UserMessageSubmitted`，状态转移已经把第一个 `CallModel` 放入 `ActionQueue`。所以循环第一次 `Pop` 得到的通常是 `CallModel`。
+
+所有外部状态机事件都通过 `DispatchEvent` 提交。只有 `UserMessageSubmitted` 创建新 Run；取消、重置和错误事件没有计划动作，因此提交后动作循环会立即返回。
 
 ## 完整闭环
 

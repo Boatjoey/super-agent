@@ -93,7 +93,7 @@ stateDiagram
 
 `ErrorOccurred`, `CancelRequested`, and `ResetRequested` return to `Idle` from any state; `ResetConversation` preserves `system` messages.
 
-The engine drops stale `RunID` results before event resolution. `State` names the current execution state; `RuntimeData` contains the complete mutable runtime data. `SnapshotFrom` validates runtime data and exposes only transition guards. `Transition` owns state/event compatibility plus call and queue guards. The `RuntimeDataChangeApplier` clones runtime data, applies runtime-data changes, and validates the result. The engine then commits runtime data and `ActionQueueChange` values under one lock. Scheduled actions run only after that commit.
+The engine drops stale `RunID` results before event resolution. External machine events enter through `Engine.DispatchEvent`; only `UserMessageSubmitted` creates a run, while the transition's scheduled actions determine whether the action loop has work. `State` names the current execution state; `RuntimeData` contains the complete mutable runtime data. `SnapshotFrom` validates runtime data and exposes only transition guards. `Transition` owns state/event compatibility plus call and queue guards. The `RuntimeDataChangeApplier` clones runtime data, applies runtime-data changes, and validates the result. The engine then commits runtime data and `ActionQueueChange` values under one lock. Scheduled actions run only after that commit.
 
 Errors distinguish incompatible events (`UnexpectedEventError`), current-run protocol mismatches (`ProtocolViolationError`), and impossible machine state (`InvariantViolationError`).
 
