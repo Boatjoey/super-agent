@@ -9,11 +9,11 @@ import (
 	"super-agent/runtime/protocol"
 )
 
-func (e *Engine) DispatchEvent(ctx context.Context, event machine.Event, chunks func(protocol.StreamChunk)) error {
-	return e.dispatchEvent(ctx, event, chunks, nil)
+func (e *Engine) DispatchEvent(ctx context.Context, event machine.Event, onStreamChunk func(protocol.StreamChunk)) error {
+	return e.dispatchEvent(ctx, event, onStreamChunk, nil)
 }
 
-func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, chunks func(protocol.StreamChunk), beforeActions func()) error {
+func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, onStreamChunk func(protocol.StreamChunk), beforeActions func()) error {
 	e.mu.Lock()
 	decision, err := e.calculateTransitionLocked(event) // transition 函数执行
 	if err != nil {
@@ -45,7 +45,7 @@ func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, chunks 
 		beforeActions()
 	}
 	e.notifyStateObserver()
-	return e.runScheduledActions(runCtx, chunks)
+	return e.runScheduledActions(runCtx, onStreamChunk)
 }
 
 func (e *Engine) calculateTransitionLocked(event machine.Event) (machine.TransitionResult, error) {
@@ -79,7 +79,7 @@ func (e *Engine) commitTransitionLocked(decision machine.TransitionResult) error
 	return nil
 }
 
-func (e *Engine) runScheduledActions(ctx context.Context, chunks func(protocol.StreamChunk)) error {
+func (e *Engine) runScheduledActions(ctx context.Context, onStreamChunk func(protocol.StreamChunk)) error {
 	runID := e.runs.CurrentRunID()
 	for {
 		e.mu.Lock()
@@ -92,7 +92,7 @@ func (e *Engine) runScheduledActions(ctx context.Context, chunks func(protocol.S
 			return nil
 		}
 		e.mu.Unlock()
-		if err := e.executeScheduledAction(ctx, action, chunks); err != nil {
+		if err := e.executeScheduledAction(ctx, action, onStreamChunk); err != nil {
 			if errors.Is(err, context.Canceled) {
 				e.runs.CancelRun()
 				_ = e.DispatchEvent(ctx, machine.CancelRequested{}, nil)
@@ -108,10 +108,10 @@ func (e *Engine) runScheduledActions(ctx context.Context, chunks func(protocol.S
 	}
 }
 
-func (e *Engine) executeScheduledAction(ctx context.Context, action execution.QueuedAction, chunks func(protocol.StreamChunk)) error {
-	stream := chunks
-	if chunks != nil {
-		stream = func(chunk protocol.StreamChunk) { e.recordStreamChunk(action.RunID, chunk); chunks(chunk) }
+func (e *Engine) executeScheduledAction(ctx context.Context, action execution.QueuedAction, onStreamChunk func(protocol.StreamChunk)) error {
+	stream := onStreamChunk
+	if onStreamChunk != nil {
+		stream = func(chunk protocol.StreamChunk) { e.recordStreamChunk(action.RunID, chunk); onStreamChunk(chunk) }
 	}
 	completion, err := e.runner.Run(ctx, action, execution.ScheduledActionInput{Messages: e.Messages(), ToolSpecs: e.toolSpecs()}, stream)
 	if err != nil {

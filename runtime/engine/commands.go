@@ -16,27 +16,27 @@ func (e *Engine) Ready() error {
 	return e.DispatchEvent(context.Background(), machine.EngineReady{}, nil)
 }
 
-func (e *Engine) Approve(ctx context.Context, chunks func(protocol.StreamChunk)) error {
-	return e.resolveApproval(ctx, machine.ApprovalGranted{}, chunks)
+func (e *Engine) Approve(ctx context.Context, onStreamChunk func(protocol.StreamChunk)) error {
+	return e.resolveApproval(ctx, machine.ApprovalGranted{}, onStreamChunk)
 }
 
-func (e *Engine) Deny(ctx context.Context, chunks func(protocol.StreamChunk)) error {
-	return e.resolveApproval(ctx, machine.ApprovalDenied{}, chunks)
+func (e *Engine) Deny(ctx context.Context, onStreamChunk func(protocol.StreamChunk)) error {
+	return e.resolveApproval(ctx, machine.ApprovalDenied{}, onStreamChunk)
 }
 
-func (e *Engine) ApproveAlways(ctx context.Context, chunks func(protocol.StreamChunk)) error {
+func (e *Engine) ApproveAlways(ctx context.Context, onStreamChunk func(protocol.StreamChunk)) error {
 	e.mu.Lock()
 	call, err := e.pendingApprovalCallLocked()
 	e.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	return e.dispatchEvent(ctx, machine.ApprovalAlwaysGranted{Call: call}, chunks, func() {
+	return e.dispatchEvent(ctx, machine.ApprovalAlwaysGranted{Call: call}, onStreamChunk, func() {
 		e.approvals.AllowAlways(execution.NewApprovalKey(call))
 	})
 }
 
-func (e *Engine) resolveApproval(ctx context.Context, decision machine.Event, chunks func(protocol.StreamChunk)) error {
+func (e *Engine) resolveApproval(ctx context.Context, decision machine.Event, onStreamChunk func(protocol.StreamChunk)) error {
 	e.mu.Lock()
 	call, err := e.pendingApprovalCallLocked()
 	if err == nil {
@@ -51,7 +51,7 @@ func (e *Engine) resolveApproval(ctx context.Context, decision machine.Event, ch
 	if err != nil {
 		return err
 	}
-	return e.DispatchEvent(ctx, decision, chunks)
+	return e.DispatchEvent(ctx, decision, onStreamChunk)
 }
 
 func (e *Engine) pendingApprovalCallLocked() (protocol.ToolCall, error) {

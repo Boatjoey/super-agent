@@ -23,11 +23,11 @@ func (s *Session) RunTurn(ctx context.Context, query string, notifications chan<
 }
 
 func (s *Session) runTurnLoop(ctx context.Context, notifications chan<- SessionNotification, approvals <-chan ApprovalDecision, query string) error {
-	chunks := func(chunk StreamChunk) {
+	onStreamChunk := func(chunk StreamChunk) {
 		notifications <- StreamChunkReceived{Chunk: chunk, Message: s.Snapshot().StreamingMessage}
 	}
 	// 用户消息提交
-	if err := s.engine.DispatchEvent(ctx, UserMessageSubmitted{Content: query}, chunks); err != nil {
+	if err := s.engine.DispatchEvent(ctx, UserMessageSubmitted{Content: query}, onStreamChunk); err != nil {
 		return s.failTurn(notifications, err)
 	}
 	s.emitSnapshot(notifications)
@@ -45,7 +45,7 @@ func (s *Session) runTurnLoop(ctx context.Context, notifications chan<- SessionN
 			// pending tool is announced from inside applyApproval. Consuming
 			// afterwards would clear the dedup key and re-announce it.
 			s.emitter.markApprovalConsumed()
-			if err := s.applyApproval(ctx, decision, chunks); err != nil {
+			if err := s.applyApproval(ctx, decision, onStreamChunk); err != nil {
 				return s.failTurn(notifications, err)
 			}
 			s.emitSnapshot(notifications)
@@ -78,15 +78,15 @@ func waitApproval(ctx context.Context, approvals <-chan ApprovalDecision) (Appro
 	}
 }
 
-func (s *Session) applyApproval(ctx context.Context, decision ApprovalDecision, chunks func(StreamChunk)) error {
+func (s *Session) applyApproval(ctx context.Context, decision ApprovalDecision, onStreamChunk func(StreamChunk)) error {
 	s.persistApproval(decision)
 	switch decision {
 	case ApproveOnce:
-		return s.engine.Approve(ctx, chunks)
+		return s.engine.Approve(ctx, onStreamChunk)
 	case ApproveAlways:
-		return s.engine.ApproveAlways(ctx, chunks)
+		return s.engine.ApproveAlways(ctx, onStreamChunk)
 	case DenyApproval:
-		return s.engine.Deny(ctx, chunks)
+		return s.engine.Deny(ctx, onStreamChunk)
 	default:
 		return errors.New("unknown approval decision")
 	}
