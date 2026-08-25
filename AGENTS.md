@@ -4,14 +4,14 @@
 
 - Go project: agent runtime, LLM adapters, local tools, Bubble Tea TUI.
 - Design pattern: hexagonal architecture with a functional core and imperative shell. `runtime/machine` is the pure domain core; engine, session, TUI, LLM, tools, and store are ports or adapters around it.
-- State-machine flow is `Event -> validated MachineSnapshot -> Transition -> RuntimeDataChange + ActionQueueChange + ScheduledAction -> transactional RuntimeDataChangeApplier/Executor -> ActionResultResolver -> Event`; dependencies point toward the machine.
-- `State` is the current execution state. `RuntimeData` is the complete mutable runtime data. A `RuntimeDataChange` constructs the next runtime data, an `ActionQueueChange` updates the action queue during commit, and a `ScheduledAction` runs only after commit.
+- State-machine flow is `Event -> validated MachineSnapshot -> Transition -> RuntimeDataChange + ActionPlan -> transactional RuntimeDataChangeApplier/Executor -> ActionResultResolver -> Event`; dependencies point toward the machine.
+- `State` is the current execution state. `RuntimeData` is the complete mutable machine data. A `RuntimeDataChange` constructs the next runtime data; an `ActionPlan` atomically clears obsolete queued work and schedules actions that run only after commit.
 - Keep `RunID` stale filtering in the engine. Keep state, call-id, queue guards, and invariants in `runtime/machine`.
-- RuntimeDataChangeAppliers must clone, apply, and validate runtime data; the engine commits runtime data and action-queue changes under one lock only after validation.
+- RuntimeDataChangeAppliers must clone, apply, and validate runtime data; the engine commits runtime data and the transition's action plan under one lock only after validation.
 - The engine notifies a per-turn state observer after state-changing transitions; the session uses it to emit live snapshots so the TUI header tracks states such as `RunningTool`.
-- Route external machine events through `Engine.DispatchEvent`; only `UserMessageSubmitted` starts a new run, and the transition's scheduled actions determine whether the action loop has work.
+- Route external machine events through `Engine.DispatchEvent`; only `UserMessageSubmitted` starts a new run, and the transition's action plan determines whether the action loop has work.
 - Keep state-machine logic in `runtime/machine/transition.go`; transitions use one package-private static registry keyed by state and event kind.
-- Keep state definitions in `runtime/machine/state.go`, complete runtime data in `runtime/machine/runtime_data.go`, runtime-data changes in `runtime/machine/runtime_data_change.go`, action-queue changes in `runtime/machine/action_queue_change.go`, and tool-batch data in `runtime/machine/tool_batch.go`.
+- Keep state definitions in `runtime/machine/state.go`, complete machine data in `runtime/machine/runtime_data.go`, runtime-data changes in `runtime/machine/runtime_data_change.go`, action plans in `runtime/machine/action_plan.go`, and tool-batch data in `runtime/machine/tool_batch.go`.
 - Keep orchestration in `runtime/engine/`; constructors belong in `engine.go`, commands in `commands.go`, scheduled-action draining in `action_loop.go`, and queries in `query.go`.
 - In `runtime/engine`, reference `machine`, `execution`, and `protocol` owners explicitly; do not re-export them through internal aliases.
 - Keep scheduled-action execution in `runtime/execution/`.
@@ -26,7 +26,7 @@
 - Load layered instructions with `app/instructions`: user-level spec, root-to-leaf `AGENTS.md`, fallback `CLAUDE.md`.
 - Preserve `system` messages such as project instructions across reset.
 - Do not scatter transition rules into `tui/`, `llm/`, or `tools/`.
-- Use existing vocabulary: `State`, `RuntimeData`, `Event`, `RuntimeDataChange`, `ActionQueueChange`, `ScheduledAction`, `Transition`.
+- Use existing vocabulary: `State`, `RuntimeData`, `Event`, `RuntimeDataChange`, `ActionPlan`, `ScheduledAction`, `Transition`.
 - Follow the hexagonal architecture in `docs/architecture.md`; `tui` must not import `runtime`.
 - Keep the TUI as the only interaction surface; do not add headless, server, or alternate UI entry points.
 - LLM and tool adapters may import `runtime/protocol`, not the root `runtime` facade.

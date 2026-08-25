@@ -793,11 +793,11 @@ func TestTransitionProducesRuntimeDataChangesAndScheduledActions(t *testing.T) {
 	if _, ok := decision.RuntimeDataChanges[0].(AppendUserMessage); !ok {
 		t.Fatalf("runtimeDataChange = %T, want AppendUserMessage", decision.RuntimeDataChanges[0])
 	}
-	if len(decision.ScheduledActions) != 1 {
-		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
+	if len(decision.ActionPlan.Schedule) != 1 {
+		t.Fatalf("actions = %+v, want one", decision.ActionPlan.Schedule)
 	}
-	if _, ok := decision.ScheduledActions[0].(CallModel); !ok {
-		t.Fatalf("action = %T, want CallModel", decision.ScheduledActions[0])
+	if _, ok := decision.ActionPlan.Schedule[0].(CallModel); !ok {
+		t.Fatalf("action = %T, want CallModel", decision.ActionPlan.Schedule[0])
 	}
 }
 
@@ -817,12 +817,12 @@ func TestApprovalGrantedRunsPendingLocalTool(t *testing.T) {
 	if _, ok := decision.RuntimeDataChanges[0].(SetCurrentTool); !ok {
 		t.Fatalf("runtimeDataChange = %T, want SetCurrentTool", decision.RuntimeDataChanges[0])
 	}
-	if len(decision.ScheduledActions) != 1 {
-		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
+	if len(decision.ActionPlan.Schedule) != 1 {
+		t.Fatalf("actions = %+v, want one", decision.ActionPlan.Schedule)
 	}
-	action, ok := decision.ScheduledActions[0].(RunTool)
+	action, ok := decision.ActionPlan.Schedule[0].(RunTool)
 	if !ok {
-		t.Fatalf("action = %T, want RunTool", decision.ScheduledActions[0])
+		t.Fatalf("action = %T, want RunTool", decision.ActionPlan.Schedule[0])
 	}
 	if action.Call.Name != call.Name {
 		t.Fatalf("tool call = %+v, want %+v", action.Call, call)
@@ -838,11 +838,11 @@ func TestToolResultAdvancesQueueThroughEngine(t *testing.T) {
 	if decision.NextState != StateAdvancingQueue {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateAdvancingQueue)
 	}
-	if len(decision.ScheduledActions) != 1 {
-		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
+	if len(decision.ActionPlan.Schedule) != 1 {
+		t.Fatalf("actions = %+v, want one", decision.ActionPlan.Schedule)
 	}
-	if _, ok := decision.ScheduledActions[0].(CheckToolQueue); !ok {
-		t.Fatalf("action = %T, want CheckToolQueue", decision.ScheduledActions[0])
+	if _, ok := decision.ActionPlan.Schedule[0].(CheckToolQueue); !ok {
+		t.Fatalf("action = %T, want CheckToolQueue", decision.ActionPlan.Schedule[0])
 	}
 }
 
@@ -856,11 +856,11 @@ func TestDenialAdvancesQueueThroughEngine(t *testing.T) {
 	if decision.NextState != StateAdvancingQueue {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateAdvancingQueue)
 	}
-	if len(decision.ScheduledActions) != 1 {
-		t.Fatalf("actions = %+v, want one", decision.ScheduledActions)
+	if len(decision.ActionPlan.Schedule) != 1 {
+		t.Fatalf("actions = %+v, want one", decision.ActionPlan.Schedule)
 	}
-	if _, ok := decision.ScheduledActions[0].(CheckToolQueue); !ok {
-		t.Fatalf("action = %T, want CheckToolQueue", decision.ScheduledActions[0])
+	if _, ok := decision.ActionPlan.Schedule[0].(CheckToolQueue); !ok {
+		t.Fatalf("action = %T, want CheckToolQueue", decision.ActionPlan.Schedule[0])
 	}
 }
 
@@ -873,8 +873,8 @@ func TestCancelRequestedReturnsRuntimeToIdle(t *testing.T) {
 	if decision.NextState != StateIdle {
 		t.Fatalf("next state = %s, want %s", decision.NextState, StateIdle)
 	}
-	if len(decision.ScheduledActions) != 0 {
-		t.Fatalf("actions = %+v, want none", decision.ScheduledActions)
+	if len(decision.ActionPlan.Schedule) != 0 {
+		t.Fatalf("actions = %+v, want none", decision.ActionPlan.Schedule)
 	}
 }
 

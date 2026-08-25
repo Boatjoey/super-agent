@@ -37,7 +37,7 @@
 真正启动第一轮循环的是这一行：
 
 ```go
-return e.runScheduledActions(runCtx, chunks)
+return e.runScheduledActions(runCtx, onStreamChunk)
 ```
 
 在调用它之前，`DispatchEvent` 已经派发 `UserMessageSubmitted`，状态转移已经把第一个 `CallModel` 放入 `ActionQueue`。所以循环第一次 `Pop` 得到的通常是 `CallModel`。
@@ -68,7 +68,7 @@ flowchart TD
 ```text
 Event
   -> Transition
-  -> RuntimeDataChange + ScheduledAction
+  -> RuntimeDataChange + ActionPlan
   -> 执行 ScheduledAction
   -> ScheduledActionResult
   -> 新 Event
@@ -82,14 +82,14 @@ Event
 ```go
 func (e *Engine) runScheduledActions(
 	ctx context.Context,
-	chunks func(protocol.StreamChunk),
+	onStreamChunk func(protocol.StreamChunk),
 ) error {
 	for {
 		action, ok := e.actionQueue.Pop()
 		if !ok {
 			return nil
 		}
-		if err := e.executeScheduledAction(ctx, action, chunks); err != nil {
+		if err := e.executeScheduledAction(ctx, action, onStreamChunk); err != nil {
 			return err
 		}
 	}

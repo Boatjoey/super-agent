@@ -25,7 +25,7 @@ func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, onStrea
 	if _, startsRun := event.(machine.UserMessageSubmitted); startsRun {
 		_, runCtx = e.runs.StartRun(ctx)
 		startedRun = true
-	} else if len(decision.ScheduledActions) > 0 {
+	} else if len(decision.ActionPlan.Schedule) > 0 {
 		currentCtx, ok := e.runs.CurrentContext()
 		if !ok {
 			e.mu.Unlock()
@@ -64,16 +64,11 @@ func (e *Engine) commitTransitionLocked(decision machine.TransitionResult) error
 	if err := machine.ValidateRuntimeData(changeResult.RuntimeData); err != nil {
 		return err
 	}
-	for _, change := range decision.ActionQueueChanges {
-		if _, ok := change.(machine.ClearActionQueue); !ok {
-			return machine.InvariantViolationError{Reason: "unknown action queue change"}
-		}
-	}
 	e.runtimeData = changeResult.RuntimeData
-	for range decision.ActionQueueChanges {
+	if decision.ActionPlan.ClearExisting {
 		e.actionQueue.Clear()
 	}
-	for _, action := range decision.ScheduledActions {
+	for _, action := range decision.ActionPlan.Schedule {
 		e.actionQueue.Queue(e.runs.CurrentRunID(), action)
 	}
 	return nil

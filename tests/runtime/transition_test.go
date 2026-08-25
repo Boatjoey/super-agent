@@ -17,10 +17,9 @@ type transitionCase struct {
 	wantState              State
 	wantErr                bool
 	runtimeDataChangeCount int
-	actionQueueChangeCount int
+	clearExistingActions   bool
 	scheduledActionCount   int
 	runtimeDataChangeTypes []RuntimeDataChange
-	actionQueueChangeTypes []ActionQueueChange
 	scheduledActionTypes   []ScheduledAction
 }
 
@@ -242,71 +241,62 @@ func TestTransitionTable(t *testing.T) {
 			name: "ErrorOccurred/WaitingLLM->Idle", state: StateWaitingLLM,
 			event:                  ErrorOccurred{Err: errors.New("boom")},
 			wantState:              StateIdle,
-			runtimeDataChangeCount: 5, actionQueueChangeCount: 1,
+			runtimeDataChangeCount: 5, clearExistingActions: true,
 			runtimeDataChangeTypes: []RuntimeDataChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
-			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "ErrorOccurred/RunningTool->Idle", state: StateRunningTool,
 			event:                  ErrorOccurred{Err: errors.New("boom")},
 			wantState:              StateIdle,
-			runtimeDataChangeCount: 5, actionQueueChangeCount: 1,
+			runtimeDataChangeCount: 5, clearExistingActions: true,
 			runtimeDataChangeTypes: []RuntimeDataChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
-			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "ErrorOccurred/AdvancingQueue->Idle", state: StateAdvancingQueue,
 			event:                  ErrorOccurred{Err: errors.New("boom")},
 			wantState:              StateIdle,
-			runtimeDataChangeCount: 5, actionQueueChangeCount: 1,
+			runtimeDataChangeCount: 5, clearExistingActions: true,
 			runtimeDataChangeTypes: []RuntimeDataChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
-			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 
 		// --- CancelRequested ---
 		{
 			name: "CancelRequested/WaitingLLM->Idle", state: StateWaitingLLM,
 			event: CancelRequested{}, wantState: StateIdle,
-			runtimeDataChangeCount: 4, actionQueueChangeCount: 1,
+			runtimeDataChangeCount: 4, clearExistingActions: true,
 			runtimeDataChangeTypes: []RuntimeDataChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
-			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "CancelRequested/WaitingApproval->Idle", state: StateWaitingApproval,
 			event: CancelRequested{}, wantState: StateIdle,
-			runtimeDataChangeCount: 4, actionQueueChangeCount: 1,
+			runtimeDataChangeCount: 4, clearExistingActions: true,
 			runtimeDataChangeTypes: []RuntimeDataChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
-			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "CancelRequested/RunningTool->Idle", state: StateRunningTool,
 			event: CancelRequested{}, wantState: StateIdle,
-			runtimeDataChangeCount: 4, actionQueueChangeCount: 1,
+			runtimeDataChangeCount: 4, clearExistingActions: true,
 			runtimeDataChangeTypes: []RuntimeDataChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
-			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "CancelRequested/AdvancingQueue->Idle", state: StateAdvancingQueue,
 			event: CancelRequested{}, wantState: StateIdle,
-			runtimeDataChangeCount: 4, actionQueueChangeCount: 1,
+			runtimeDataChangeCount: 4, clearExistingActions: true,
 			runtimeDataChangeTypes: []RuntimeDataChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
-			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 
 		// --- ResetRequested ---
 		{
 			name: "ResetRequested/Idle->Idle", state: StateIdle,
 			event: ResetRequested{}, wantState: StateIdle,
-			runtimeDataChangeCount: 1, actionQueueChangeCount: 1,
+			runtimeDataChangeCount: 1, clearExistingActions: true,
 			runtimeDataChangeTypes: []RuntimeDataChange{ResetConversation{}},
-			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 		{
 			name: "ResetRequested/WaitingLLM->Idle", state: StateWaitingLLM,
 			event: ResetRequested{}, wantState: StateIdle,
-			runtimeDataChangeCount: 1, actionQueueChangeCount: 1,
+			runtimeDataChangeCount: 1, clearExistingActions: true,
 			runtimeDataChangeTypes: []RuntimeDataChange{ResetConversation{}},
-			actionQueueChangeTypes: []ActionQueueChange{ClearActionQueue{}},
 		},
 	}
 
@@ -328,25 +318,20 @@ func TestTransitionTable(t *testing.T) {
 			if len(result.RuntimeDataChanges) != tc.runtimeDataChangeCount {
 				t.Fatalf("runtime data changes = %d (%+v), want %d", len(result.RuntimeDataChanges), result.RuntimeDataChanges, tc.runtimeDataChangeCount)
 			}
-			if len(result.ActionQueueChanges) != tc.actionQueueChangeCount {
-				t.Fatalf("action queue changes = %d (%+v), want %d", len(result.ActionQueueChanges), result.ActionQueueChanges, tc.actionQueueChangeCount)
+			if result.ActionPlan.ClearExisting != tc.clearExistingActions {
+				t.Fatalf("clear existing actions = %t, want %t", result.ActionPlan.ClearExisting, tc.clearExistingActions)
 			}
-			if len(result.ScheduledActions) != tc.scheduledActionCount {
-				t.Fatalf("scheduled actions = %d (%+v), want %d", len(result.ScheduledActions), result.ScheduledActions, tc.scheduledActionCount)
+			if len(result.ActionPlan.Schedule) != tc.scheduledActionCount {
+				t.Fatalf("scheduled actions = %d (%+v), want %d", len(result.ActionPlan.Schedule), result.ActionPlan.Schedule, tc.scheduledActionCount)
 			}
 			for i, want := range tc.runtimeDataChangeTypes {
 				if reflect.TypeOf(result.RuntimeDataChanges[i]) != reflect.TypeOf(want) {
 					t.Fatalf("runtime data change[%d] = %T, want %T", i, result.RuntimeDataChanges[i], want)
 				}
 			}
-			for i, want := range tc.actionQueueChangeTypes {
-				if reflect.TypeOf(result.ActionQueueChanges[i]) != reflect.TypeOf(want) {
-					t.Fatalf("action queue change[%d] = %T, want %T", i, result.ActionQueueChanges[i], want)
-				}
-			}
 			for i, want := range tc.scheduledActionTypes {
-				if reflect.TypeOf(result.ScheduledActions[i]) != reflect.TypeOf(want) {
-					t.Fatalf("scheduled action[%d] = %T, want %T", i, result.ScheduledActions[i], want)
+				if reflect.TypeOf(result.ActionPlan.Schedule[i]) != reflect.TypeOf(want) {
+					t.Fatalf("scheduled action[%d] = %T, want %T", i, result.ActionPlan.Schedule[i], want)
 				}
 			}
 		})

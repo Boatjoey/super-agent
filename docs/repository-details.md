@@ -83,9 +83,9 @@ QueuedAction { RunID, ActionID, ScheduledAction }
   -> ActionResultResolver.Resolve -> transition Event
   -> SnapshotFrom(RuntimeData) -> validated MachineSnapshot
   -> Transition(snapshot, event)
-  -> TransitionResult { NextState, RuntimeDataChanges, ActionQueueChanges, ScheduledActions }
+  -> TransitionResult { NextState, RuntimeDataChanges, ActionPlan }
   -> RuntimeDataChangeApplier.ApplyRuntimeDataChanges on cloned RuntimeData -> ValidateRuntimeData
-  -> atomic RuntimeData + ActionQueueChange commit
+  -> atomic RuntimeData + ActionPlan commit
 ```
 
 `ActionResultResolver` maps model/tool action results directly to events accepted by the transition table. It starts tool batches and classifies each queued call into `ToolCallNeedsApproval`, `ToolCallReadyToRun`, or a policy denial error. A batch is the context unit; a call is the approval and execution unit. `runtime/execution` owns command classification, protected path checks, network default-deny behavior, and structured permission requests.
@@ -95,7 +95,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 - `State`: current runtime phase.
 - `Event`: fact that triggers a transition.
 - `RuntimeDataChange`: synchronous transformation of cloned `RuntimeData`.
-- `ActionQueueChange`: action-queue update committed with runtime data.
+- `ActionPlan`: one queue plan committed with runtime data; it can clear obsolete work and schedule new work.
 - `ScheduledAction`: requested work such as model calls, tool execution, or queue processing.
 - `MachineSnapshot`: validated read-only view containing only transition guards.
 - `Transition`: pure state-machine decision with state, call, and queue guards.
@@ -148,22 +148,22 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 
 ## Transition Table
 
-| State | Event | Next | RuntimeDataChanges | ActionQueueChanges | ScheduledActions |
-|---|---|---|---|---|---|
-| Initializing | EngineReady | Idle | - | - | - |
-| Idle | UserMessageSubmitted | WaitingLLM | AppendUserMessage | - | CallModel |
-| WaitingLLM | AssistantMessageReceived | Idle | AppendAssistantMessage | - | - |
-| WaitingLLM | ToolBatchReceived | AdvancingQueue | AppendAssistantMessage, SetToolCallBatch | - | CheckToolQueue |
-| WaitingApproval | ApprovalGranted | RunningTool | SetCurrentTool, ClearPendingTool | - | RunTool |
-| WaitingApproval | ApprovalAlwaysGranted | RunningTool | SetCurrentTool, ClearPendingTool | - | RunTool |
-| WaitingApproval | ApprovalDenied | AdvancingQueue | ClearPendingTool, AppendToolResult | - | CheckToolQueue |
-| RunningTool | ToolResultReceived | AdvancingQueue | AppendToolResult, ClearCurrentTool | - | CheckToolQueue |
-| AdvancingQueue | ToolBatchFinished | WaitingLLM | ClearToolCallBatch | - | CallModel |
-| AdvancingQueue | ToolCallNeedsApproval | WaitingApproval | SetPendingTool, AdvanceToolCallBatch | - | - |
-| AdvancingQueue | ToolCallReadyToRun | RunningTool | AdvanceToolCallBatch, SetCurrentTool | - | RunTool |
-| any | ErrorOccurred | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | ClearActionQueue | - |
-| any | CancelRequested | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | ClearActionQueue | - |
-| any | ResetRequested | Idle | ResetConversation | ClearActionQueue | - |
+| State | Event | Next | RuntimeDataChanges | ActionPlan |
+|---|---|---|---|---|
+| Initializing | EngineReady | Idle | - | - |
+| Idle | UserMessageSubmitted | WaitingLLM | AppendUserMessage | Schedule CallModel |
+| WaitingLLM | AssistantMessageReceived | Idle | AppendAssistantMessage | - |
+| WaitingLLM | ToolBatchReceived | AdvancingQueue | AppendAssistantMessage, SetToolCallBatch | Schedule CheckToolQueue |
+| WaitingApproval | ApprovalGranted | RunningTool | SetCurrentTool, ClearPendingTool | Schedule RunTool |
+| WaitingApproval | ApprovalAlwaysGranted | RunningTool | SetCurrentTool, ClearPendingTool | Schedule RunTool |
+| WaitingApproval | ApprovalDenied | AdvancingQueue | ClearPendingTool, AppendToolResult | Schedule CheckToolQueue |
+| RunningTool | ToolResultReceived | AdvancingQueue | AppendToolResult, ClearCurrentTool | Schedule CheckToolQueue |
+| AdvancingQueue | ToolBatchFinished | WaitingLLM | ClearToolCallBatch | Schedule CallModel |
+| AdvancingQueue | ToolCallNeedsApproval | WaitingApproval | SetPendingTool, AdvanceToolCallBatch | - |
+| AdvancingQueue | ToolCallReadyToRun | RunningTool | AdvanceToolCallBatch, SetCurrentTool | Schedule RunTool |
+| any | ErrorOccurred | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | Clear existing |
+| any | CancelRequested | Idle | ClearPendingTool, ClearCurrentTool, ClearToolCallBatch | Clear existing |
+| any | ResetRequested | Idle | ResetConversation | Clear existing |
 
 ## Git And PR Notes
 

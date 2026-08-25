@@ -39,10 +39,7 @@ type ClearCurrentTool = machine.ClearCurrentTool
 type ClearToolCallBatch = machine.ClearToolCallBatch
 type ResetConversation = machine.ResetConversation
 
-type ActionQueueChange = machine.ActionQueueChange
-type ClearActionQueue = machine.ClearActionQueue
-
-var AllActionQueueChanges = machine.AllActionQueueChanges
+type ActionPlan = machine.ActionPlan
 
 type ScheduledAction = machine.ScheduledAction
 

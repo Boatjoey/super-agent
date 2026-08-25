@@ -21,18 +21,17 @@ func Transition(
 
 `Event` 是状态机事件接口。包内方法 `isEvent` 封闭事件集合，`kind` 提供注册键。
 
-返回值包含四部分：
+返回值包含三部分：
 
 ```go
 type TransitionResult struct {
 	NextState          State
 	RuntimeDataChanges []RuntimeDataChange
-	ActionQueueChanges []ActionQueueChange
-	ScheduledActions   []ScheduledAction
+	ActionPlan         ActionPlan
 }
 ```
 
-`NextState` 是下一执行状态；`RuntimeDataChanges` 构造下一份 `RuntimeData`；`ActionQueueChanges` 在提交时修改队列；`ScheduledActions` 在提交后执行外部工作。
+`NextState` 是下一执行状态；`RuntimeDataChanges` 构造下一份 `RuntimeData`；`ActionPlan` 统一描述清理旧动作和调度新动作。调度的动作只在提交后执行。
 
 例如：
 
@@ -40,7 +39,7 @@ type TransitionResult struct {
 return TransitionResult{
 	NextState:          StateWaitingLLM,
 	RuntimeDataChanges: []RuntimeDataChange{AppendUserMessage{Content: event.Content}},
-	ScheduledActions:   []ScheduledAction{CallModel{}},
+	ActionPlan:         ActionPlan{Schedule: []ScheduledAction{CallModel{}}},
 }, nil
 ```
 
@@ -147,8 +146,8 @@ Event
   -> SnapshotFrom：验证当前 RuntimeData
   -> Transition：产生决策
   -> RuntimeDataChangeApplier：克隆、修改、验证下一份 RuntimeData
-  -> Engine：提交 RuntimeData 和 ActionQueueChanges
-  -> ActionQueue：加入 ScheduledActions
+  -> Engine：原子提交 RuntimeData 和 ActionPlan
+  -> ActionQueue：按 ActionPlan 清理旧动作并加入新动作
   -> ScheduledActionRunner：执行动作
   -> ActionResultResolver：把结果转换成下一个 Event
 ```

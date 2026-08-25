@@ -3,8 +3,7 @@ package machine
 type TransitionResult struct {
 	NextState          State
 	RuntimeDataChanges []RuntimeDataChange
-	ActionQueueChanges []ActionQueueChange
-	ScheduledActions   []ScheduledAction
+	ActionPlan         ActionPlan
 }
 
 type transitionKey struct {
@@ -97,7 +96,7 @@ func handleUserMessageSubmitted(_ MachineSnapshot, event UserMessageSubmitted) (
 	return TransitionResult{
 		NextState:          StateWaitingLLM,
 		RuntimeDataChanges: []RuntimeDataChange{AppendUserMessage{Content: event.Content}},
-		ScheduledActions:   []ScheduledAction{CallModel{}},
+		ActionPlan:         ActionPlan{Schedule: []ScheduledAction{CallModel{}}},
 	}, nil
 }
 
@@ -127,7 +126,7 @@ func handleToolBatchReceived(snapshot MachineSnapshot, event ToolBatchReceived) 
 			}},
 			SetToolCallBatch{ID: toolBatchID(event.Calls), Calls: event.Calls},
 		},
-		ScheduledActions: []ScheduledAction{CheckToolQueue{}},
+		ActionPlan: ActionPlan{Schedule: []ScheduledAction{CheckToolQueue{}}},
 	}, nil
 }
 
@@ -149,7 +148,7 @@ func approveTool(snapshot MachineSnapshot, event Event, call ToolCall) (Transiti
 	return TransitionResult{
 		NextState:          StateRunningTool,
 		RuntimeDataChanges: []RuntimeDataChange{SetCurrentTool{Call: call}, ClearPendingTool{}},
-		ScheduledActions:   []ScheduledAction{RunTool{Call: call}},
+		ActionPlan:         ActionPlan{Schedule: []ScheduledAction{RunTool{Call: call}}},
 	}, nil
 }
 
@@ -166,7 +165,7 @@ func handleApprovalDenied(snapshot MachineSnapshot, event ApprovalDenied) (Trans
 			ClearPendingTool{},
 			AppendToolResult{Call: event.Call, Result: "denied: " + event.Call.Name},
 		},
-		ScheduledActions: []ScheduledAction{CheckToolQueue{}},
+		ActionPlan: ActionPlan{Schedule: []ScheduledAction{CheckToolQueue{}}},
 	}, nil
 }
 
@@ -183,7 +182,7 @@ func handleToolResultReceived(snapshot MachineSnapshot, event ToolResultReceived
 			AppendToolResult{Call: event.Call, Result: event.Result},
 			ClearCurrentTool{},
 		},
-		ScheduledActions: []ScheduledAction{CheckToolQueue{}},
+		ActionPlan: ActionPlan{Schedule: []ScheduledAction{CheckToolQueue{}}},
 	}, nil
 }
 
@@ -194,7 +193,7 @@ func handleToolBatchFinished(snapshot MachineSnapshot, event ToolBatchFinished) 
 	return TransitionResult{
 		NextState:          StateWaitingLLM,
 		RuntimeDataChanges: []RuntimeDataChange{ClearToolCallBatch{}},
-		ScheduledActions:   []ScheduledAction{CallModel{}},
+		ActionPlan:         ActionPlan{Schedule: []ScheduledAction{CallModel{}}},
 	}, nil
 }
 
@@ -224,7 +223,7 @@ func handleToolCallReadyToRun(snapshot MachineSnapshot, event ToolCallReadyToRun
 	return TransitionResult{
 		NextState:          StateRunningTool,
 		RuntimeDataChanges: []RuntimeDataChange{AdvanceToolCallBatch{}, SetCurrentTool{Call: event.Call}},
-		ScheduledActions:   []ScheduledAction{RunTool{Call: event.Call}},
+		ActionPlan:         ActionPlan{Schedule: []ScheduledAction{RunTool{Call: event.Call}}},
 	}, nil
 }
 
@@ -241,7 +240,7 @@ func handleErrorOccurred(_ MachineSnapshot, event ErrorOccurred) (TransitionResu
 			ClearCurrentTool{},
 			ClearToolCallBatch{},
 		},
-		ActionQueueChanges: []ActionQueueChange{ClearActionQueue{}},
+		ActionPlan: ActionPlan{ClearExisting: true},
 	}, nil
 }
 
@@ -254,7 +253,7 @@ func handleCancelRequested(MachineSnapshot, CancelRequested) (TransitionResult, 
 			ClearCurrentTool{},
 			ClearToolCallBatch{},
 		},
-		ActionQueueChanges: []ActionQueueChange{ClearActionQueue{}},
+		ActionPlan: ActionPlan{ClearExisting: true},
 	}, nil
 }
 
@@ -262,7 +261,7 @@ func handleResetRequested(MachineSnapshot, ResetRequested) (TransitionResult, er
 	return TransitionResult{
 		NextState:          StateIdle,
 		RuntimeDataChanges: []RuntimeDataChange{ResetConversation{}},
-		ActionQueueChanges: []ActionQueueChange{ClearActionQueue{}},
+		ActionPlan:         ActionPlan{ClearExisting: true},
 	}, nil
 }
 

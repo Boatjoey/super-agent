@@ -24,7 +24,7 @@ func handleUserMessageSubmitted(_ MachineSnapshot, event UserMessageSubmitted) (
 	return TransitionResult{
 		NextState:          StateWaitingLLM,
 		RuntimeDataChanges: []RuntimeDataChange{AppendUserMessage{Content: event.Content}},
-		ScheduledActions:   []ScheduledAction{CallModel{}},
+		ActionPlan:         ActionPlan{Schedule: []ScheduledAction{CallModel{}}},
 	}, nil
 }
 ```
@@ -33,9 +33,9 @@ func handleUserMessageSubmitted(_ MachineSnapshot, event UserMessageSubmitted) (
 
 - `NextState`：进入 `WaitingLLM`。
 - `RuntimeDataChanges`：通过 `AppendUserMessage` 保存用户消息。
-- `ScheduledActions`：状态提交后执行 `CallModel`。
+- `ActionPlan.Schedule`：状态提交后执行 `CallModel`。
 
-此处没有 `ActionQueueChanges`，因为不需要清空或修改已有动作队列。
+此处 `ActionPlan.ClearExisting` 为 `false`，因为不需要清空已有动作。
 
 ## 3. Engine 应用决策
 
