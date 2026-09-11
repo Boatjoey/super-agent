@@ -11,6 +11,7 @@ type AssistantMessageReceived = machine.AssistantMessageReceived
 type ToolBatchReceived = machine.ToolBatchReceived
 type ToolCallNeedsApproval = machine.ToolCallNeedsApproval
 type ToolCallReadyToRun = machine.ToolCallReadyToRun
+type ToolCallDenied = machine.ToolCallDenied
 type ToolBatchFinished = machine.ToolBatchFinished
 type ToolResultReceived = machine.ToolResultReceived
 type ApprovalGranted = machine.ApprovalGranted

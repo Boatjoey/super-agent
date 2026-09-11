@@ -38,6 +38,28 @@ func TestDefaultActionResultResolverTurnsRiskyQueuedToolIntoApprovalEvent(t *tes
 	}
 }
 
+func TestDefaultActionResultResolverTurnsPolicyDenialIntoToolEvent(t *testing.T) {
+	resolver := NewDefaultActionResultResolver(
+		NewPolicy(PermissionModePlan, PermissionRules{}),
+		NewMemoryApprovalStore(),
+	)
+	call := ToolCall{ID: "call-1", Name: "write_file", Input: `{"path":"main.go","content":"x"}`}
+	event, err := resolver.Resolve(ToolQueueChecked{}, ActionResultInput{
+		ToolBatch: &ToolCallBatch{Calls: []ToolCall{call}},
+		ToolSpecs: []ToolSpec{{Name: "write_file", Risky: true}},
+	})
+	if err != nil {
+		t.Fatalf("Resolve failed: %v", err)
+	}
+	denied, ok := event.(ToolCallDenied)
+	if !ok {
+		t.Fatalf("event = %T, want ToolCallDenied", event)
+	}
+	if denied.Call.ID != call.ID || denied.Reason == "" {
+		t.Fatalf("denied = %+v, want call and reason", denied)
+	}
+}
+
 func TestDefaultActionResultResolverTurnsApprovalResultsIntoEvents(t *testing.T) {
 	resolver := NewDefaultActionResultResolver(NewDefaultPolicy(), NewMemoryApprovalStore())
 	call := ToolCall{ID: "call-1", Name: "bash"}

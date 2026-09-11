@@ -68,7 +68,7 @@ func (r *DefaultActionResultResolver) resolveToolCall(call ToolCall, specs []Too
 	decision := r.decision(call, specs)
 	if decision == DecisionDenied {
 		req := r.policy.PermissionRequest(call, ToolPolicyInput{ToolSpecs: specs})
-		return nil, errors.New("tool denied by permission policy: " + req.Reason)
+		return ToolCallDenied{Call: call, Reason: req.Reason}, nil
 	}
 	if decision == DecisionRunDirectly {
 		return ToolCallReadyToRun{Call: call}, nil

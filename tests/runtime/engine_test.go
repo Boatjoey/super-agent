@@ -333,6 +333,7 @@ func TestFailedToolBatchAnswersEveryToolCall(t *testing.T) {
 			{ID: "call-2", Name: "bash", Input: "printf two"},
 			{ID: "call-3", Name: "bash", Input: "printf three"},
 		}},
+		{Content: "done"},
 	}}
 	tools := &fakeTool{
 		results: map[string]string{"bash": "ok"},
@@ -350,8 +351,8 @@ func TestFailedToolBatchAnswersEveryToolCall(t *testing.T) {
 	session := NewSession(engine)
 	events := make(chan SessionNotification, 20)
 	approvals := make(chan ApprovalDecision, 1)
-	if err := session.RunTurn(context.Background(), "run tools", events, approvals); err == nil {
-		t.Fatal("RunTurn succeeded, want policy denial")
+	if err := session.RunTurn(context.Background(), "run tools", events, approvals); err != nil {
+		t.Fatalf("RunTurn failed: %v", err)
 	}
 	for range events {
 	}
@@ -360,14 +361,24 @@ func TestFailedToolBatchAnswersEveryToolCall(t *testing.T) {
 	// answered, so a batch that fails partway through still has to close out
 	// every call, using the real call ids.
 	var got []string
+	var denied string
 	for _, message := range engine.Messages() {
 		if message.Role == RoleTool {
 			got = append(got, message.ToolCallID)
+			if message.ToolCallID == "call-2" {
+				denied = message.Content
+			}
 		}
 	}
 	want := []string{"call-1", "call-2", "call-3"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("answered tool calls = %v, want %v", got, want)
+	}
+	if denied != "denied by permission policy: denied by test policy" {
+		t.Fatalf("denied result = %q", denied)
+	}
+	if len(tools.calls) != 2 || tools.calls[0].ID != "call-1" || tools.calls[1].ID != "call-3" {
+		t.Fatalf("executed calls = %+v, want call-1 and call-3", tools.calls)
 	}
 }
 

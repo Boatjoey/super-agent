@@ -88,7 +88,9 @@ QueuedAction { RunID, ActionID, ScheduledAction }
   -> atomic RuntimeData + ActionPlan commit
 ```
 
-`ActionResultResolver` maps model/tool action results directly to events accepted by the transition table. It starts tool batches and classifies each queued call into `ToolCallNeedsApproval`, `ToolCallReadyToRun`, or a policy denial error. A batch is the context unit; a call is the approval and execution unit. `runtime/execution` owns command classification, protected path checks, network default-deny behavior, and structured permission requests.
+`ActionResultResolver` maps model/tool action results directly to events accepted by the transition table. It starts tool batches and classifies each queued call into `ToolCallNeedsApproval`, `ToolCallReadyToRun`, or `ToolCallDenied`. A denial is appended as that call's tool result, then queue processing continues so the model can choose another action. A batch is the context unit; a call is the approval and execution unit. `runtime/execution` owns command classification, protected path checks, network default-deny behavior, and structured permission requests.
+
+Command classification is a text heuristic for approval routing, not a security boundary. Absolute command paths, shell expansion, interpreters, generated scripts, and indirect dependency downloads can evade static classification. Tool processes are not isolated by namespaces, cgroups, seccomp, containers, or privilege separation; they run with the current user's authority. Real isolation must be enforced below the classifier.
 
 ## Runtime Terms
 

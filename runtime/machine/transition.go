@@ -35,6 +35,7 @@ func newTransitionRegistry() map[transitionKey]transitionHandler {
 		{transitionKey{StateAdvancingQueue, eventToolBatchFinished}, adaptTransition(handleToolBatchFinished)},
 		{transitionKey{StateAdvancingQueue, eventToolCallNeedsApproval}, adaptTransition(handleToolCallNeedsApproval)},
 		{transitionKey{StateAdvancingQueue, eventToolCallReadyToRun}, adaptTransition(handleToolCallReadyToRun)},
+		{transitionKey{StateAdvancingQueue, eventToolCallDenied}, adaptTransition(handleToolCallDenied)},
 		{transitionKey{event: eventErrorOccurred}, adaptTransition(handleErrorOccurred)},
 		{transitionKey{event: eventCancelRequested}, adaptTransition(handleCancelRequested)},
 		{transitionKey{event: eventResetRequested}, adaptTransition(handleResetRequested)},
@@ -225,6 +226,23 @@ func handleToolCallReadyToRun(snapshot MachineSnapshot, event ToolCallReadyToRun
 		NextState:          StateRunningTool,
 		RuntimeDataChanges: []RuntimeDataChange{AdvanceToolCallBatch{}, SetCurrentTool{Call: event.Call}},
 		ActionPlan:         ActionPlan{Schedule: []ScheduledAction{RunTool{Call: event.Call}}},
+	}, nil
+}
+
+func handleToolCallDenied(snapshot MachineSnapshot, event ToolCallDenied) (TransitionResult, error) {
+	if snapshot.queue.next == nil {
+		return protocolViolation(snapshot, event, "denied call has no next tool")
+	}
+	if !sameToolCall(event.Call, *snapshot.queue.next) {
+		return protocolViolation(snapshot, event, "denied call does not match next tool")
+	}
+	return TransitionResult{
+		NextState: StateAdvancingQueue,
+		RuntimeDataChanges: []RuntimeDataChange{
+			AdvanceToolCallBatch{},
+			AppendToolResult{Call: event.Call, Result: "denied by permission policy: " + event.Reason},
+		},
+		ActionPlan: ActionPlan{Schedule: []ScheduledAction{CheckToolQueue{}}},
 	}, nil
 }
 

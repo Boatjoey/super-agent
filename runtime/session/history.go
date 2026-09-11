@@ -66,6 +66,9 @@ func (s *Session) Compact(ctx context.Context, summary string, keepNewest int) e
 	if keepNewest < 1 {
 		keepNewest = 4
 	}
+	if nonSystemMessageCount(snapshot.Messages) <= keepNewest {
+		return nil
+	}
 	summary = strings.TrimSpace(summary)
 	if summary == "" {
 		var err error
@@ -116,6 +119,16 @@ func (s *Session) Undo() error {
 	return nil
 }
 
+func nonSystemMessageCount(messages []Message) int {
+	count := 0
+	for _, message := range messages {
+		if message.Role != RoleSystem {
+			count++
+		}
+	}
+	return count
+}
+
 func compactedMessages(messages []Message, summary string, keepNewest int) []Message {
 	var system, rest []Message
 	for _, message := range messages {
@@ -130,5 +143,11 @@ func compactedMessages(messages []Message, summary string, keepNewest int) []Mes
 	}
 	kept := append([]Message(nil), system...)
 	kept = append(kept, Message{Role: RoleSystem, Content: "Conversation summary:\n" + summary})
-	return append(kept, rest[len(rest)-keepNewest:]...)
+	start := len(rest) - keepNewest
+	if rest[start].Role == RoleTool {
+		for start > 0 && rest[start].Role == RoleTool {
+			start--
+		}
+	}
+	return append(kept, rest[start:]...)
 }

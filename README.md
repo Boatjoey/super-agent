@@ -87,6 +87,8 @@ truncates the corresponding transcript.
 
 ## Tools
 
+Permission modes and command classification reduce accidental execution; they are not a sandbox. Shell syntax, absolute paths, interpreters, generated scripts, and indirect network access can evade text classification. Tools run with the current user's authority without namespace, cgroup, or seccomp isolation.
+
 Default tools:
 
 - `read_file`: read workspace files with optional line ranges.

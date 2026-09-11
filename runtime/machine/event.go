@@ -14,6 +14,7 @@ const (
 	eventToolBatchReceived        eventKind = "ToolBatchReceived"
 	eventToolCallNeedsApproval    eventKind = "ToolCallNeedsApproval"
 	eventToolCallReadyToRun       eventKind = "ToolCallReadyToRun"
+	eventToolCallDenied           eventKind = "ToolCallDenied"
 	eventToolBatchFinished        eventKind = "ToolBatchFinished"
 	eventToolResultReceived       eventKind = "ToolResultReceived"
 	eventApprovalGranted          eventKind = "ApprovalGranted"
@@ -62,6 +63,14 @@ type ToolCallReadyToRun struct {
 
 func (ToolCallReadyToRun) isEvent()        {}
 func (ToolCallReadyToRun) kind() eventKind { return eventToolCallReadyToRun }
+
+type ToolCallDenied struct {
+	Call   ToolCall
+	Reason string
+}
+
+func (ToolCallDenied) isEvent()        {}
+func (ToolCallDenied) kind() eventKind { return eventToolCallDenied }
 
 type ToolBatchFinished struct{}
 
@@ -126,6 +135,7 @@ var AllEvents = []Event{
 	ToolBatchReceived{},
 	ToolCallNeedsApproval{},
 	ToolCallReadyToRun{},
+	ToolCallDenied{},
 	ToolBatchFinished{},
 	ToolResultReceived{},
 	ApprovalGranted{},

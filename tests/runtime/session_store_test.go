@@ -114,6 +114,67 @@ func TestCompactKeepsSystemInstructionsAndNewestContext(t *testing.T) {
 	}
 }
 
+func TestCompactKeepsAssistantForRetainedToolResults(t *testing.T) {
+	st := store.New(t.TempDir())
+	call1 := ToolCall{ID: "call-1", Name: "first"}
+	call2 := ToolCall{ID: "call-2", Name: "second"}
+	messages := []Message{
+		{Role: RoleSystem, Content: "rules"},
+		{Role: RoleAssistant, ToolCalls: []*ToolCall{&call1, &call2}},
+		{Role: RoleTool, ToolCallID: call1.ID, ToolName: call1.Name, Content: "one"},
+		{Role: RoleTool, ToolCallID: call2.ID, ToolName: call2.Name, Content: "two"},
+		{Role: RoleUser, Content: "next"},
+		{Role: RoleAssistant, Content: "done"},
+	}
+	meta, err := st.Create(store.Metadata{Provider: "test", Model: "test-model", CWD: t.TempDir()}, messages)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngineWithExecutor(&staticExecutor{}, messages)
+	engine.ReplaceMessages(messages)
+	session := persistentSession(engine, st, meta)
+	if err := session.Compact(context.Background(), "summary", 3); err != nil {
+		t.Fatal(err)
+	}
+
+	got := session.Snapshot().Messages
+	if len(got) != 7 {
+		t.Fatalf("messages = %+v, want system, summary, and complete retained turn", got)
+	}
+	if got[2].Role != RoleAssistant || len(got[2].ToolCalls) != 2 {
+		t.Fatalf("retained boundary = %+v, want parent assistant tool call", got[2])
+	}
+	if got[3].ToolCallID != call1.ID || got[4].ToolCallID != call2.ID {
+		t.Fatalf("retained tool results = %+v", got[3:5])
+	}
+}
+
+func TestCompactSkipsSummaryWhenHistoryAlreadyFits(t *testing.T) {
+	st := store.New(t.TempDir())
+	messages := []Message{
+		{Role: RoleSystem, Content: "rules"},
+		{Role: RoleUser, Content: "one"},
+		{Role: RoleAssistant, Content: "two"},
+	}
+	meta, err := st.Create(store.Metadata{Provider: "test", Model: "test-model", CWD: t.TempDir()}, messages)
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor := &staticExecutor{}
+	engine := NewEngineWithExecutor(executor, messages)
+	engine.ReplaceMessages(messages)
+	session := persistentSession(engine, st, meta)
+	if err := session.Compact(context.Background(), "", 4); err != nil {
+		t.Fatal(err)
+	}
+	if executor.calls != 0 {
+		t.Fatalf("summary calls = %d, want 0", executor.calls)
+	}
+	if got := session.Snapshot().Messages; len(got) != len(messages) {
+		t.Fatalf("messages = %+v, want unchanged history", got)
+	}
+}
+
 func TestUndoRestoresWriteFileCheckpoint(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "fixture.txt")
@@ -190,9 +251,12 @@ func (w *checkpointWorkspace) Capture(paths []string) ([]FileSnapshot, error) {
 
 func (*checkpointWorkspace) Restore([]FileSnapshot) error { return nil }
 
-type staticExecutor struct{}
+type staticExecutor struct {
+	calls int
+}
 
 func (x *staticExecutor) Execute(context.Context, ScheduledAction, ScheduledActionInput, func(StreamChunk)) (ScheduledActionResult, error) {
+	x.calls++
 	return ModelReplied{Response: ModelResponse{Content: "model summary"}}, nil
 }
 

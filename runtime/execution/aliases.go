@@ -38,6 +38,7 @@ type ToolBatchReceived = machine.ToolBatchReceived
 type ToolBatchFinished = machine.ToolBatchFinished
 type ToolCallNeedsApproval = machine.ToolCallNeedsApproval
 type ToolCallReadyToRun = machine.ToolCallReadyToRun
+type ToolCallDenied = machine.ToolCallDenied
 type ToolResultReceived = machine.ToolResultReceived
 type ApprovalGranted = machine.ApprovalGranted
 type ApprovalAlwaysGranted = machine.ApprovalAlwaysGranted

@@ -50,6 +50,8 @@ func transitionSnapshot(state State, event Event) MachineSnapshot {
 		call = ev.Call
 	case ToolCallReadyToRun:
 		call = ev.Call
+	case ToolCallDenied:
+		call = ev.Call
 	}
 	switch state {
 	case StateAdvancingQueue:
@@ -235,6 +237,22 @@ func TestTransitionTable(t *testing.T) {
 		{
 			name: "ToolCallReadyToRun/rejects_when_not_AdvancingQueue", state: StateIdle,
 			event:   ToolCallReadyToRun{Call: sampleToolCall()},
+			wantErr: true,
+		},
+
+		// --- ToolCallDenied ---
+		{
+			name: "ToolCallDenied/AdvancingQueue->AdvancingQueue", state: StateAdvancingQueue,
+			event:                  ToolCallDenied{Call: sampleToolCall(), Reason: "plan mode"},
+			wantState:              StateAdvancingQueue,
+			runtimeDataChangeCount: 2,
+			scheduledActionCount:   1,
+			runtimeDataChangeTypes: []RuntimeDataChange{AdvanceToolCallBatch{}, AppendToolResult{}},
+			scheduledActionTypes:   []ScheduledAction{CheckToolQueue{}},
+		},
+		{
+			name: "ToolCallDenied/rejects_when_not_AdvancingQueue", state: StateIdle,
+			event:   ToolCallDenied{Call: sampleToolCall(), Reason: "plan mode"},
 			wantErr: true,
 		},
 

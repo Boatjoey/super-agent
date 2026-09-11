@@ -80,3 +80,4 @@
 - `YOLO=true` in `.env` enables bypass only when no explicit `--approval-mode` flag was passed; the flag always wins over the environment.
 - LLM provider config comes from `~/.superagent/settings.json`.
 - Permission mode and allow/deny rules come from `~/.superagent/settings.json`.
+- Command classification routes approvals but is not a security boundary; tools still run without kernel isolation.
