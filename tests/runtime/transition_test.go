@@ -240,11 +240,14 @@ func TestTransitionTable(t *testing.T) {
 
 		// --- ErrorOccurred ---
 		{
+			// No tool call reached the transcript, so none may be answered: a
+			// tool result without a matching tool call is rejected by the
+			// provider on the next request.
 			name: "ErrorOccurred/WaitingLLM->Idle", state: StateWaitingLLM,
 			event:                  ErrorOccurred{Err: errors.New("boom")},
 			wantState:              StateIdle,
-			runtimeDataChangeCount: 5, clearExistingActions: true,
-			runtimeDataChangeTypes: []RuntimeDataChange{FlushStreamingAssistant{}, AppendToolResult{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
+			runtimeDataChangeCount: 4, clearExistingActions: true,
+			runtimeDataChangeTypes: []RuntimeDataChange{FlushStreamingAssistant{}, ClearPendingTool{}, ClearCurrentTool{}, ClearToolCallBatch{}},
 		},
 		{
 			name: "ErrorOccurred/RunningTool->Idle", state: StateRunningTool,

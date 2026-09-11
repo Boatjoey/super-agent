@@ -16,6 +16,10 @@ const (
 	defaultCommandTimeout = 30 * time.Second
 	maxCommandTimeout     = 120 * time.Second
 	defaultOutputBytes    = 20000
+	// maxOutputBytes bounds memory the same way maxCommandTimeout bounds time.
+	// Without it the model can pass an arbitrary limit and buffer a command's
+	// entire output.
+	maxOutputBytes = 200000
 )
 
 type RunCommandTool struct{}
@@ -211,8 +215,18 @@ func runExec(ctx context.Context, cwd string, timeout time.Duration, maxBytes in
 	if cwd != "" {
 		cmd.Dir = cwd
 	}
-	output, err := cmd.CombinedOutput()
-	result := trimOutput(string(output), maxBytes)
+	cmd.Env = childEnv()
+	isolateProcessGroup(cmd)
+
+	// stdout and stderr share one capped writer, so the cap applies to their
+	// combined output and neither stream can fill a pipe buffer and block the
+	// child.
+	sink := &cappedBuffer{limit: maxBytes}
+	cmd.Stdout = sink
+	cmd.Stderr = sink
+
+	err := cmd.Run()
+	result := sink.String()
 	if runCtx.Err() != nil {
 		return result, runCtx.Err()
 	}
@@ -240,14 +254,10 @@ func outputLimit(maxBytes int) int {
 	if maxBytes <= 0 {
 		return defaultOutputBytes
 	}
-	return maxBytes
-}
-
-func trimOutput(output string, maxBytes int) string {
-	if len(output) <= maxBytes {
-		return output
+	if maxBytes > maxOutputBytes {
+		return maxOutputBytes
 	}
-	return output[:maxBytes] + "\n... truncated"
+	return maxBytes
 }
 
 func plural(count int, singular, plural string) string {

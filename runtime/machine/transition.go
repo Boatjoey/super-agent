@@ -228,20 +228,41 @@ func handleToolCallReadyToRun(snapshot MachineSnapshot, event ToolCallReadyToRun
 	}, nil
 }
 
-func handleErrorOccurred(_ MachineSnapshot, event ErrorOccurred) (TransitionResult, error) {
+func handleErrorOccurred(snapshot MachineSnapshot, event ErrorOccurred) (TransitionResult, error) {
+	reason := runtimeErrorMessage(event.Err)
+	// Every tool call the model asked for must be answered. An unanswered call
+	// produces a transcript the provider rejects with a 400, and because the
+	// transcript is persisted the failure survives a resume.
+	//
+	// A dispatched call is always in exactly one of three places: awaiting
+	// approval, running, or already answered by an earlier append. So the
+	// outstanding set is the pending call, the current call, and every call the
+	// batch has not reached yet.
+	changes := []RuntimeDataChange{FlushStreamingAssistant{Interrupted: true}}
+	if snapshot.pendingTool != nil {
+		changes = append(changes, AppendToolResult{
+			Call:   *snapshot.pendingTool,
+			Result: "not executed: " + reason,
+		})
+	}
+	if snapshot.currentTool != nil {
+		changes = append(changes, AppendToolResult{Call: *snapshot.currentTool, Result: reason})
+	}
+	for _, call := range snapshot.queue.remaining {
+		changes = append(changes, AppendToolResult{
+			Call:   call,
+			Result: "not executed: " + reason,
+		})
+	}
+	changes = append(changes,
+		ClearPendingTool{},
+		ClearCurrentTool{},
+		ClearToolCallBatch{},
+	)
 	return TransitionResult{
-		NextState: StateIdle,
-		RuntimeDataChanges: []RuntimeDataChange{
-			FlushStreamingAssistant{Interrupted: true},
-			AppendToolResult{
-				Call:   ToolCall{ID: "runtime_error", Name: "runtime_error"},
-				Result: runtimeErrorMessage(event.Err),
-			},
-			ClearPendingTool{},
-			ClearCurrentTool{},
-			ClearToolCallBatch{},
-		},
-		ActionPlan: ActionPlan{ClearExisting: true},
+		NextState:          StateIdle,
+		RuntimeDataChanges: changes,
+		ActionPlan:         ActionPlan{ClearExisting: true},
 	}, nil
 }
 

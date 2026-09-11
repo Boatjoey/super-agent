@@ -390,7 +390,7 @@ func TestStoreSerializesConcurrentAppends(t *testing.T) {
 	}
 }
 
-func TestResolverErrorAppendsSingleRuntimeErrorMessage(t *testing.T) {
+func TestResolverErrorLeavesNoToolMessageWhenNothingWasAsked(t *testing.T) {
 	model := &scriptedModel{responses: []ModelResponse{
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "bash", Input: "pwd"}}},
 	}}
@@ -405,13 +405,12 @@ func TestResolverErrorAppendsSingleRuntimeErrorMessage(t *testing.T) {
 		t.Fatal("RunTurn error = nil, want tools-disabled error")
 	}
 
-	count := 0
-	for _, message := range session.Snapshot().Messages {
-		if message.ToolName == "runtime_error" {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Fatalf("runtime_error messages = %d, want exactly 1", count)
+	// The resolver rejects the tool call before it reaches the transcript, so
+	// the assistant never asked for anything and nothing may be answered. The
+	// previous behaviour appended a tool message carrying a placeholder id,
+	// which the provider rejects on the next request.
+	messages := session.Snapshot().Messages
+	if len(messages) != 1 || messages[0].Role != RoleUser {
+		t.Fatalf("messages = %+v, want only the user message", messages)
 	}
 }

@@ -5,6 +5,10 @@ import "fmt"
 type queueView struct {
 	hasBatch bool
 	next     *ToolCall
+	// remaining holds the batch calls from the current index onward, i.e. every
+	// call that has not been dispatched yet. Error handling needs the full list
+	// to answer each tool call the model asked for.
+	remaining []ToolCall
 }
 
 func (q queueView) empty() bool { return q.hasBatch && q.next == nil }
@@ -26,9 +30,10 @@ func SnapshotFrom(runtimeData RuntimeData) (MachineSnapshot, error) {
 		currentTool: cloneToolCall(runtimeData.CurrentTool),
 		queue:       queueView{hasBatch: runtimeData.ToolBatch != nil},
 	}
-	if runtimeData.ToolBatch != nil && runtimeData.ToolBatch.Index < len(runtimeData.ToolBatch.Calls) {
-		call := runtimeData.ToolBatch.Calls[runtimeData.ToolBatch.Index]
+	if batch := runtimeData.ToolBatch; batch != nil && batch.Index < len(batch.Calls) {
+		call := batch.Calls[batch.Index]
 		snapshot.queue.next = &call
+		snapshot.queue.remaining = append([]ToolCall(nil), batch.Calls[batch.Index:]...)
 	}
 	return snapshot, nil
 }

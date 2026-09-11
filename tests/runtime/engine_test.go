@@ -263,7 +263,7 @@ func TestEngineRunsScheduledActionsThroughInjectedExecutor(t *testing.T) {
 	}
 }
 
-func TestEngineRecordsRuntimeErrorInMessagesForNextTurn(t *testing.T) {
+func TestModelFailureLeavesNoFabricatedToolMessage(t *testing.T) {
 	executor := &failingOnceExecutor{}
 	engine := NewEngineWithExecutor(executor, nil)
 	if err := engine.Ready(); err != nil {
@@ -279,21 +279,95 @@ func TestEngineRecordsRuntimeErrorInMessagesForNextTurn(t *testing.T) {
 	for range events {
 	}
 
+	// A model call that fails before requesting any tool must not leave a tool
+	// message behind. A tool result with no matching tool call is rejected by
+	// the provider on the next request, and the transcript is persisted, so the
+	// malformed sequence would survive a resume.
 	messages := engine.Messages()
-	if len(messages) != 2 {
-		t.Fatalf("messages = %+v, want user plus runtime error", messages)
+	if len(messages) != 1 {
+		t.Fatalf("messages = %+v, want only the user message", messages)
 	}
-	if got := messages[1]; got.Role != RoleTool || got.ToolName != "runtime_error" || got.Content != "provider timeout" {
-		t.Fatalf("runtime error message = %+v", got)
+	if messages[0].Role != RoleUser {
+		t.Fatalf("messages[0] = %+v, want the user message", messages[0])
 	}
 
 	runSession(t, engine, "continue")
 
-	if len(executor.seen) != 3 {
-		t.Fatalf("second model input = %+v, want previous user, runtime error, new user", executor.seen)
+	if executor.calls != 2 {
+		t.Fatalf("model calls = %d, want 2", executor.calls)
 	}
-	if got := executor.seen[1]; got.ToolName != "runtime_error" || got.Content != "provider timeout" {
-		t.Fatalf("second model input missing runtime error: %+v", executor.seen)
+	// seen holds the input of the most recent call.
+	if len(executor.seen) != 2 {
+		t.Fatalf("second model input = %+v, want previous user and new user", executor.seen)
+	}
+	for _, message := range executor.seen {
+		if message.Role == RoleTool {
+			t.Fatalf("second model input carries a fabricated tool message: %+v", executor.seen)
+		}
+	}
+}
+
+// denyNthPolicy runs every tool call directly except the nth, which it denies.
+// It reproduces a tool batch that fails partway through.
+type denyNthPolicy struct {
+	denyAt int
+	seen   int
+}
+
+func (p *denyNthPolicy) ClassifyToolCall(ToolCall, ToolPolicyInput) ToolDecision {
+	p.seen++
+	if p.seen == p.denyAt {
+		return DecisionDenied
+	}
+	return DecisionRunDirectly
+}
+
+func (p *denyNthPolicy) PermissionRequest(call ToolCall, _ ToolPolicyInput) PermissionRequest {
+	return PermissionRequest{ToolName: call.Name, Reason: "denied by test policy"}
+}
+
+func TestFailedToolBatchAnswersEveryToolCall(t *testing.T) {
+	model := &scriptedModel{responses: []ModelResponse{
+		{ToolCalls: []ToolCall{
+			{ID: "call-1", Name: "bash", Input: "printf one"},
+			{ID: "call-2", Name: "bash", Input: "printf two"},
+			{ID: "call-3", Name: "bash", Input: "printf three"},
+		}},
+	}}
+	tools := &fakeTool{
+		results: map[string]string{"bash": "ok"},
+		specs:   []ToolSpec{{Name: "bash", Risky: true}},
+	}
+	engine := NewEngineWithExecutorAndPolicy(
+		NewDefaultScheduledActionExecutor(model, tools),
+		&denyNthPolicy{denyAt: 2},
+		nil,
+	)
+	if err := engine.Ready(); err != nil {
+		t.Fatal(err)
+	}
+
+	session := NewSession(engine)
+	events := make(chan SessionNotification, 20)
+	approvals := make(chan ApprovalDecision, 1)
+	if err := session.RunTurn(context.Background(), "run tools", events, approvals); err == nil {
+		t.Fatal("RunTurn succeeded, want policy denial")
+	}
+	for range events {
+	}
+
+	// A provider rejects a request whose assistant tool_calls are not all
+	// answered, so a batch that fails partway through still has to close out
+	// every call, using the real call ids.
+	var got []string
+	for _, message := range engine.Messages() {
+		if message.Role == RoleTool {
+			got = append(got, message.ToolCallID)
+		}
+	}
+	want := []string{"call-1", "call-2", "call-3"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("answered tool calls = %v, want %v", got, want)
 	}
 }
 

@@ -239,22 +239,54 @@ func workspacePath(path string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
+	cwd, err = resolveExisting(cwd)
+	if err != nil {
+		return "", "", err
+	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", "", err
 	}
-	cwd, err = filepath.Abs(cwd)
+	// Resolve symlinks before the containment check. A purely lexical check
+	// accepts `link/passwd` when the workspace holds `link -> /etc`, which reads
+	// and writes outside the workspace.
+	resolved, err := resolveExisting(abs)
 	if err != nil {
 		return "", "", err
 	}
-	rel, err := filepath.Rel(cwd, abs)
+	rel, err := filepath.Rel(cwd, resolved)
 	if err != nil {
 		return "", "", err
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", "", errors.New("path is outside working directory")
 	}
-	return abs, filepath.ToSlash(rel), nil
+	return resolved, filepath.ToSlash(rel), nil
+}
+
+// resolveExisting returns path with every symlink resolved.
+//
+// EvalSymlinks fails on a path that does not exist yet, which is the ordinary
+// case when write_file creates a new file, so the nearest existing ancestor is
+// resolved and the remaining components are re-appended to it.
+func resolveExisting(path string) (string, error) {
+	suffix := ""
+	current := path
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			return filepath.Join(resolved, suffix), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return filepath.Join(current, suffix), nil
+		}
+		suffix = filepath.Join(filepath.Base(current), suffix)
+		current = parent
+	}
 }
 
 func numberedLines(content string, start, end int) string {

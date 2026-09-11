@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os/exec"
-	"strings"
 
 	"super-agent/runtime/protocol"
 )
@@ -32,17 +31,21 @@ func (t BashTool) Run(ctx context.Context, call protocol.ToolCall) (string, erro
 	if command == "" {
 		return "", errors.New("invalid bash command input: must be JSON with 'command' field")
 	}
-	output, err := exec.CommandContext(ctx, "bash", "-lc", command).CombinedOutput()
+	// Routed through runExec so this tool gets the same command timeout, output
+	// cap, process group, and environment scrubbing as every other command tool.
+	output, err := runExec(ctx, "", defaultCommandTimeout, defaultOutputBytes, "bash", "-lc", command)
 	if err == nil {
-		return string(output), nil
+		return output, nil
 	}
 	if ctx.Err() != nil {
-		return string(output), ctx.Err()
+		return output, ctx.Err()
 	}
 	if _, ok := err.(*exec.ExitError); ok {
-		return failedCommandResult(output, err), nil
+		// A non-zero exit status is a normal result rather than a tool failure:
+		// the output and status already read as a diagnosis for the model.
+		return output, nil
 	}
-	return string(output), err
+	return output, err
 }
 
 func bashCommand(input string) string {
@@ -53,12 +56,4 @@ func bashCommand(input string) string {
 		return args.Command
 	}
 	return ""
-}
-
-func failedCommandResult(output []byte, err error) string {
-	result := string(output)
-	if result != "" && !strings.HasSuffix(result, "\n") {
-		result += "\n"
-	}
-	return result + err.Error()
 }
