@@ -162,6 +162,8 @@ func registryWithRunner(runner *commandRunner) *Registry {
 		GitStatusTool{runner: runner},
 		GitDiffTool{runner: runner},
 		BashTool{runner: runner},
+		WebSearchTool{},
+		BrowserFetchTool{},
 	)
 }
 

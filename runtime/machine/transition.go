@@ -96,7 +96,7 @@ func handleEngineReady(MachineSnapshot, EngineReady) (TransitionResult, error) {
 func handleUserMessageSubmitted(_ MachineSnapshot, event UserMessageSubmitted) (TransitionResult, error) {
 	return TransitionResult{
 		NextState:          StateWaitingLLM,
-		RuntimeDataChanges: []RuntimeDataChange{AppendUserMessage{Content: event.Content}},
+		RuntimeDataChanges: []RuntimeDataChange{AppendUserMessage{Content: event.Content, Attachments: event.Attachments}},
 		ActionPlan:         ActionPlan{Schedule: []ScheduledAction{CallModel{}}},
 	}, nil
 }

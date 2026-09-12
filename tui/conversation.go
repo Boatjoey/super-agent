@@ -50,6 +50,7 @@ type MCPServerSummary struct {
 	Tools []string
 }
 type AgentSummary struct{ Name, Provider, Model, PermissionMode string }
+type AttachmentSummary struct{ Name, MIME string }
 
 type ApprovalDecision string
 
@@ -121,4 +122,6 @@ type Conversation interface {
 	CustomCommands() []string
 	ExpandCustomCommand(string, string) (string, error)
 	Export(string) (string, error)
+	Attach(string) (AttachmentSummary, error)
+	PendingAttachments() []AttachmentSummary
 }

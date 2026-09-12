@@ -27,7 +27,8 @@ const (
 )
 
 type UserMessageSubmitted struct {
-	Content string
+	Content     string
+	Attachments []Attachment
 }
 
 func (UserMessageSubmitted) isEvent()        {}

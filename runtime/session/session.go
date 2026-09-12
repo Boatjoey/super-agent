@@ -18,6 +18,8 @@ type Session struct {
 	mu              sync.Mutex
 	closerMu        sync.Mutex
 	closers         []io.Closer
+	attachmentMu    sync.Mutex
+	attachments     []Attachment
 }
 
 func (s *Session) AddCloser(closer io.Closer) {

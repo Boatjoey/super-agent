@@ -2,7 +2,9 @@ package llm
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"strings"
 
 	"super-agent/runtime/protocol"
 
@@ -138,7 +140,23 @@ func toClaudeMessages(messages []protocol.Message) []anthropic.MessageParam {
 	for _, msg := range messages {
 		switch msg.Role {
 		case protocol.RoleUser:
-			result = append(result, anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
+			blocks := []anthropic.ContentBlockParamUnion{anthropic.NewTextBlock(msg.Content)}
+			for _, attachment := range msg.Attachments {
+				switch {
+				case strings.HasPrefix(attachment.MIME, "image/"):
+					blocks = append(blocks, anthropic.NewImageBlockBase64(attachment.MIME, attachment.Data))
+				case attachment.MIME == "application/pdf":
+					blocks = append(blocks, anthropic.NewDocumentBlock(anthropic.Base64PDFSourceParam{Data: attachment.Data}))
+				case strings.HasPrefix(attachment.MIME, "text/"):
+					content, err := base64.StdEncoding.DecodeString(attachment.Data)
+					if err == nil {
+						blocks = append(blocks, anthropic.NewTextBlock("Attachment "+attachment.Name+":\n"+string(content)))
+					}
+				default:
+					blocks = append(blocks, anthropic.NewTextBlock("Attached file: "+attachment.Name+" ("+attachment.MIME+")"))
+				}
+			}
+			result = append(result, anthropic.NewUserMessage(blocks...))
 		case protocol.RoleAssistant:
 			var blocks []anthropic.ContentBlockParamUnion
 			if msg.Content != "" {

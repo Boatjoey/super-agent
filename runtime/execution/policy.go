@@ -122,6 +122,9 @@ func (p *DefaultPolicy) PermissionRequest(call ToolCall, input ToolPolicyInput) 
 		req.CWD = "."
 	}
 	switch call.Name {
+	case "web_search", "browser_fetch":
+		req.CommandClass = CommandClassNetwork
+		req.Reason = "network access requires approval"
 	case "bash":
 		req.Command = jsonStringField(call.Input, "command")
 		req = analyzeCommandRequest(req)

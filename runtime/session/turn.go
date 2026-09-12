@@ -29,7 +29,11 @@ func (s *Session) RunTurn(ctx context.Context, query string, notifications chan<
 		s.emitter.markApprovalConsumed()
 		return decision, nil
 	})
-	err := s.engine.RunTurn(ctx, UserMessageSubmitted{Content: query}, onStreamChunk, approvalWaiter)
+	s.attachmentMu.Lock()
+	attachments := append([]Attachment(nil), s.attachments...)
+	s.attachments = nil
+	s.attachmentMu.Unlock()
+	err := s.engine.RunTurn(ctx, UserMessageSubmitted{Content: query, Attachments: attachments}, onStreamChunk, approvalWaiter)
 	if err != nil {
 		err = s.failTurn(notifications, err)
 	}

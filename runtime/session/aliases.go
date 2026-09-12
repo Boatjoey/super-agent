@@ -10,6 +10,7 @@ import (
 type State = machine.State
 
 type Message = protocol.Message
+type Attachment = protocol.Attachment
 type ToolCall = protocol.ToolCall
 type PermissionRequest = machine.PermissionRequest
 type ApprovalDecision = machine.ApprovalDecision

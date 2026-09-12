@@ -71,6 +71,7 @@ TUI commands:
 - `/undo`: restore the latest non-empty checkpoint, truncate the stored transcript to that checkpoint, and reload the conversation so workspace and history stay consistent.
 - `/review`, `/fix-ci`, and `/commit-message`: start focused model workflows; `/diff` previews the patch and `/branch` shows branch status directly.
 - `/export <markdown|json>` and `/share`: atomically write transcript exports or standalone local HTML under `.super-agent/exports/`.
+- `/attach <path>` and `/attachments`: queue bounded workspace attachments for the next multimodal user message.
 
 TUI keys: `Enter` submits when idle and cancels/restarts with steering input while a turn runs; `Tab` queues a follow-up during a run. `Ctrl+J`, `Shift+Enter`, or `Alt+Enter` inserts a newline. Typing `/` opens the command palette; arrows select and `Tab` or `Enter` completes a command. `Esc` clears input or cancels a run, `Ctrl+U` clears input, `Ctrl+C` cancels or quits, arrows otherwise navigate multiline input or recall single-line prompts without losing the current draft, and Page Up/Down scrolls.
 
@@ -212,6 +213,8 @@ Command classification is a text heuristic for approval routing, not a security 
 Supported permission modes are `ask`, `accept-edits`, `plan`, and `bypass`; `--yolo` maps to `bypass`. The `YOLO=true` environment variable enables bypass only when no explicit `--approval-mode` flag was passed, so a checked-in `.env` cannot silently disable permission prompts. The top-level `sandbox` settings select `strict` or `off` and configure `cpu_seconds`, `memory_mb`, `max_processes`, and `max_open_files`. Strict is the default. Invalid modes fail config load. If the settings file is missing, the app creates a template on startup.
 
 The top-level `lsp_servers` map starts stdio language servers by file extension. Its tools provide push diagnostics, workspace symbols, definitions, references, and document symbols/outlines.
+
+The risky `web_search` and `browser_fetch` tools use the common network permission flow. Browser fetches accept only public HTTP(S), reject local/private DNS results, cap redirects, responses, and time, and extract page text without executing scripts.
 
 The `extensions` settings load prompt-backed custom slash commands, sandboxed lifecycle hooks, `SKILL.md` instructions, and local `plugin.json` bundles. Supported hook events are `startup`, `before_turn`, and `after_turn`.
 

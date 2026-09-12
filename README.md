@@ -147,6 +147,9 @@ Default tools:
 - `bash`: run shell commands after approval.
 - `delegate`: run a child Agent and return its final response. Set `worktree` to
   create an isolated detached Git worktree under `.super-agent/worktrees/`.
+- `web_search`: search the public web after network approval.
+- `browser_fetch`: fetch public HTTP(S) pages with redirect, size, timeout, and
+  private-address protections.
 
 MCP stdio servers are configured in `mcp_servers` by name. Each entry accepts
 `command`, `args`, `env`, `cwd`, `connect_timeout_seconds`, and
@@ -162,6 +165,11 @@ Language servers use stdio and are configured in `lsp_servers` with `command`,
 `lsp_diagnostics`, `lsp_symbols`, `lsp_definition`, `lsp_references`, and
 `lsp_outline` tools.
 
+Use `/attach <path>` to queue a workspace image or file for the next prompt and
+`/attachments` to inspect the queue. Attachments are limited to 10 MiB. Images
+are sent as native multimodal blocks; supported documents are sent as file or
+document blocks.
+
 The `extensions` section supports prompt-backed slash commands, sandboxed
 `startup`/`before_turn`/`after_turn` hooks, `SKILL.md` paths, and local plugin
 directories. A plugin contains `plugin.json` with optional `commands`, `hooks`,
@@ -176,7 +184,6 @@ to an absolute path or a path relative to the workspace.
 
 - Kernel-enforced tool isolation.
 - MCP and dynamic tool providers.
-- Multimodal input and network tools.
 
 The Bubble Tea TUI remains the only interaction surface; headless, server, and
 alternate UI entry points are out of scope.

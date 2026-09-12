@@ -12,13 +12,20 @@ const (
 )
 
 type Message struct {
-	Role             Role        `json:"role"`
-	Content          string      `json:"content,omitempty"`
-	ReasoningContent string      `json:"reasoning_content,omitempty"`
-	ToolCallID       string      `json:"tool_call_id,omitempty"`
-	ToolName         string      `json:"tool_name,omitempty"`
-	ToolCalls        []*ToolCall `json:"tool_calls,omitempty"`
-	Interrupted      bool        `json:"interrupted,omitempty"`
+	Role             Role         `json:"role"`
+	Content          string       `json:"content,omitempty"`
+	ReasoningContent string       `json:"reasoning_content,omitempty"`
+	ToolCallID       string       `json:"tool_call_id,omitempty"`
+	ToolName         string       `json:"tool_name,omitempty"`
+	ToolCalls        []*ToolCall  `json:"tool_calls,omitempty"`
+	Interrupted      bool         `json:"interrupted,omitempty"`
+	Attachments      []Attachment `json:"attachments,omitempty"`
+}
+
+type Attachment struct {
+	Name string `json:"name"`
+	MIME string `json:"mime"`
+	Data string `json:"data"`
 }
 
 type ToolCall struct {

@@ -44,3 +44,33 @@ func TestClaudeModelSendsSystemMessage(t *testing.T) {
 		t.Fatalf("messages = %+v", requestBody.Messages)
 	}
 }
+
+func TestClaudeModelSendsImageAttachment(t *testing.T) {
+	var types []struct {
+		Type string `json:"type"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct {
+				Content json.RawMessage `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(body.Messages[0].Content, &types); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"m\",\"content\":[],\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"ok\"}}\n\ndata: {\"type\":\"message_stop\"}\n\n"))
+	}))
+	defer server.Close()
+	model := NewClaude(ProviderConfig{BaseURL: server.URL, APIKey: "key", Model: "model"})
+	_, err := model.Next(context.Background(), []runtime.Message{{Role: runtime.RoleUser, Content: "inspect", Attachments: []runtime.Attachment{{Name: "pixel.png", MIME: "image/png", Data: "aW1hZ2U="}}}}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(types) != 2 || types[0].Type != "text" || types[1].Type != "image" {
+		t.Fatalf("content types = %+v", types)
+	}
+}

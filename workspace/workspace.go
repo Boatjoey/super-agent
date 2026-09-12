@@ -1,7 +1,9 @@
 package workspace
 
 import (
+	"encoding/base64"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +12,29 @@ import (
 )
 
 type Workspace struct{}
+
+func (Workspace) ReadAttachment(path string) (session.Attachment, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return session.Attachment{}, err
+	}
+	if _, err := capture(absolute); err != nil {
+		return session.Attachment{}, err
+	}
+	info, err := os.Stat(absolute)
+	if err != nil {
+		return session.Attachment{}, err
+	}
+	if info.Size() > 10<<20 {
+		return session.Attachment{}, errors.New("attachment exceeds 10 MiB")
+	}
+	content, err := os.ReadFile(absolute)
+	if err != nil {
+		return session.Attachment{}, err
+	}
+	mime := http.DetectContentType(content)
+	return session.Attachment{Name: filepath.Base(absolute), MIME: mime, Data: base64.StdEncoding.EncodeToString(content)}, nil
+}
 
 func (Workspace) WriteExport(relative string, content []byte) (string, error) {
 	cwd, err := os.Getwd()

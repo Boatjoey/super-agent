@@ -5,7 +5,8 @@ type RuntimeDataChange interface {
 }
 
 type AppendUserMessage struct {
-	Content string
+	Content     string
+	Attachments []Attachment
 }
 
 func (AppendUserMessage) isRuntimeDataChange() {}

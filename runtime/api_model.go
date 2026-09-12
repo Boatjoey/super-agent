@@ -26,6 +26,7 @@ const (
 )
 
 type Message = protocol.Message
+type Attachment = protocol.Attachment
 type ToolCall = protocol.ToolCall
 type ToolCallBatch = machine.ToolCallBatch
 type ToolSpec = protocol.ToolSpec

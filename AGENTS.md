@@ -50,12 +50,13 @@
 - `go run . --no-tools`: run without tools.
 - `go run . --yolo`: auto-approve tools.
 - `go run . --approval-mode <ask|accept-edits|plan|bypass>`: set permission mode.
-- TUI session commands: `/instructions`, `/permissions`, `/permissions mode <mode>`, `/mcp list`, `/mcp add <name> <command> [args...]`, `/mcp remove <name>`, `/mcp restart <name>`, `/sessions`, `/resume <id>`, `/rename <id> <title>`, `/delete-session <id>`, `/fork [title]`, `/memory`, `/remember <text>`, `/forget`, `/compact`, `/undo`.
+- TUI session commands: `/instructions`, `/permissions`, `/permissions mode <mode>`, `/mcp list`, `/mcp add <name> <command> [args...]`, `/mcp remove <name>`, `/mcp restart <name>`, `/sessions`, `/resume <id>`, `/rename <id> <title>`, `/delete-session <id>`, `/fork [title]`, `/memory`, `/remember <text>`, `/forget`, `/attach <path>`, `/attachments`, `/compact`, `/undo`.
 - Agent commands: `/agent`, `/agent <name>`, `/plan`, and `/build`; custom profiles live under `agents` in settings.
 - The `delegate` tool creates persistent child sessions; cancellation follows the parent context, and optional worktrees live under `.super-agent/worktrees/`.
 - `/fork [title]` branches the transcript; `/memory`, `/remember <text>`, and `/forget` manage cross-session memory.
 - Workflow commands: `/review`, `/diff`, `/fix-ci`, `/branch`, and `/commit-message`.
 - `/export <markdown|json>` and `/share` write local files under `.super-agent/exports/`.
+- `/attach <path>` queues a bounded workspace attachment for the next turn; `/attachments` lists the queue.
 - While a turn runs, `Enter` cancels and steers with the new prompt; `Tab` queues a follow-up. Queued prompts run in order.
 - The footer previews the first three queued prompts and the remaining count.
 - The footer shows a `states:` history of the current turn's state transitions (for example `WaitingLLM → AdvancingQueue → RunningTool`); consecutive repeats collapse and the history resets when a new turn starts.
@@ -94,6 +95,7 @@
 - LSP stdio server definitions come from `lsp_servers`; configured servers expose diagnostics, symbols, definitions, references, and outlines as tools.
 - Extensions configure custom commands, `startup`/`before_turn`/`after_turn` hooks, skills, and local plugin manifests.
 - Structured JSONL telemetry correlates run/action IDs, transitions, tools, durations, errors, and token estimates.
+- `web_search` and `browser_fetch` are risky network tools; browser fetch blocks local/private targets and enforces redirect, timeout, and response limits.
 - Command classification routes approvals but is not a security boundary.
 - Linux command tools use strict bubblewrap isolation by default with a read-only host root, writable workspace, policy-controlled networking, ephemeral home/tmp, and `prlimit` resource bounds.
 - Strict sandbox mode fails closed when `bwrap` or `prlimit` is unavailable; unsupported platforms require explicit `sandbox.mode: off`.

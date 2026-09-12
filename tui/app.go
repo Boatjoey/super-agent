@@ -239,6 +239,14 @@ func (a App) footerView() string {
 		}
 	}
 
+	if attachments := a.session.PendingAttachments(); len(attachments) > 0 {
+		names := make([]string, 0, len(attachments))
+		for _, attachment := range attachments {
+			names = append(names, attachment.Name)
+		}
+		b.WriteString(a.styles.Status.Render(" Attachments: "+strings.Join(names, ", ")) + "\n")
+	}
+
 	if call := a.pendingTool; call != nil {
 		prompt := lipgloss.NewStyle().
 			Background(lipgloss.Color("3")).

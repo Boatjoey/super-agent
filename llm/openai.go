@@ -134,10 +134,25 @@ func toOpenAIMessages(messages []protocol.Message) []openai.ChatCompletionMessag
 		case protocol.RoleTool:
 			params = append(params, openai.ToolMessage(msg.Content, msg.ToolCallID))
 		default:
-			params = append(params, openai.UserMessage(msg.Content))
+			params = append(params, openAIUserMessage(msg))
 		}
 	}
 	return params
+}
+
+func openAIUserMessage(message protocol.Message) openai.ChatCompletionMessageParamUnion {
+	if len(message.Attachments) == 0 {
+		return openai.UserMessage(message.Content)
+	}
+	parts := []openai.ChatCompletionContentPartUnionParam{openai.TextContentPart(message.Content)}
+	for _, attachment := range message.Attachments {
+		if strings.HasPrefix(attachment.MIME, "image/") {
+			parts = append(parts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: "data:" + attachment.MIME + ";base64," + attachment.Data, Detail: "auto"}))
+		} else {
+			parts = append(parts, openai.FileContentPart(openai.ChatCompletionContentPartFileFileParam{FileData: openai.String(attachment.Data), Filename: openai.String(attachment.Name)}))
+		}
+	}
+	return openai.UserMessage(parts)
 }
 
 func assistantMessage(content, reasoningContent string, toolCalls []*protocol.ToolCall) openai.ChatCompletionMessageParamUnion {

@@ -10,12 +10,14 @@ import (
 
 var slashCommands = []string{
 	"/clear", "/compact", "/delete-session", "/help", "/instructions", "/permissions",
-	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan", "/fork", "/memory", "/remember", "/forget", "/review", "/diff", "/fix-ci", "/branch", "/commit-message", "/export", "/share",
+	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan", "/fork", "/memory", "/remember", "/forget", "/review", "/diff", "/fix-ci", "/branch", "/commit-message", "/export", "/share", "/attach", "/attachments",
 }
 
 var slashCommandDescriptions = map[string]string{
 	"/clear":          "Reset the conversation",
 	"/agent":          "List or select an agent <name>",
+	"/attach":         "Attach a workspace file <path>",
+	"/attachments":    "List pending attachments",
 	"/build":          "Switch to the build agent",
 	"/branch":         "Show branch and working-tree status",
 	"/commit-message": "Suggest a commit message",
@@ -212,6 +214,29 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.handleExport(parts[1])
 	case "/share":
 		a.handleExport("html")
+	case "/attach":
+		if len(parts) != 2 {
+			a.err = "Usage: /attach <path>"
+			break
+		}
+		attachment, err := a.session.Attach(parts[1])
+		if err != nil {
+			a.err = "Attach failed: " + err.Error()
+			break
+		}
+		a.err = ""
+		a.status = "Attached " + attachment.Name + " (" + attachment.MIME + ")"
+	case "/attachments":
+		attachments := a.session.PendingAttachments()
+		if len(attachments) == 0 {
+			a.status = "No pending attachments"
+		} else {
+			var names []string
+			for _, attachment := range attachments {
+				names = append(names, attachment.Name+" ("+attachment.MIME+")")
+			}
+			a.status = "Attachments:\n- " + strings.Join(names, "\n- ")
+		}
 	case "/instructions":
 		a.err = ""
 		a.status = formatInstructions(a.info.InstructionPaths)

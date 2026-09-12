@@ -90,6 +90,18 @@ func (a *TUIConversation) ExpandCustomCommand(name, arguments string) (string, e
 	return a.agents.ExpandCommand(name, arguments)
 }
 func (a *TUIConversation) Export(format string) (string, error) { return a.session.Export(format) }
+func (a *TUIConversation) Attach(path string) (tui.AttachmentSummary, error) {
+	attachment, err := a.session.Attach(path)
+	return tui.AttachmentSummary{Name: attachment.Name, MIME: attachment.MIME}, err
+}
+func (a *TUIConversation) PendingAttachments() []tui.AttachmentSummary {
+	attachments := a.session.PendingAttachments()
+	result := make([]tui.AttachmentSummary, 0, len(attachments))
+	for _, attachment := range attachments {
+		result = append(result, tui.AttachmentSummary{Name: attachment.Name, MIME: attachment.MIME})
+	}
+	return result
+}
 
 func (a *TUIConversation) Snapshot() tui.ConversationView {
 	return toConversationView(a.session.Snapshot())

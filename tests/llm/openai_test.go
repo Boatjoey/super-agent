@@ -114,6 +114,43 @@ func TestOpenAIModelSendsSystemMessage(t *testing.T) {
 	}
 }
 
+func TestOpenAIModelSendsImageAndFileAttachments(t *testing.T) {
+	var content []struct {
+		Type     string `json:"type"`
+		ImageURL struct {
+			URL string `json:"url"`
+		} `json:"image_url"`
+		File struct {
+			Filename string `json:"filename"`
+			FileData string `json:"file_data"`
+		} `json:"file"`
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct {
+				Content json.RawMessage `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(body.Messages[0].Content, &content); err != nil {
+			t.Fatal(err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"id\":\"x\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer server.Close()
+	model := NewOpenAI(ProviderConfig{BaseURL: server.URL, APIKey: "key", Model: "model"})
+	_, err := model.Next(context.Background(), []runtime.Message{{Role: runtime.RoleUser, Content: "inspect", Attachments: []runtime.Attachment{{Name: "pixel.png", MIME: "image/png", Data: "aW1hZ2U="}, {Name: "note.txt", MIME: "text/plain", Data: "dGV4dA=="}}}}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(content) != 3 || !strings.HasPrefix(content[1].ImageURL.URL, "data:image/png;base64,") || content[2].File.Filename != "note.txt" || content[2].File.FileData != "dGV4dA==" {
+		t.Fatalf("content = %+v", content)
+	}
+}
+
 func TestOpenAIModelUsesSDKDefaultBaseURLWhenConfigBaseURLIsEmpty(t *testing.T) {
 	unsetEnv(t, "OPENAI_BASE_URL")
 	originalTransport := http.DefaultTransport

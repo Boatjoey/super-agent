@@ -15,6 +15,7 @@ const (
 )
 
 type Message = protocol.Message
+type Attachment = protocol.Attachment
 type ToolCall = protocol.ToolCall
 type ModelResponse = protocol.ModelResponse
 type StreamChunk = protocol.StreamChunk

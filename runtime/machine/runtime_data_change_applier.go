@@ -33,7 +33,7 @@ func applyRuntimeDataChange(changeResult *RuntimeDataChangeResult, runtimeDataCh
 	case AppendUserMessage:
 		state.StreamingContent = ""
 		state.StreamingReasoning = ""
-		state.Messages = append(state.Messages, Message{Role: RoleUser, Content: m.Content})
+		state.Messages = append(state.Messages, Message{Role: RoleUser, Content: m.Content, Attachments: append([]Attachment(nil), m.Attachments...)})
 	case AppendAssistantMessage:
 		state.StreamingContent = ""
 		state.StreamingReasoning = ""
@@ -116,6 +116,7 @@ func cloneRuntimeData(runtimeData RuntimeData) RuntimeData {
 
 func cloneMessage(message Message) Message {
 	cloned := message
+	cloned.Attachments = append([]Attachment(nil), message.Attachments...)
 	if message.ToolCalls != nil {
 		cloned.ToolCalls = make([]*ToolCall, len(message.ToolCalls))
 		for i, call := range message.ToolCalls {

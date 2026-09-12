@@ -776,6 +776,10 @@ func (c *notificationOnlyConversation) ExpandCustomCommand(name, arguments strin
 	return strings.ReplaceAll(c.customCommands[name], "$ARGUMENTS", arguments), nil
 }
 func (c *notificationOnlyConversation) Export(string) (string, error) { return "/tmp/export", nil }
+func (c *notificationOnlyConversation) Attach(path string) (tui.AttachmentSummary, error) {
+	return tui.AttachmentSummary{Name: path, MIME: "text/plain"}, nil
+}
+func (c *notificationOnlyConversation) PendingAttachments() []tui.AttachmentSummary { return nil }
 
 func (c *notificationOnlyConversation) Snapshot() tui.ConversationView {
 	if c.rejectSnapshots {
