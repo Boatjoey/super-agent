@@ -91,6 +91,12 @@ app creates this template if the file does not exist:
       "prompt": "Review changes and report defects.",
       "permission_mode": "plan"
     }
+  },
+  "extensions": {
+    "commands": {"explain": "Explain $ARGUMENTS"},
+    "hooks": {"after_turn": ["go test ./..."]},
+    "skills": [".superagent/skills/reviewer"],
+    "plugins": [".superagent/plugins/team"]
   }
 }
 ```
@@ -153,11 +159,15 @@ Language servers use stdio and are configured in `lsp_servers` with `command`,
 `lsp_diagnostics`, `lsp_symbols`, `lsp_definition`, `lsp_references`, and
 `lsp_outline` tools.
 
+The `extensions` section supports prompt-backed slash commands, sandboxed
+`startup`/`before_turn`/`after_turn` hooks, `SKILL.md` paths, and local plugin
+directories. A plugin contains `plugin.json` with optional `commands`, `hooks`,
+and skill paths relative to the plugin directory.
+
 ## Roadmap
 
 - Kernel-enforced tool isolation.
 - MCP and dynamic tool providers.
-- Hooks, custom commands, skills, and plugins.
 - Observability, export, multimodal input, and network tools.
 
 The Bubble Tea TUI remains the only interaction surface; headless, server, and

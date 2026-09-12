@@ -124,6 +124,23 @@ func TestWorkflowCommandsShowDiffAndBranchStatus(t *testing.T) {
 	}
 }
 
+func TestCustomSlashCommandExpandsArguments(t *testing.T) {
+	session := &notificationOnlyConversation{customCommands: map[string]string{"audit": "Audit $ARGUMENTS"}}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	model = typeText(model, "/audit auth")
+	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("custom command did not start a turn")
+	}
+	msg := <-runCommandAsync(t, cmd)
+	if msg == nil {
+		t.Fatal("custom command returned no message")
+	}
+	if len(session.queries) != 1 || session.queries[0] != "Audit auth" {
+		t.Fatalf("queries = %+v", session.queries)
+	}
+}
+
 func TestSlashPaletteSelectsCommandWithArrowsAndEnter(t *testing.T) {
 	model := newEventOnlyTUI(t)
 	model = typeText(model, "/")
@@ -732,6 +749,7 @@ type notificationOnlyConversation struct {
 	mcpAddedName    string
 	mcpAddedCommand string
 	mcpAddedArgs    []string
+	customCommands  map[string]string
 }
 
 func (c *notificationOnlyConversation) ListAgents() []tui.AgentSummary { return nil }
@@ -746,6 +764,16 @@ func (c *notificationOnlyConversation) GitDiff(context.Context) (string, error) 
 }
 func (c *notificationOnlyConversation) GitStatus(context.Context) (string, error) {
 	return "status", nil
+}
+func (c *notificationOnlyConversation) CustomCommands() []string {
+	var names []string
+	for name := range c.customCommands {
+		names = append(names, name)
+	}
+	return names
+}
+func (c *notificationOnlyConversation) ExpandCustomCommand(name, arguments string) (string, error) {
+	return strings.ReplaceAll(c.customCommands[name], "$ARGUMENTS", arguments), nil
 }
 
 func (c *notificationOnlyConversation) Snapshot() tui.ConversationView {

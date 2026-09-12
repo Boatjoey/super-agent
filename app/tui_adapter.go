@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -76,12 +77,30 @@ func (a *TUIConversation) GitStatus(ctx context.Context) (string, error) {
 	}
 	return a.agents.GitStatus(ctx)
 }
+func (a *TUIConversation) CustomCommands() []string {
+	if a.agents == nil {
+		return nil
+	}
+	return a.agents.CustomCommands()
+}
+func (a *TUIConversation) ExpandCustomCommand(name, arguments string) (string, error) {
+	if a.agents == nil {
+		return "", fmt.Errorf("custom commands are unavailable")
+	}
+	return a.agents.ExpandCommand(name, arguments)
+}
 
 func (a *TUIConversation) Snapshot() tui.ConversationView {
 	return toConversationView(a.session.Snapshot())
 }
 
 func (a *TUIConversation) RunTurn(ctx context.Context, query string, notifications chan<- tui.ConversationNotification, approvals <-chan tui.ApprovalDecision) error {
+	if a.agents != nil {
+		if err := a.agents.RunHook(ctx, "before_turn"); err != nil {
+			close(notifications)
+			return err
+		}
+	}
 	runtimeNotifications := make(chan runtime.SessionNotification, 100)
 	runtimeApprovals := make(chan runtime.ApprovalDecision, 1)
 	done := make(chan struct{})
@@ -114,6 +133,9 @@ func (a *TUIConversation) RunTurn(ctx context.Context, query string, notificatio
 	err := a.session.RunTurn(ctx, query, runtimeNotifications, runtimeApprovals)
 	close(done)
 	bridges.Wait()
+	if a.agents != nil {
+		err = errors.Join(err, a.agents.RunHook(context.WithoutCancel(ctx), "after_turn"))
+	}
 	return err
 }
 

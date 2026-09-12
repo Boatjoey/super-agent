@@ -210,6 +210,15 @@ func TestAgentControllerSwitchesPlanAndBuildProfiles(t *testing.T) {
 	}
 }
 
+func TestConfiguredHooksRequireTools(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Chdir(t.TempDir())
+	_, _, _, err := NewSessionWithExtensions(Config{Provider: "deepseek", NoTools: true, Extensions: Extensions{Hooks: map[string][]string{"startup": {"true"}}}})
+	if err == nil || !strings.Contains(err.Error(), "hooks require tools") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestLoadEmptyAgentsFallsBackToClaudeMd(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("   \n"), 0644); err != nil {

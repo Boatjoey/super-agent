@@ -162,7 +162,12 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 		session.AddCloser(lspCloser)
 		lspCloser = nil
 	}
-	agents := &AgentController{session: session, model: router, profiles: profiles, providers: providers, workflows: &WorkflowController{registry: registry}, base: cwd, current: profile.Name}
+	workflows := &WorkflowController{registry: registry, extensions: cfg.Extensions}
+	if err := workflows.RunHook(context.Background(), "startup"); err != nil {
+		_ = session.Close()
+		return nil, nil, nil, err
+	}
+	agents := &AgentController{session: session, model: router, profiles: profiles, providers: providers, workflows: workflows, base: cwd, current: profile.Name}
 	return session, controller, agents, nil
 }
 

@@ -36,6 +36,7 @@ type Config struct {
 	InstructionSources []string
 	Agents             map[string]AgentSettings
 	Agent              string
+	Extensions         Extensions
 }
 
 type Settings struct {
@@ -47,6 +48,7 @@ type Settings struct {
 	LSPServers  map[string]LSPServerSettings  `json:"lsp_servers"`
 	Agent       string                        `json:"agent"`
 	Agents      map[string]AgentSettings      `json:"agents"`
+	Extensions  ExtensionSettings             `json:"extensions"`
 }
 
 type AgentSettings struct {
@@ -126,6 +128,7 @@ func DefaultSettings() Settings {
 		LSPServers: map[string]LSPServerSettings{},
 		Agent:      "build",
 		Agents:     map[string]AgentSettings{},
+		Extensions: ExtensionSettings{Commands: map[string]string{}, Hooks: map[string][]string{}},
 	}
 }
 
@@ -143,6 +146,10 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 		return Config{}, err
 	}
 	bundle, err := instructions.Load(cwd)
+	if err != nil {
+		return Config{}, err
+	}
+	extensions, err := loadExtensions(settings.Extensions, cwd)
 	if err != nil {
 		return Config{}, err
 	}
@@ -218,6 +225,7 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 		InstructionSources: instructionSourcePaths(bundle),
 		Agents:             settings.Agents,
 		Agent:              firstNonEmpty(settings.Agent, "build"),
+		Extensions:         extensions,
 	}, nil
 }
 

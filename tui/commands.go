@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -74,7 +75,19 @@ func matchingSlashCommands(value string) []string {
 }
 
 func (a App) slashMatches() []string {
-	return matchingSlashCommands(a.input.Value())
+	matches := matchingSlashCommands(a.input.Value())
+	value := a.input.Value()
+	if strings.HasPrefix(value, "/") && !strings.ContainsAny(value, " \t\n") {
+		custom := append([]string(nil), a.session.CustomCommands()...)
+		sort.Strings(custom)
+		for _, name := range custom {
+			command := "/" + strings.TrimPrefix(name, "/")
+			if strings.HasPrefix(command, value) {
+				matches = append(matches, command)
+			}
+		}
+	}
+	return matches
 }
 
 func (a App) completeSelectedSlashCommand() (App, bool) {
@@ -215,7 +228,13 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 	case "/help":
 		a.showHelp = true
 	default:
-		a.err = "Unknown command: " + command
+		arguments := strings.TrimSpace(strings.TrimPrefix(text, command))
+		expanded, err := a.session.ExpandCustomCommand(strings.TrimPrefix(command, "/"), arguments)
+		if err != nil {
+			a.err = "Unknown command: " + command
+			break
+		}
+		return a.submitPrompt(expanded)
 	}
 	return a, nil
 }

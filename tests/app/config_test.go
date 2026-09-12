@@ -104,6 +104,41 @@ func TestLoadConfigReadsLSPServers(t *testing.T) {
 	}
 }
 
+func TestLoadConfigCombinesSkillsCommandsAndPlugins(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	project := t.TempDir()
+	t.Chdir(project)
+	if err := os.MkdirAll(filepath.Join(project, "skill"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "skill", "SKILL.md"), []byte("Use focused tests."), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(project, "plugin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"commands":{"audit":"Audit $ARGUMENTS"},"hooks":{"after_turn":["go test ./..."]}}`
+	if err := os.WriteFile(filepath.Join(project, "plugin", "plugin.json"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".superagent")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"provider":"deepseek","providers":{"deepseek":{}},"extensions":{"commands":{"explain":"Explain $ARGUMENTS"},"skills":["skill"],"plugins":["plugin"]}}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(settings), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(Flags{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Extensions.Commands["audit"] == "" || cfg.Extensions.Commands["explain"] == "" || !strings.Contains(cfg.Extensions.SkillPrompt, "Use focused tests.") || len(cfg.Extensions.Hooks["after_turn"]) != 1 {
+		t.Fatalf("extensions = %+v", cfg.Extensions)
+	}
+}
+
 func TestLoadConfigUsesSettingsPermissionMode(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

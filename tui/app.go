@@ -300,7 +300,11 @@ func (a App) footerView() string {
 			}
 			label := matches[index]
 			if !compact {
-				label = fmt.Sprintf("%-17s %s", label, slashCommandDescriptions[matches[index]])
+				description := slashCommandDescriptions[matches[index]]
+				if description == "" {
+					description = "Custom command"
+				}
+				label = fmt.Sprintf("%-17s %s", label, description)
 			}
 			b.WriteString(style.Render(prefix+label) + "\n")
 		}

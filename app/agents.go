@@ -53,11 +53,22 @@ func (c *AgentController) GitDiff(ctx context.Context) (string, error) {
 func (c *AgentController) GitStatus(ctx context.Context) (string, error) {
 	return c.workflows.GitStatus(ctx)
 }
+func (c *AgentController) RunHook(ctx context.Context, event string) error {
+	return c.workflows.RunHook(ctx, event)
+}
+func (c *AgentController) CustomCommands() []string { return c.workflows.CustomCommands() }
+func (c *AgentController) ExpandCommand(name, arguments string) (string, error) {
+	return c.workflows.ExpandCommand(name, arguments)
+}
 
 func buildAgentProfiles(cfg Config, providers map[string]llm.ProviderConfig) (map[string]AgentProfile, error) {
+	skillPrompt := ""
+	if cfg.Extensions.SkillPrompt != "" {
+		skillPrompt = "\n\nAvailable skills:\n" + cfg.Extensions.SkillPrompt
+	}
 	profiles := map[string]AgentProfile{
-		"build": {Name: "build", Provider: cfg.Provider, Model: cfg.ModelConfig.Model, Prompt: "Build mode: inspect, implement, verify, and finish requested changes.", PermissionMode: cfg.PermissionMode},
-		"plan":  {Name: "plan", Provider: cfg.Provider, Model: cfg.ModelConfig.Model, Prompt: "Plan mode: investigate and propose a plan. Do not modify files or run mutating tools.", PermissionMode: runtime.PermissionModePlan},
+		"build": {Name: "build", Provider: cfg.Provider, Model: cfg.ModelConfig.Model, Prompt: "Build mode: inspect, implement, verify, and finish requested changes." + skillPrompt, PermissionMode: cfg.PermissionMode},
+		"plan":  {Name: "plan", Provider: cfg.Provider, Model: cfg.ModelConfig.Model, Prompt: "Plan mode: investigate and propose a plan. Do not modify files or run mutating tools." + skillPrompt, PermissionMode: runtime.PermissionModePlan},
 	}
 	for name, item := range cfg.Agents {
 		name = strings.TrimSpace(name)
@@ -76,7 +87,7 @@ func buildAgentProfiles(cfg Config, providers map[string]llm.ProviderConfig) (ma
 		if !runtime.ValidPermissionMode(mode) {
 			return nil, errors.New("agent " + name + " has invalid permission mode: " + string(mode))
 		}
-		profiles[name] = AgentProfile{Name: name, Provider: provider, Model: providerCfg.Model, Prompt: strings.TrimSpace(item.Prompt), PermissionMode: mode}
+		profiles[name] = AgentProfile{Name: name, Provider: provider, Model: providerCfg.Model, Prompt: strings.TrimSpace(item.Prompt) + skillPrompt, PermissionMode: mode}
 	}
 	return profiles, nil
 }

@@ -118,4 +118,6 @@ type Conversation interface {
 	ForgetMemories() error
 	GitDiff(context.Context) (string, error)
 	GitStatus(context.Context) (string, error)
+	CustomCommands() []string
+	ExpandCustomCommand(string, string) (string, error)
 }

@@ -212,6 +212,8 @@ Supported permission modes are `ask`, `accept-edits`, `plan`, and `bypass`; `--y
 
 The top-level `lsp_servers` map starts stdio language servers by file extension. Its tools provide push diagnostics, workspace symbols, definitions, references, and document symbols/outlines.
 
+The `extensions` settings load prompt-backed custom slash commands, sandboxed lifecycle hooks, `SKILL.md` instructions, and local `plugin.json` bundles. Supported hook events are `startup`, `before_turn`, and `after_turn`.
+
 ## Build
 
 `./scripts/build-local.sh` builds the app and installs it as `/usr/local/bin/super-agent`. Set `SUPER_AGENT_INSTALL_DIR` to override the install directory for tests or automation.
