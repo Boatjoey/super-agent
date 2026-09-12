@@ -31,14 +31,8 @@ func TestMCPHelperProcess(t *testing.T) {
 }
 
 func TestMCPStdioDiscoversAndCallsTool(t *testing.T) {
-	manager, err := mcptools.Connect(context.Background(), []mcptools.ServerConfig{{
-		Name:           "fake",
-		Command:        os.Args[0],
-		Args:           []string{"-test.run=TestMCPHelperProcess"},
-		Env:            map[string]string{"SUPER_AGENT_MCP_HELPER": "1"},
-		ConnectTimeout: 5 * time.Second,
-		CallTimeout:    5 * time.Second,
-	}})
+	config := fakeMCPConfig("fake")
+	manager, err := mcptools.Connect(context.Background(), []mcptools.ServerConfig{config})
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -69,6 +63,34 @@ func TestMCPStdioDiscoversAndCallsTool(t *testing.T) {
 	}
 }
 
+func TestMCPManagerAddsRemovesAndRestartsServers(t *testing.T) {
+	manager, err := mcptools.Connect(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Close() })
+	config := fakeMCPConfig("dynamic")
+	added, err := manager.Add(context.Background(), config)
+	if err != nil || len(added) != 1 {
+		t.Fatalf("Add = %d tools, %v", len(added), err)
+	}
+	servers := manager.Servers()
+	if len(servers) != 1 || servers[0].Name != "dynamic" || len(servers[0].Tools) != 1 || servers[0].Tools[0] != "echo" {
+		t.Fatalf("Servers = %+v", servers)
+	}
+	oldNames, replacement, err := manager.Restart(context.Background(), "dynamic")
+	if err != nil || len(oldNames) != 1 || len(replacement) != 1 {
+		t.Fatalf("Restart = %+v, %d, %v", oldNames, len(replacement), err)
+	}
+	removed, err := manager.Remove("dynamic")
+	if err != nil || len(removed) != 1 || len(manager.Tools()) != 0 {
+		t.Fatalf("Remove = %+v, tools %d, %v", removed, len(manager.Tools()), err)
+	}
+	if _, err := manager.Remove("dynamic"); err == nil {
+		t.Fatal("second Remove succeeded")
+	}
+}
+
 func TestMCPConnectNormalizesServerFailure(t *testing.T) {
 	_, err := mcptools.Connect(context.Background(), []mcptools.ServerConfig{{
 		Name:           "broken",
@@ -78,5 +100,16 @@ func TestMCPConnectNormalizesServerFailure(t *testing.T) {
 	}})
 	if err == nil || !strings.Contains(err.Error(), `MCP server "broken"`) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func fakeMCPConfig(name string) mcptools.ServerConfig {
+	return mcptools.ServerConfig{
+		Name:           name,
+		Command:        os.Args[0],
+		Args:           []string{"-test.run=TestMCPHelperProcess"},
+		Env:            map[string]string{"SUPER_AGENT_MCP_HELPER": "1"},
+		ConnectTimeout: 5 * time.Second,
+		CallTimeout:    5 * time.Second,
 	}
 }

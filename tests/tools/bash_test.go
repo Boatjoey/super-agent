@@ -132,4 +132,8 @@ func TestToolRegistryAddsDynamicToolsAtomically(t *testing.T) {
 	if err != nil || got != "ran remote" {
 		t.Fatalf("Run dynamic tool = %q, %v", got, err)
 	}
+	registry.Remove("remote")
+	if _, err := registry.Run(context.Background(), runtime.ToolCall{Name: "remote"}); err == nil {
+		t.Fatal("removed tool still runs")
+	}
 }

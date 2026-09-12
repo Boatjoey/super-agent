@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"super-agent/runtime/protocol"
 )
@@ -14,6 +15,7 @@ type Tool interface {
 }
 
 type Registry struct {
+	mu         sync.RWMutex
 	order      []string
 	tools      map[string]Tool
 	checkpoint func(protocol.ToolCall) error
@@ -34,6 +36,12 @@ func NewRegistry(items ...Tool) *Registry {
 // Add atomically adds dynamically discovered tools. No tool is added when a
 // name is empty, duplicated in the batch, or already registered.
 func (r *Registry) Add(items ...Tool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.add(items)
+}
+
+func (r *Registry) add(items []Tool) error {
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
 		if item == nil {
@@ -59,7 +67,26 @@ func (r *Registry) Add(items ...Tool) error {
 	return nil
 }
 
+func (r *Registry) Remove(names ...string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	remove := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		remove[name] = struct{}{}
+		delete(r.tools, name)
+	}
+	order := r.order[:0]
+	for _, name := range r.order {
+		if _, exists := remove[name]; !exists {
+			order = append(order, name)
+		}
+	}
+	r.order = order
+}
+
 func (r *Registry) SetCheckpointCallback(callback func(protocol.ToolCall) error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.checkpoint = callback
 }
 
@@ -92,6 +119,8 @@ func registryWithRunner(runner *commandRunner) *Registry {
 }
 
 func (r *Registry) Specs() []protocol.ToolSpec {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	specs := make([]protocol.ToolSpec, 0, len(r.order))
 	for _, name := range r.order {
 		specs = append(specs, r.tools[name].Spec())
@@ -100,12 +129,15 @@ func (r *Registry) Specs() []protocol.ToolSpec {
 }
 
 func (r *Registry) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
+	r.mu.RLock()
 	tool, ok := r.tools[call.Name]
+	checkpoint := r.checkpoint
+	r.mu.RUnlock()
 	if !ok {
 		return "", errors.New("unknown tool: " + call.Name)
 	}
-	if tool.Spec().Risky && r.checkpoint != nil {
-		if err := r.checkpoint(call); err != nil {
+	if tool.Spec().Risky && checkpoint != nil {
+		if err := checkpoint(call); err != nil {
 			return "", err
 		}
 	}

@@ -43,8 +43,15 @@ type Manager struct {
 
 type server struct {
 	name        string
+	config      ServerConfig
 	session     *sdk.ClientSession
 	callTimeout time.Duration
+	toolNames   []string
+}
+
+type ServerInfo struct {
+	Name  string
+	Tools []string
 }
 
 type remoteTool struct {
@@ -56,7 +63,7 @@ type remoteTool struct {
 func Connect(ctx context.Context, configs []ServerConfig) (*Manager, error) {
 	manager := &Manager{servers: make(map[string]*server)}
 	for _, config := range configs {
-		if err := manager.connect(ctx, config); err != nil {
+		if _, err := manager.Add(ctx, config); err != nil {
 			_ = manager.Close()
 			return nil, err
 		}
@@ -64,12 +71,9 @@ func Connect(ctx context.Context, configs []ServerConfig) (*Manager, error) {
 	return manager, nil
 }
 
-func (m *Manager) connect(ctx context.Context, config ServerConfig) error {
+func connectServer(ctx context.Context, config ServerConfig) (*server, []builtintools.Tool, error) {
 	if config.Name == "" || config.Command == "" {
-		return errors.New("MCP server name and command are required")
-	}
-	if _, exists := m.servers[config.Name]; exists {
-		return fmt.Errorf("MCP server %q is duplicated", config.Name)
+		return nil, nil, errors.New("MCP server name and command are required")
 	}
 	connectTimeout := config.ConnectTimeout
 	if connectTimeout <= 0 {
@@ -88,13 +92,13 @@ func (m *Manager) connect(ctx context.Context, config ServerConfig) error {
 	client := sdk.NewClient(&sdk.Implementation{Name: "super-agent", Version: "dev"}, nil)
 	session, err := client.Connect(connectCtx, &sdk.CommandTransport{Command: command}, nil)
 	if err != nil {
-		return fmt.Errorf("connect MCP server %q: %w", config.Name, err)
+		return nil, nil, fmt.Errorf("connect MCP server %q: %w", config.Name, err)
 	}
-	connected := &server{name: config.Name, session: session, callTimeout: callTimeout}
+	connected := &server{name: config.Name, config: config, session: session, callTimeout: callTimeout}
 	discovered, err := session.ListTools(connectCtx, nil)
 	if err != nil {
 		_ = session.Close()
-		return fmt.Errorf("list tools from MCP server %q: %w", config.Name, err)
+		return nil, nil, fmt.Errorf("list tools from MCP server %q: %w", config.Name, err)
 	}
 
 	batch := make([]builtintools.Tool, 0, len(discovered.Tools))
@@ -102,13 +106,94 @@ func (m *Manager) connect(ctx context.Context, config ServerConfig) error {
 		spec, err := toolSpec(tool)
 		if err != nil {
 			_ = session.Close()
-			return fmt.Errorf("map MCP tool from server %q: %w", config.Name, err)
+			return nil, nil, fmt.Errorf("map MCP tool from server %q: %w", config.Name, err)
 		}
 		batch = append(batch, &remoteTool{server: connected, remoteName: tool.Name, spec: spec})
+		connected.toolNames = append(connected.toolNames, spec.Name)
+	}
+	return connected, batch, nil
+}
+
+func (m *Manager) Add(ctx context.Context, config ServerConfig) ([]builtintools.Tool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return nil, errors.New("MCP manager is closed")
+	}
+	if _, exists := m.servers[config.Name]; exists {
+		return nil, fmt.Errorf("MCP server %q is duplicated", config.Name)
+	}
+	connected, batch, err := connectServer(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	existing := make(map[string]struct{}, len(m.tools))
+	for _, tool := range m.tools {
+		existing[tool.Spec().Name] = struct{}{}
+	}
+	for _, tool := range batch {
+		if _, collision := existing[tool.Spec().Name]; collision {
+			_ = connected.session.Close()
+			return nil, fmt.Errorf("MCP tool %q is duplicated", tool.Spec().Name)
+		}
 	}
 	m.servers[config.Name] = connected
 	m.tools = append(m.tools, batch...)
-	return nil
+	return append([]builtintools.Tool(nil), batch...), nil
+}
+
+func (m *Manager) Remove(name string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	connected, exists := m.servers[name]
+	if !exists {
+		return nil, fmt.Errorf("MCP server %q not found", name)
+	}
+	delete(m.servers, name)
+	kept := m.tools[:0]
+	for _, tool := range m.tools {
+		remote, ok := tool.(*remoteTool)
+		if !ok || remote.server != connected {
+			kept = append(kept, tool)
+		}
+	}
+	m.tools = kept
+	return append([]string(nil), connected.toolNames...), connected.session.Close()
+}
+
+func (m *Manager) Restart(ctx context.Context, name string) ([]string, []builtintools.Tool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	old, exists := m.servers[name]
+	if !exists {
+		return nil, nil, fmt.Errorf("MCP server %q not found", name)
+	}
+	replacement, batch, err := connectServer(ctx, old.config)
+	if err != nil {
+		return nil, nil, err
+	}
+	kept := m.tools[:0]
+	for _, tool := range m.tools {
+		remote, ok := tool.(*remoteTool)
+		if !ok || remote.server != old {
+			kept = append(kept, tool)
+		}
+	}
+	m.tools = append(kept, batch...)
+	m.servers[name] = replacement
+	_ = old.session.Close()
+	return append([]string(nil), old.toolNames...), append([]builtintools.Tool(nil), batch...), nil
+}
+
+func (m *Manager) Servers() []ServerInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]ServerInfo, 0, len(m.servers))
+	for name, server := range m.servers {
+		result = append(result, ServerInfo{Name: name, Tools: append([]string(nil), server.toolNames...)})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result
 }
 
 func (m *Manager) Tools() []builtintools.Tool {
