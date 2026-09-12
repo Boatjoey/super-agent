@@ -89,7 +89,8 @@ app creates this template if the file does not exist:
   "agents": {
     "reviewer": {
       "prompt": "Review changes and report defects.",
-      "permission_mode": "plan"
+      "permission_mode": "plan",
+      "tools": ["read_file", "search", "git_diff", "lsp_diagnostics"]
     }
   },
   "extensions": {
@@ -107,7 +108,7 @@ the binary.
 
 `build` and `plan` are built-in Agent profiles. Use `/agent` to list profiles,
 `/agent <name>` to switch, or `/plan` and `/build` as shortcuts. Custom entries
-may override `provider`, `model`, `prompt`, and `permission_mode`; switching
+may override `provider`, `model`, `prompt`, `tools`, and `permission_mode`; switching
 profiles clears the current transcript.
 
 Instructions are loaded from optional `~/.superagent/AGENTS.md`, then from
@@ -163,7 +164,7 @@ updates `settings.json` atomically.
 Language servers use stdio and are configured in `lsp_servers` with `command`,
 `args`, `extensions`, and `language_id`. Configured servers expose
 `lsp_diagnostics`, `lsp_symbols`, `lsp_definition`, `lsp_references`, and
-`lsp_outline` tools.
+`lsp_outline` tools. `/diagnostics <path>` runs diagnostics without a model turn.
 
 Use `/attach <path>` to queue a workspace image or file for the next prompt and
 `/attachments` to inspect the queue. Attachments are limited to 10 MiB. Images
@@ -174,19 +175,18 @@ Long command results such as `/diff` render in the scrollable conversation
 viewport; footer status is bounded so small terminals retain usable input.
 
 The `extensions` section supports prompt-backed slash commands, sandboxed
-`startup`/`before_turn`/`after_turn` hooks, `SKILL.md` paths, and local plugin
-directories. A plugin contains `plugin.json` with optional `commands`, `hooks`,
-and skill paths relative to the plugin directory.
+lifecycle hooks, `SKILL.md` paths, and local plugin directories. Commands,
+skills, and plugins are also discovered under user/project `.superagent/`
+directories. Use `/commands`, `/skills`, and `/plugins` to inspect them.
 
 Telemetry is written as JSON Lines to `~/.superagent/telemetry.jsonl` by
 default. Records correlate run/action IDs, transitions, tools, errors,
 durations, and estimated model input/output tokens. Set `telemetry.log_path`
 to an absolute path or a path relative to the workspace.
 
-## Roadmap
+## Status
 
-- Kernel-enforced tool isolation.
-- MCP and dynamic tool providers.
+- The competitive-gap roadmap is complete; see `docs/competitive-gap-tasks.md`.
 
 The Bubble Tea TUI remains the only interaction surface; headless, server, and
 alternate UI entry points are out of scope.

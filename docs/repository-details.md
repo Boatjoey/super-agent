@@ -87,7 +87,7 @@ Tool approval is a selectable menu: arrows or `j`/`k` move, `Enter` confirms, an
 
 ## Default Tools
 
-`tools.DefaultRegistry` exposes `read_file`, `list_files`, `search`, `apply_patch`, `write_file`, `run_command`, `go_test`, `format`, `git_status`, `git_diff`, and `bash`. `tools.Registry.Add` atomically merges dynamically discovered tools and rejects collisions. Configured MCP stdio servers connect through `tools/mcp`; their input schemas are mapped to `protocol.ToolSpec`, calls have deadlines and bounded output, and their tools are always risky under the common approval policy. The runtime session owns extension shutdown. File-oriented tools use structured JSON inputs and reject paths outside the current working directory. `run_command` supports cwd, timeout, and output limits. `git_status` and `git_diff` are read-only. `apply_patch`, `write_file`, `run_command`, `go_test`, `format`, and `bash` are risky tools and require policy approval unless the active mode allows them.
+`tools.DefaultRegistry` exposes workspace, command, Git, web-search, and guarded browser-fetch tools. `tools.Registry.Add` atomically merges dynamically discovered tools and rejects collisions. Configured MCP stdio servers connect through `tools/mcp`; their input schemas are mapped to `protocol.ToolSpec`, calls have deadlines and bounded output, and their tools are always risky under the common approval policy. Agent profiles may restrict the visible and callable tool set. The runtime session owns extension shutdown. File-oriented tools reject paths outside the working directory; risky tools require policy approval unless the active mode allows them.
 
 ## Runtime Rule
 
@@ -218,9 +218,9 @@ The top-level `lsp_servers` map starts stdio language servers by file extension.
 
 The risky `web_search` and `browser_fetch` tools use the common network permission flow. Browser fetches accept only public HTTP(S), reject local/private DNS results, cap redirects, responses, and time, and extract page text without executing scripts.
 
-The `extensions` settings load prompt-backed custom slash commands, sandboxed lifecycle hooks, `SKILL.md` instructions, and local `plugin.json` bundles. Supported hook events are `startup`, `before_turn`, and `after_turn`.
+The `extensions` settings and user/project `.superagent` directories load prompt-backed slash commands, sandboxed lifecycle hooks, `SKILL.md` instructions, and local `plugin.json` bundles. Hook events cover session start, before/after turns, pre/post tool calls, approvals, and errors; hook tool execution bypasses observer recursion.
 
-`runtime/telemetry` writes synchronized JSONL records for transitions, actions, runs, and tools. Records carry run/action correlation IDs, duration, errors, component names, and model token estimates. `telemetry.log_path` controls the destination.
+`runtime/telemetry` writes synchronized JSONL records for transitions, actions, and runs. Records carry run/action correlation IDs, tool component names, duration, errors, and model token estimates. `telemetry.log_path` controls the destination. Session exports include persisted tool, approval, cancellation, and error audit events.
 
 ## Build
 
