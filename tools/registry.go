@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"super-agent/runtime/protocol"
-	"super-agent/runtime/telemetry"
 )
 
 type Tool interface {
@@ -21,6 +19,13 @@ type Registry struct {
 	order      []string
 	tools      map[string]Tool
 	checkpoint func(protocol.ToolCall) error
+	observer   func(context.Context, string, protocol.ToolCall, error) error
+}
+
+func (r *Registry) SetToolObserver(observer func(context.Context, string, protocol.ToolCall, error) error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.observer = observer
 }
 
 func NewRegistry(items ...Tool) *Registry {
@@ -178,15 +183,20 @@ func (r *Registry) Specs() []protocol.ToolSpec {
 }
 
 func (r *Registry) Run(ctx context.Context, call protocol.ToolCall) (result string, err error) {
-	started := time.Now()
-	ids := telemetry.IDsFrom(ctx)
-	defer func() {
-		errorText := ""
-		if err != nil {
-			errorText = err.Error()
+	r.mu.RLock()
+	observer := r.observer
+	r.mu.RUnlock()
+	if observer != nil {
+		if err := observer(ctx, "pre_tool", call, nil); err != nil {
+			return "", err
 		}
-		telemetry.Record("tool", telemetry.Fields{"run_id": ids.RunID, "action_id": ids.ActionID, "tool": call.Name, "duration_ms": time.Since(started).Milliseconds(), "error": errorText})
-	}()
+		defer func() { err = errors.Join(err, observer(ctx, "post_tool", call, err)) }()
+	}
+	return r.RunDirect(ctx, call)
+}
+
+// RunDirect is used by lifecycle hooks to avoid recursively invoking hooks.
+func (r *Registry) RunDirect(ctx context.Context, call protocol.ToolCall) (result string, err error) {
 	r.mu.RLock()
 	tool, ok := r.tools[call.Name]
 	checkpoint := r.checkpoint

@@ -73,6 +73,7 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 		extension  io.Closer
 		lspCloser  io.Closer
 		controller *MCPController
+		toolFilter *filteredToolRunner
 	)
 	defer func() {
 		if extension != nil {
@@ -118,7 +119,9 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 			}
 			lspCloser = lspManager
 		}
-		toolRunner = runtime.ToolRunner(registry) // 工具调用的封装
+		toolFilter = &filteredToolRunner{runner: registry}
+		toolFilter.setAllowed(profile.Tools)
+		toolRunner = toolFilter
 	}
 	initial, bundle, err := initialMessagesWithAgent(cwd, profile)
 	if err != nil {
@@ -175,11 +178,16 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 		lspCloser = nil
 	}
 	workflows := &WorkflowController{registry: registry, extensions: cfg.Extensions}
-	if err := workflows.RunHook(context.Background(), "startup"); err != nil {
+	if registry != nil {
+		registry.SetToolObserver(func(ctx context.Context, event string, _ runtime.ToolCall, _ error) error {
+			return workflows.RunHook(ctx, event)
+		})
+	}
+	if err := workflows.RunHooks(context.Background(), "session_start", "startup"); err != nil {
 		_ = session.Close()
 		return nil, nil, nil, err
 	}
-	agents := &AgentController{session: session, model: router, profiles: profiles, providers: providers, workflows: workflows, base: cwd, current: profile.Name}
+	agents := &AgentController{session: session, model: router, profiles: profiles, providers: providers, workflows: workflows, tools: toolFilter, base: cwd, current: profile.Name}
 	return session, controller, agents, nil
 }
 

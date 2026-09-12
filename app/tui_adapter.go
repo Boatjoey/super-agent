@@ -102,6 +102,24 @@ func (a *TUIConversation) PendingAttachments() []tui.AttachmentSummary {
 	}
 	return result
 }
+func (a *TUIConversation) Skills() []string {
+	if a.agents == nil {
+		return nil
+	}
+	return a.agents.Skills()
+}
+func (a *TUIConversation) Plugins() []string {
+	if a.agents == nil {
+		return nil
+	}
+	return a.agents.Plugins()
+}
+func (a *TUIConversation) Diagnostics(ctx context.Context, path string) (string, error) {
+	if a.agents == nil {
+		return "", fmt.Errorf("diagnostics are unavailable")
+	}
+	return a.agents.Diagnostics(ctx, path)
+}
 
 func (a *TUIConversation) Snapshot() tui.ConversationView {
 	return toConversationView(a.session.Snapshot())
@@ -123,6 +141,11 @@ func (a *TUIConversation) RunTurn(ctx context.Context, query string, notificatio
 		defer bridges.Done()
 		defer close(notifications)
 		for notification := range runtimeNotifications {
+			if _, ok := notification.(runtime.ToolApprovalRequested); ok && a.agents != nil {
+				if err := a.agents.RunHook(ctx, "approval_requested"); err != nil {
+					notifications <- tui.ConversationError{Err: err}
+				}
+			}
 			notifications <- toConversationNotification(notification)
 		}
 	}()
@@ -147,7 +170,11 @@ func (a *TUIConversation) RunTurn(ctx context.Context, query string, notificatio
 	close(done)
 	bridges.Wait()
 	if a.agents != nil {
-		err = errors.Join(err, a.agents.RunHook(context.WithoutCancel(ctx), "after_turn"))
+		hookCtx := context.WithoutCancel(ctx)
+		if err != nil {
+			err = errors.Join(err, a.agents.RunHook(hookCtx, "error"))
+		}
+		err = errors.Join(err, a.agents.RunHooks(hookCtx, "turn_complete", "after_turn"))
 	}
 	return err
 }

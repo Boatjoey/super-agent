@@ -125,4 +125,7 @@ type Conversation interface {
 	Export(string) (string, error)
 	Attach(string) (AttachmentSummary, error)
 	PendingAttachments() []AttachmentSummary
+	Skills() []string
+	Plugins() []string
+	Diagnostics(context.Context, string) (string, error)
 }

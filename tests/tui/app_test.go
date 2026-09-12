@@ -780,6 +780,11 @@ func (c *notificationOnlyConversation) Attach(path string) (tui.AttachmentSummar
 	return tui.AttachmentSummary{Name: path, MIME: "text/plain"}, nil
 }
 func (c *notificationOnlyConversation) PendingAttachments() []tui.AttachmentSummary { return nil }
+func (c *notificationOnlyConversation) Skills() []string                            { return nil }
+func (c *notificationOnlyConversation) Plugins() []string                           { return nil }
+func (c *notificationOnlyConversation) Diagnostics(context.Context, string) (string, error) {
+	return "[]", nil
+}
 
 func (c *notificationOnlyConversation) Snapshot() tui.ConversationView {
 	if c.rejectSnapshots {

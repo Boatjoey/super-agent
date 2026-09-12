@@ -58,10 +58,11 @@ type TelemetrySettings struct {
 }
 
 type AgentSettings struct {
-	Provider       string `json:"provider,omitempty"`
-	Model          string `json:"model,omitempty"`
-	Prompt         string `json:"prompt,omitempty"`
-	PermissionMode string `json:"permission_mode,omitempty"`
+	Provider       string   `json:"provider,omitempty"`
+	Model          string   `json:"model,omitempty"`
+	Prompt         string   `json:"prompt,omitempty"`
+	PermissionMode string   `json:"permission_mode,omitempty"`
+	Tools          []string `json:"tools,omitempty"`
 }
 
 type LSPServerSettings struct {

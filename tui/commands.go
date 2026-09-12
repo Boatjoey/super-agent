@@ -10,7 +10,7 @@ import (
 
 var slashCommands = []string{
 	"/clear", "/compact", "/delete-session", "/help", "/instructions", "/permissions",
-	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan", "/fork", "/memory", "/remember", "/forget", "/review", "/diff", "/fix-ci", "/branch", "/commit-message", "/export", "/share", "/attach", "/attachments",
+	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan", "/mode", "/fork", "/memory", "/remember", "/forget", "/review", "/diff", "/fix-ci", "/branch", "/commit-message", "/export", "/share", "/attach", "/attachments", "/commands", "/skills", "/plugins", "/diagnostics",
 }
 
 var slashCommandDescriptions = map[string]string{
@@ -21,9 +21,11 @@ var slashCommandDescriptions = map[string]string{
 	"/build":          "Switch to the build agent",
 	"/branch":         "Show branch and working-tree status",
 	"/commit-message": "Suggest a commit message",
+	"/commands":       "List custom commands",
 	"/compact":        "Compact context [summary]",
 	"/delete-session": "Delete a saved session <id>",
 	"/diff":           "Preview the current patch",
+	"/diagnostics":    "Show LSP diagnostics <path>",
 	"/export":         "Export session <markdown|json>",
 	"/fix-ci":         "Inspect and fix failing CI checks",
 	"/help":           "Show commands and shortcuts",
@@ -31,8 +33,10 @@ var slashCommandDescriptions = map[string]string{
 	"/forget":         "Clear cross-session memory",
 	"/instructions":   "Show loaded instruction files",
 	"/mcp":            "Manage MCP servers <list|add|remove|restart>",
+	"/mode":           "Switch mode <plan|build>",
 	"/memory":         "Show cross-session memory",
 	"/permissions":    "Inspect or change permission mode",
+	"/plugins":        "List loaded plugins",
 	"/plan":           "Switch to the plan agent",
 	"/quit":           "Exit Super Agent",
 	"/rename":         "Rename a session <id> <title>",
@@ -42,6 +46,7 @@ var slashCommandDescriptions = map[string]string{
 	"/resume":         "Resume a saved session <id>",
 	"/sessions":       "List saved sessions",
 	"/share":          "Create a local HTML share file",
+	"/skills":         "List loaded skills",
 	"/undo":           "Restore the last checkpoint",
 }
 
@@ -188,6 +193,12 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.handleAgent([]string{"/agent", "plan"})
 	case "/build":
 		a.handleAgent([]string{"/agent", "build"})
+	case "/mode":
+		if len(parts) != 2 || (parts[1] != "plan" && parts[1] != "build") {
+			a.err = "Usage: /mode <plan|build>"
+			break
+		}
+		a.handleAgent([]string{"/agent", parts[1]})
 	case "/fork":
 		a.handleFork(strings.TrimSpace(strings.TrimPrefix(text, command)))
 	case "/memory":
@@ -201,7 +212,7 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 	case "/branch":
 		a.handleGitStatus()
 	case "/review":
-		return a.submitPrompt("Review the current changes. Inspect the git diff and relevant code, then report only actionable defects with file and line references. Do not modify files.")
+		return a.submitPrompt("Review the current changes. Inspect the git diff, relevant code, and LSP diagnostics when configured, then report only actionable defects with file and line references. Do not modify files.")
 	case "/fix-ci":
 		return a.submitPrompt("Inspect the repository CI configuration and current failures, reproduce them locally, implement the fixes, and verify the result.")
 	case "/commit-message":
@@ -237,6 +248,27 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 			}
 			a.status = "Attachments:\n- " + strings.Join(names, "\n- ")
 		}
+	case "/commands":
+		a.status = formatNamedItems("Custom commands", a.session.CustomCommands())
+	case "/skills":
+		a.status = formatNamedItems("Skills", a.session.Skills())
+	case "/plugins":
+		a.status = formatNamedItems("Plugins", a.session.Plugins())
+	case "/diagnostics":
+		if len(parts) != 2 {
+			a.err = "Usage: /diagnostics <path>"
+			break
+		}
+		result, err := a.session.Diagnostics(context.Background(), parts[1])
+		if err != nil {
+			a.err = "Diagnostics failed: " + err.Error()
+			break
+		}
+		a.err = ""
+		a.commandOutput = result
+		a.status = "Diagnostics"
+		a.viewport.SetContent(a.contentString())
+		a.viewport.GotoBottom()
 	case "/instructions":
 		a.err = ""
 		a.status = formatInstructions(a.info.InstructionPaths)
@@ -272,6 +304,13 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		return a.submitPrompt(expanded)
 	}
 	return a, nil
+}
+
+func formatNamedItems(label string, items []string) string {
+	if len(items) == 0 {
+		return "No " + strings.ToLower(label)
+	}
+	return label + ":\n- " + strings.Join(items, "\n- ")
 }
 
 func (a *App) handleExport(format string) {

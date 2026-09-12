@@ -146,6 +146,21 @@ func (r Repository) Load(id session.SessionID) ([]protocol.Message, session.Meta
 	return messages, toSessionMetadata(meta), nil
 }
 
+func (r Repository) LoadAuditEvents(id session.SessionID) ([]session.AuditEvent, error) {
+	records, err := r.store.Records(SessionID(id))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]session.AuditEvent, 0)
+	for _, record := range records {
+		switch record.Type {
+		case EventApprovalDecision, EventToolResult, EventError, EventCancel:
+			result = append(result, session.AuditEvent{Type: record.Type, Time: record.Time, ToolCall: record.ToolCall, Decision: record.Decision, Result: record.Result, Error: record.Error})
+		}
+	}
+	return result, nil
+}
+
 func (r Repository) RenameSession(id session.SessionID, title string) error {
 	return r.store.RenameSession(SessionID(id), title)
 }

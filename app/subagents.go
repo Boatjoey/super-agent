@@ -104,7 +104,9 @@ func (t *subagentTool) Run(ctx context.Context, call runtime.ToolCall) (string, 
 	if err := registry.Add(&childDelegate); err != nil {
 		return "", err
 	}
-	engine := runtime.NewEngineWithExecutorAndPolicy(runtime.NewDefaultScheduledActionExecutor(model, registry), runtime.NewPolicy(profile.PermissionMode, t.rules), initial)
+	filtered := &filteredToolRunner{runner: registry}
+	filtered.setAllowed(profile.Tools)
+	engine := runtime.NewEngineWithExecutorAndPolicy(runtime.NewDefaultScheduledActionExecutor(model, filtered), runtime.NewPolicy(profile.PermissionMode, t.rules), initial)
 	if err := engine.Ready(); err != nil {
 		return "", err
 	}

@@ -31,6 +31,15 @@ type FileSnapshot struct {
 	Mode    uint32
 }
 
+type AuditEvent struct {
+	Type     string    `json:"type"`
+	Time     time.Time `json:"time"`
+	ToolCall *ToolCall `json:"tool_call,omitempty"`
+	Decision string    `json:"decision,omitempty"`
+	Result   string    `json:"result,omitempty"`
+	Error    string    `json:"error,omitempty"`
+}
+
 // Repository is the outbound persistence port used by session use cases.
 // Implementations decide how metadata, transcripts, and checkpoints are stored.
 type Repository interface {
@@ -46,6 +55,7 @@ type Repository interface {
 	SaveCheckpoint(SessionID, ToolCall, []FileSnapshot) error
 	List() ([]Summary, error)
 	Load(SessionID) ([]Message, Metadata, error)
+	LoadAuditEvents(SessionID) ([]AuditEvent, error)
 	RenameSession(SessionID, string) error
 	Delete(SessionID) error
 	// LoadUndoPoint returns the files of the most recent non-empty
