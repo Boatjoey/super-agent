@@ -78,6 +78,13 @@ app creates this template if the file does not exist:
     "max_open_files": 256
   },
   "mcp_servers": {},
+  "lsp_servers": {
+    "go": {
+      "command": "gopls",
+      "extensions": ["go"],
+      "language_id": "go"
+    }
+  },
   "agent": "build",
   "agents": {
     "reviewer": {
@@ -138,11 +145,16 @@ variables are explicit except for basic process variables such as `PATH` and
 `/mcp remove <name>`, and `/mcp restart <name>` to manage servers. Add/remove
 updates `settings.json` atomically.
 
+Language servers use stdio and are configured in `lsp_servers` with `command`,
+`args`, `extensions`, and `language_id`. Configured servers expose
+`lsp_diagnostics`, `lsp_symbols`, `lsp_definition`, `lsp_references`, and
+`lsp_outline` tools.
+
 ## Roadmap
 
 - Kernel-enforced tool isolation.
 - MCP and dynamic tool providers.
-- LSP diagnostics and review workflows.
+- Review workflows.
 - Hooks, custom commands, skills, and plugins.
 - Observability, export, multimodal input, and network tools.
 

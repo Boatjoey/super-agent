@@ -84,6 +84,26 @@ func TestLoadConfigReadsCustomAgent(t *testing.T) {
 	}
 }
 
+func TestLoadConfigReadsLSPServers(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".superagent")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"provider":"deepseek","providers":{"deepseek":{}},"lsp_servers":{"go":{"command":"gopls","args":["serve"],"extensions":["go"],"language_id":"go"}}}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(settings), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(Flags{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.LSPServers) != 1 || cfg.LSPServers[0].Command != "gopls" || cfg.LSPServers[0].LanguageID != "go" {
+		t.Fatalf("LSP servers = %+v", cfg.LSPServers)
+	}
+}
+
 func TestLoadConfigUsesSettingsPermissionMode(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

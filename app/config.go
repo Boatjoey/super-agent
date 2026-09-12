@@ -12,6 +12,7 @@ import (
 	"super-agent/llm"
 	"super-agent/runtime"
 	"super-agent/tools"
+	lsptools "super-agent/tools/lsp"
 	mcptools "super-agent/tools/mcp"
 )
 
@@ -29,6 +30,7 @@ type Config struct {
 	PermissionRules    runtime.PermissionRules
 	Sandbox            tools.SandboxConfig
 	MCPServers         []mcptools.ServerConfig
+	LSPServers         []lsptools.ServerConfig
 	ModelConfig        llm.ProviderConfig
 	ProviderConfigs    map[string]llm.ProviderConfig
 	InstructionSources []string
@@ -42,6 +44,7 @@ type Settings struct {
 	Permissions PermissionSettings            `json:"permissions"`
 	Sandbox     SandboxSettings               `json:"sandbox"`
 	MCPServers  map[string]MCPServerSettings  `json:"mcp_servers"`
+	LSPServers  map[string]LSPServerSettings  `json:"lsp_servers"`
 	Agent       string                        `json:"agent"`
 	Agents      map[string]AgentSettings      `json:"agents"`
 }
@@ -51,6 +54,13 @@ type AgentSettings struct {
 	Model          string `json:"model,omitempty"`
 	Prompt         string `json:"prompt,omitempty"`
 	PermissionMode string `json:"permission_mode,omitempty"`
+}
+
+type LSPServerSettings struct {
+	Command    string   `json:"command"`
+	Args       []string `json:"args"`
+	Extensions []string `json:"extensions"`
+	LanguageID string   `json:"language_id"`
 }
 
 type MCPServerSettings struct {
@@ -113,6 +123,7 @@ func DefaultSettings() Settings {
 			MaxOpenFiles: 256,
 		},
 		MCPServers: map[string]MCPServerSettings{},
+		LSPServers: map[string]LSPServerSettings{},
 		Agent:      "build",
 		Agents:     map[string]AgentSettings{},
 	}
@@ -180,6 +191,11 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 			CallTimeout:    time.Duration(server.CallTimeoutSeconds) * time.Second,
 		})
 	}
+	lspServers := make([]lsptools.ServerConfig, 0, len(settings.LSPServers))
+	for name, server := range settings.LSPServers {
+		lspServers = append(lspServers, lsptools.ServerConfig{Name: name, Command: server.Command, Args: server.Args, Extensions: server.Extensions, LanguageID: server.LanguageID, Root: cwd})
+	}
+	sort.Slice(lspServers, func(i, j int) bool { return lspServers[i].Name < lspServers[j].Name })
 	return Config{
 		Provider:         provider,
 		AutoApproveTools: mode == runtime.PermissionModeBypass,
@@ -196,6 +212,7 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 			MaxOpenFiles: settings.Sandbox.MaxOpenFiles,
 		},
 		MCPServers:         mcpServers,
+		LSPServers:         lspServers,
 		ModelConfig:        settings.Providers[provider],
 		ProviderConfigs:    settings.Providers,
 		InstructionSources: instructionSourcePaths(bundle),
@@ -308,6 +325,9 @@ func normalizeSettings(settings *Settings) {
 	}
 	if settings.Agents == nil {
 		settings.Agents = map[string]AgentSettings{}
+	}
+	if settings.LSPServers == nil {
+		settings.LSPServers = map[string]LSPServerSettings{}
 	}
 	if settings.Permissions.Mode == "" {
 		settings.Permissions.Mode = "ask"

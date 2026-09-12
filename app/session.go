@@ -15,6 +15,7 @@ import (
 	"super-agent/runtime"
 	"super-agent/store"
 	"super-agent/tools"
+	lsptools "super-agent/tools/lsp"
 	mcptools "super-agent/tools/mcp"
 	"super-agent/workspace"
 )
@@ -60,11 +61,15 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 		toolRunner runtime.ToolRunner
 		registry   *tools.Registry
 		extension  io.Closer
+		lspCloser  io.Closer
 		controller *MCPController
 	)
 	defer func() {
 		if extension != nil {
 			_ = extension.Close()
+		}
+		if lspCloser != nil {
+			_ = lspCloser.Close()
 		}
 	}()
 	if cfg.NoTools {
@@ -90,6 +95,19 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 		controller = NewMCPController(manager, registry, settingsPath, cwd, settingsMap(cfg.MCPServers))
 		// The runtime session owns extension process lifetime after creation.
 		extension = manager
+		if len(cfg.LSPServers) > 0 {
+			lspManager, connectErr := lsptools.Connect(context.Background(), cwd, cfg.LSPServers)
+			if connectErr != nil {
+				return nil, nil, nil, connectErr
+			}
+			for _, lspTool := range lspManager.Tools() {
+				if addErr := registry.Add(lspTool); addErr != nil {
+					_ = lspManager.Close()
+					return nil, nil, nil, addErr
+				}
+			}
+			lspCloser = lspManager
+		}
 		toolRunner = runtime.ToolRunner(registry) // 工具调用的封装
 	}
 	initial, bundle, err := initialMessagesWithAgent(cwd, profile)
@@ -135,6 +153,14 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 	if extension != nil {
 		session.AddCloser(extension)
 		extension = nil
+	}
+	if lspCloser != nil {
+		session.AddCloser(lspCloser)
+		lspCloser = nil
+	}
+	if lspCloser != nil {
+		session.AddCloser(lspCloser)
+		lspCloser = nil
 	}
 	agents := &AgentController{session: session, model: router, profiles: profiles, providers: providers, base: cwd, current: profile.Name}
 	return session, controller, agents, nil

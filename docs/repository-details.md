@@ -209,6 +209,8 @@ Command classification is a text heuristic for approval routing, not a security 
 
 Supported permission modes are `ask`, `accept-edits`, `plan`, and `bypass`; `--yolo` maps to `bypass`. The `YOLO=true` environment variable enables bypass only when no explicit `--approval-mode` flag was passed, so a checked-in `.env` cannot silently disable permission prompts. The top-level `sandbox` settings select `strict` or `off` and configure `cpu_seconds`, `memory_mb`, `max_processes`, and `max_open_files`. Strict is the default. Invalid modes fail config load. If the settings file is missing, the app creates a template on startup.
 
+The top-level `lsp_servers` map starts stdio language servers by file extension. Its tools provide push diagnostics, workspace symbols, definitions, references, and document symbols/outlines.
+
 ## Build
 
 `./scripts/build-local.sh` builds the app and installs it as `/usr/local/bin/super-agent`. Set `SUPER_AGENT_INSTALL_DIR` to override the install directory for tests or automation.

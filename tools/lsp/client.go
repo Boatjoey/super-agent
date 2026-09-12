@@ -1,0 +1,363 @@
+package lsp
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"super-agent/runtime/protocol"
+)
+
+type ServerConfig struct {
+	Name, Command, LanguageID, Root string
+	Args, Extensions                []string
+}
+
+type response struct {
+	Result json.RawMessage `json:"result"`
+	Error  *struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+type client struct {
+	config      ServerConfig
+	process     *exec.Cmd
+	stdin       io.WriteCloser
+	mu          sync.Mutex
+	pending     map[int64]chan response
+	diagnostics map[string]json.RawMessage
+	nextID      atomic.Int64
+	done        chan struct{}
+	err         error
+}
+
+type Manager struct {
+	root    string
+	clients []*client
+}
+
+func Connect(ctx context.Context, root string, configs []ServerConfig) (*Manager, error) {
+	manager := &Manager{root: root}
+	for _, config := range configs {
+		if config.Root == "" {
+			config.Root = root
+		}
+		client, err := start(ctx, config)
+		if err != nil {
+			_ = manager.Close()
+			return nil, fmt.Errorf("connect LSP %s: %w", config.Name, err)
+		}
+		manager.clients = append(manager.clients, client)
+	}
+	return manager, nil
+}
+
+func start(ctx context.Context, config ServerConfig) (*client, error) {
+	if strings.TrimSpace(config.Name) == "" || strings.TrimSpace(config.Command) == "" {
+		return nil, errors.New("name and command are required")
+	}
+	command := exec.CommandContext(context.WithoutCancel(ctx), config.Command, config.Args...)
+	command.Dir = config.Root
+	stdin, err := command.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	command.Stderr = os.Stderr
+	if err := command.Start(); err != nil {
+		return nil, err
+	}
+	client := &client{config: config, process: command, stdin: stdin, pending: map[int64]chan response{}, diagnostics: map[string]json.RawMessage{}, done: make(chan struct{})}
+	go client.readLoop(stdout)
+	rootURI := fileURI(config.Root)
+	if _, err := client.request(ctx, "initialize", map[string]any{"processId": os.Getpid(), "rootUri": rootURI, "capabilities": map[string]any{}}); err != nil {
+		_ = client.Close()
+		return nil, err
+	}
+	if err := client.notify("initialized", map[string]any{}); err != nil {
+		_ = client.Close()
+		return nil, err
+	}
+	return client, nil
+}
+
+func (c *client) readLoop(reader io.Reader) {
+	buffer := bufio.NewReader(reader)
+	defer close(c.done)
+	for {
+		length, err := readHeader(buffer)
+		if err != nil {
+			c.fail(err)
+			return
+		}
+		body := make([]byte, length)
+		if _, err := io.ReadFull(buffer, body); err != nil {
+			c.fail(err)
+			return
+		}
+		var envelope struct {
+			ID     *int64          `json:"id"`
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
+			Result json.RawMessage `json:"result"`
+			Error  *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(body, &envelope) != nil {
+			continue
+		}
+		if envelope.ID != nil {
+			c.mu.Lock()
+			channel := c.pending[*envelope.ID]
+			delete(c.pending, *envelope.ID)
+			c.mu.Unlock()
+			if channel != nil {
+				channel <- response{Result: envelope.Result, Error: envelope.Error}
+			}
+			continue
+		}
+		if envelope.Method == "textDocument/publishDiagnostics" {
+			var params struct {
+				URI         string          `json:"uri"`
+				Diagnostics json.RawMessage `json:"diagnostics"`
+			}
+			if json.Unmarshal(envelope.Params, &params) == nil {
+				c.mu.Lock()
+				c.diagnostics[params.URI] = params.Diagnostics
+				c.mu.Unlock()
+			}
+		}
+	}
+}
+
+func readHeader(reader *bufio.Reader) (int, error) {
+	length := 0
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return 0, err
+		}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			break
+		}
+		if strings.HasPrefix(strings.ToLower(line), "content-length:") {
+			length, err = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(strings.ToLower(line), "content-length:")))
+			if err != nil {
+				return 0, err
+			}
+		}
+	}
+	if length <= 0 {
+		return 0, errors.New("invalid LSP content length")
+	}
+	return length, nil
+}
+
+func (c *client) request(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	id := c.nextID.Add(1)
+	channel := make(chan response, 1)
+	c.mu.Lock()
+	c.pending[id] = channel
+	c.mu.Unlock()
+	if err := c.write(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}); err != nil {
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
+		return nil, err
+	}
+	select {
+	case reply := <-channel:
+		if reply.Error != nil {
+			return nil, fmt.Errorf("LSP %s: %s", method, reply.Error.Message)
+		}
+		return reply.Result, nil
+	case <-c.done:
+		return nil, firstError(c.err, errors.New("LSP server stopped"))
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func (c *client) notify(method string, params any) error {
+	return c.write(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
+}
+
+func (c *client) write(message any) error {
+	body, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, err = fmt.Fprintf(c.stdin, "Content-Length: %d\r\n\r\n%s", len(body), body)
+	return err
+}
+
+func (c *client) fail(err error) { c.mu.Lock(); c.err = err; c.mu.Unlock() }
+
+func (c *client) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, _ = c.request(ctx, "shutdown", nil)
+	_ = c.notify("exit", nil)
+	_ = c.stdin.Close()
+	if c.process.Process != nil {
+		_ = c.process.Process.Kill()
+	}
+	return c.process.Wait()
+}
+
+func (m *Manager) Close() error {
+	var result error
+	for _, client := range m.clients {
+		result = errors.Join(result, client.Close())
+	}
+	return result
+}
+
+func (m *Manager) Tools() []Tool {
+	if len(m.clients) == 0 {
+		return nil
+	}
+	names := []string{"lsp_diagnostics", "lsp_symbols", "lsp_definition", "lsp_references", "lsp_outline"}
+	result := make([]Tool, 0, len(names))
+	for _, name := range names {
+		result = append(result, Tool{name: name, manager: m})
+	}
+	return result
+}
+
+func (m *Manager) clientFor(path string) (*client, string, error) {
+	absolute, err := filepath.Abs(filepath.Join(m.root, path))
+	if err != nil {
+		return nil, "", err
+	}
+	relative, err := filepath.Rel(m.root, absolute)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return nil, "", errors.New("path escapes workspace")
+	}
+	extension := strings.TrimPrefix(filepath.Ext(absolute), ".")
+	for _, client := range m.clients {
+		for _, supported := range client.config.Extensions {
+			if strings.TrimPrefix(supported, ".") == extension {
+				return client, absolute, nil
+			}
+		}
+	}
+	return nil, "", errors.New("no LSP server configured for ." + extension)
+}
+
+func fileURI(path string) string {
+	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String()
+}
+func firstError(values ...error) error {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
+}
+
+type Tool struct {
+	name    string
+	manager *Manager
+}
+
+func (t Tool) Spec() protocol.ToolSpec {
+	properties := map[string]any{"path": map[string]any{"type": "string"}, "line": map[string]any{"type": "integer"}, "column": map[string]any{"type": "integer"}, "query": map[string]any{"type": "string"}}
+	required := []string{"path"}
+	if t.name == "lsp_symbols" {
+		required = []string{"query"}
+	}
+	return protocol.ToolSpec{Name: t.name, Description: "Query the configured language server.", Parameters: map[string]any{"type": "object", "properties": properties, "required": required}}
+}
+
+func (t Tool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
+	var input struct {
+		Path, Query  string
+		Line, Column int
+	}
+	if err := json.Unmarshal([]byte(call.Input), &input); err != nil {
+		return "", err
+	}
+	if t.name == "lsp_symbols" {
+		if len(t.manager.clients) == 0 {
+			return "", errors.New("no LSP servers configured")
+		}
+		result, err := t.manager.clients[0].request(ctx, "workspace/symbol", map[string]any{"query": input.Query})
+		return pretty(result), err
+	}
+	client, path, err := t.manager.clientFor(input.Path)
+	if err != nil {
+		return "", err
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	uri := fileURI(path)
+	if err := client.notify("textDocument/didOpen", map[string]any{"textDocument": map[string]any{"uri": uri, "languageId": client.config.LanguageID, "version": 1, "text": string(content)}}); err != nil {
+		return "", err
+	}
+	textDocument := map[string]any{"uri": uri}
+	position := map[string]any{"line": max(0, input.Line-1), "character": max(0, input.Column-1)}
+	var result json.RawMessage
+	switch t.name {
+	case "lsp_diagnostics":
+		deadline := time.NewTimer(300 * time.Millisecond)
+		defer deadline.Stop()
+		select {
+		case <-deadline.C:
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+		client.mu.Lock()
+		result = append(json.RawMessage(nil), client.diagnostics[uri]...)
+		client.mu.Unlock()
+		if len(result) == 0 {
+			result = json.RawMessage("[]")
+		}
+	case "lsp_outline":
+		result, err = client.request(ctx, "textDocument/documentSymbol", map[string]any{"textDocument": textDocument})
+	case "lsp_definition":
+		result, err = client.request(ctx, "textDocument/definition", map[string]any{"textDocument": textDocument, "position": position})
+	case "lsp_references":
+		result, err = client.request(ctx, "textDocument/references", map[string]any{"textDocument": textDocument, "position": position, "context": map[string]any{"includeDeclaration": true}})
+	default:
+		return "", errors.New("unknown LSP tool")
+	}
+	return pretty(result), err
+}
+
+func pretty(value json.RawMessage) string {
+	if len(value) == 0 {
+		return "null"
+	}
+	var output bytes.Buffer
+	if json.Indent(&output, value, "", "  ") != nil {
+		return string(value)
+	}
+	return output.String()
+}
