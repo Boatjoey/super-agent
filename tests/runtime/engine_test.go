@@ -29,6 +29,13 @@ type fakeTool struct {
 	calls   []ToolCall
 }
 
+type closeRecorder struct{ calls int }
+
+func (c *closeRecorder) Close() error {
+	c.calls++
+	return nil
+}
+
 func (t *fakeTool) Run(_ context.Context, call ToolCall) (string, error) {
 	t.calls = append(t.calls, call)
 	return t.results[call.Name], nil
@@ -61,6 +68,23 @@ func TestNewEngineStartsInitializingAndReadyEntersIdle(t *testing.T) {
 	}
 	if engine.State() != StateIdle {
 		t.Fatalf("state = %s, want %s", engine.State(), StateIdle)
+	}
+}
+
+func TestSessionCloseClosesOwnedAdaptersOnce(t *testing.T) {
+	session := NewSession(NewEngine(&scriptedModel{}, &fakeTool{}, nil))
+	first := &closeRecorder{}
+	second := &closeRecorder{}
+	session.AddCloser(first)
+	session.AddCloser(second)
+	if err := session.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if err := session.Close(); err != nil {
+		t.Fatalf("second Close: %v", err)
+	}
+	if first.calls != 1 || second.calls != 1 {
+		t.Fatalf("close calls = %d, %d; want 1, 1", first.calls, second.calls)
 	}
 }
 

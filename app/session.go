@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -9,6 +11,7 @@ import (
 	"super-agent/runtime"
 	"super-agent/store"
 	"super-agent/tools"
+	mcptools "super-agent/tools/mcp"
 	"super-agent/workspace"
 )
 
@@ -24,13 +27,31 @@ func NewSession(cfg Config) (*runtime.Session, error) {
 	var (
 		toolRunner runtime.ToolRunner
 		registry   *tools.Registry
+		extension  io.Closer
 	)
+	defer func() {
+		if extension != nil {
+			_ = extension.Close()
+		}
+	}()
 	if cfg.NoTools {
 		toolRunner = tools.NoTools{}
 	} else {
 		registry, err = tools.SandboxedRegistry(cfg.Sandbox)
 		if err != nil {
 			return nil, err
+		}
+		if len(cfg.MCPServers) > 0 {
+			manager, connectErr := mcptools.Connect(context.Background(), cfg.MCPServers)
+			if connectErr != nil {
+				return nil, connectErr
+			}
+			if addErr := registry.Add(manager.Tools()...); addErr != nil {
+				_ = manager.Close()
+				return nil, addErr
+			}
+			// The runtime session owns extension process lifetime after creation.
+			extension = manager
 		}
 		toolRunner = runtime.ToolRunner(registry) // 工具调用的封装
 	}
@@ -61,6 +82,10 @@ func NewSession(cfg Config) (*runtime.Session, error) {
 		registry.SetCheckpointCallback(session.Checkpoint)
 	}
 	session.ConfigurePermissions(cfg.PermissionMode, cfg.PermissionRules)
+	if extension != nil {
+		session.AddCloser(extension)
+		extension = nil
+	}
 	return session, nil
 }
 

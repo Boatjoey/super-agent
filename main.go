@@ -35,6 +35,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	defer session.Close()
 	cwd, _ := os.Getwd()
 	if _, err := tea.NewProgram(tui.New(app.NewTUIConversation(session), tui.StartupInfo{
 		Provider:         cfg.Provider,

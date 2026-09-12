@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"super-agent/runtime/protocol"
 )
@@ -28,6 +29,34 @@ func NewRegistry(items ...Tool) *Registry {
 		registry.tools[name] = item
 	}
 	return registry
+}
+
+// Add atomically adds dynamically discovered tools. No tool is added when a
+// name is empty, duplicated in the batch, or already registered.
+func (r *Registry) Add(items ...Tool) error {
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		if item == nil {
+			return errors.New("cannot register nil tool")
+		}
+		name := item.Spec().Name
+		if name == "" {
+			return errors.New("cannot register tool with empty name")
+		}
+		if _, exists := r.tools[name]; exists {
+			return fmt.Errorf("tool %q is already registered", name)
+		}
+		if _, exists := seen[name]; exists {
+			return fmt.Errorf("tool %q is duplicated", name)
+		}
+		seen[name] = struct{}{}
+	}
+	for _, item := range items {
+		name := item.Spec().Name
+		r.order = append(r.order, name)
+		r.tools[name] = item
+	}
+	return nil
 }
 
 func (r *Registry) SetCheckpointCallback(callback func(protocol.ToolCall) error) {

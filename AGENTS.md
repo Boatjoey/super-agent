@@ -30,6 +30,7 @@
 - Follow the hexagonal architecture in `docs/architecture.md`; `tui` must not import `runtime`.
 - Keep the TUI as the only interaction surface; do not add headless, server, or alternate UI entry points.
 - LLM and tool adapters may import `runtime/protocol`, not the root `runtime` facade.
+- MCP stdio adapters live in `tools/mcp`; discovered tools join `tools.Registry` atomically and remain risky under the common permission policy.
 - More detail: `docs/repository-details.md`.
 - Transition teaching guide: `teach/agent-transition.md`.
 - Agent-loop teaching guide: `teach/agent-loop.md`.
@@ -83,6 +84,7 @@
 - `YOLO=true` in `.env` enables bypass only when no explicit `--approval-mode` flag was passed; the flag always wins over the environment.
 - LLM provider config comes from `~/.superagent/settings.json`.
 - Permission mode and allow/deny rules come from `~/.superagent/settings.json`.
+- MCP stdio server definitions come from the top-level `mcp_servers` settings map.
 - Command classification routes approvals but is not a security boundary.
 - Linux command tools use strict bubblewrap isolation by default with a read-only host root, writable workspace, policy-controlled networking, ephemeral home/tmp, and `prlimit` resource bounds.
 - Strict sandbox mode fails closed when `bwrap` or `prlimit` is unavailable; unsupported platforms require explicit `sandbox.mode: off`.

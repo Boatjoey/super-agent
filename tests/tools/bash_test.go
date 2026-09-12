@@ -111,3 +111,25 @@ func TestToolRegistryRejectsUnknownTool(t *testing.T) {
 		t.Fatalf("err = %v, want unknown tool error", err)
 	}
 }
+
+func TestToolRegistryAddsDynamicToolsAtomically(t *testing.T) {
+	registry := NewRegistry(&fakeTool{spec: runtime.ToolSpec{Name: "built-in"}})
+	first := &fakeTool{spec: runtime.ToolSpec{Name: "remote"}}
+	duplicate := &fakeTool{spec: runtime.ToolSpec{Name: "built-in"}}
+
+	if err := registry.Add(first, duplicate); err == nil {
+		t.Fatal("Add succeeded with duplicate name")
+	}
+	for _, spec := range registry.Specs() {
+		if spec.Name == "remote" {
+			t.Fatal("failed batch was partially registered")
+		}
+	}
+	if err := registry.Add(first); err != nil {
+		t.Fatalf("Add dynamic tool: %v", err)
+	}
+	got, err := registry.Run(context.Background(), runtime.ToolCall{Name: "remote"})
+	if err != nil || got != "ran remote" {
+		t.Fatalf("Run dynamic tool = %q, %v", got, err)
+	}
+}

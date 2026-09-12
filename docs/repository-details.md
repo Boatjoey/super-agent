@@ -72,7 +72,7 @@ Tool approval is a selectable menu: arrows or `j`/`k` move, `Enter` confirms, an
 
 ## Default Tools
 
-`tools.DefaultRegistry` exposes `read_file`, `list_files`, `search`, `apply_patch`, `write_file`, `run_command`, `go_test`, `format`, `git_status`, `git_diff`, and `bash`. File-oriented tools use structured JSON inputs and reject paths outside the current working directory. `run_command` supports cwd, timeout, and output limits. `git_status` and `git_diff` are read-only. `apply_patch`, `write_file`, `run_command`, `go_test`, `format`, and `bash` are risky tools and require policy approval unless the active mode allows them.
+`tools.DefaultRegistry` exposes `read_file`, `list_files`, `search`, `apply_patch`, `write_file`, `run_command`, `go_test`, `format`, `git_status`, `git_diff`, and `bash`. `tools.Registry.Add` atomically merges dynamically discovered tools and rejects collisions. Configured MCP stdio servers connect through `tools/mcp`; their input schemas are mapped to `protocol.ToolSpec`, calls have deadlines and bounded output, and their tools are always risky under the common approval policy. The runtime session owns extension shutdown. File-oriented tools use structured JSON inputs and reject paths outside the current working directory. `run_command` supports cwd, timeout, and output limits. `git_status` and `git_diff` are read-only. `apply_patch`, `write_file`, `run_command`, `go_test`, `format`, and `bash` are risky tools and require policy approval unless the active mode allows them.
 
 ## Runtime Rule
 

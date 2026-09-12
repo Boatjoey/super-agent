@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	. "super-agent/app"
 )
@@ -161,6 +162,31 @@ func TestLoadConfigRejectsInvalidSandboxMode(t *testing.T) {
 	_, err := LoadConfig(Flags{}, lookup(nil))
 	if err == nil || !strings.Contains(err.Error(), "invalid sandbox mode: maybe") {
 		t.Fatalf("err = %v, want invalid sandbox mode", err)
+	}
+}
+
+func TestLoadConfigMapsMCPServersInNameOrder(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	settingsDir := filepath.Join(home, ".superagent")
+	if err := os.MkdirAll(settingsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"provider":"openai","mcp_servers":{"z":{"command":"z-server"},"a":{"command":"a-server","args":["--stdio"],"env":{"TOKEN":"explicit"},"cwd":"nested","connect_timeout_seconds":3,"call_timeout_seconds":4}},"providers":{"openai":{"api_key":"key","model":"model"}}}`
+	if err := os.WriteFile(filepath.Join(settingsDir, "settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(Flags{}, lookup(nil))
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if len(cfg.MCPServers) != 2 || cfg.MCPServers[0].Name != "a" || cfg.MCPServers[1].Name != "z" {
+		t.Fatalf("MCPServers = %+v", cfg.MCPServers)
+	}
+	server := cfg.MCPServers[0]
+	if server.Command != "a-server" || len(server.Args) != 1 || server.Env["TOKEN"] != "explicit" || !filepath.IsAbs(server.CWD) || server.ConnectTimeout != 3*time.Second || server.CallTimeout != 4*time.Second {
+		t.Fatalf("server = %+v", server)
 	}
 }
 

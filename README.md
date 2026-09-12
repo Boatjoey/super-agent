@@ -76,7 +76,8 @@ app creates this template if the file does not exist:
     "memory_mb": 1024,
     "max_processes": 128,
     "max_open_files": 256
-  }
+  },
+  "mcp_servers": {}
 }
 ```
 
@@ -111,6 +112,13 @@ Default tools:
 - `git_status`: show `git status --short`.
 - `git_diff`: show `git diff` for optional paths.
 - `bash`: run shell commands after approval.
+
+MCP stdio servers are configured in `mcp_servers` by name. Each entry accepts
+`command`, `args`, `env`, `cwd`, `connect_timeout_seconds`, and
+`call_timeout_seconds`. Discovered schemas join the built-in registry; MCP tools
+are treated as risky and use the same approval flow. Server environment
+variables are explicit except for basic process variables such as `PATH` and
+`HOME`.
 
 ## Roadmap
 

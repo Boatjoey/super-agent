@@ -5,11 +5,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
+	"time"
 
 	"super-agent/app/instructions"
 	"super-agent/llm"
 	"super-agent/runtime"
 	"super-agent/tools"
+	mcptools "super-agent/tools/mcp"
 )
 
 type Flags struct {
@@ -25,6 +28,7 @@ type Config struct {
 	PermissionMode     runtime.PermissionMode
 	PermissionRules    runtime.PermissionRules
 	Sandbox            tools.SandboxConfig
+	MCPServers         []mcptools.ServerConfig
 	ModelConfig        llm.ProviderConfig
 	InstructionSources []string
 }
@@ -34,6 +38,16 @@ type Settings struct {
 	Providers   map[string]llm.ProviderConfig `json:"providers"`
 	Permissions PermissionSettings            `json:"permissions"`
 	Sandbox     SandboxSettings               `json:"sandbox"`
+	MCPServers  map[string]MCPServerSettings  `json:"mcp_servers"`
+}
+
+type MCPServerSettings struct {
+	Command               string            `json:"command"`
+	Args                  []string          `json:"args"`
+	Env                   map[string]string `json:"env"`
+	CWD                   string            `json:"cwd"`
+	ConnectTimeoutSeconds int               `json:"connect_timeout_seconds"`
+	CallTimeoutSeconds    int               `json:"call_timeout_seconds"`
 }
 
 type SandboxSettings struct {
@@ -86,6 +100,7 @@ func DefaultSettings() Settings {
 			MaxProcesses: 128,
 			MaxOpenFiles: 256,
 		},
+		MCPServers: map[string]MCPServerSettings{},
 	}
 }
 
@@ -131,6 +146,26 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 		DenyEnv:       settings.Permissions.DenyEnv,
 		Network:       firstNonEmpty(settings.Permissions.Network, "deny"),
 	}
+	mcpServers := make([]mcptools.ServerConfig, 0, len(settings.MCPServers))
+	mcpNames := make([]string, 0, len(settings.MCPServers))
+	for name := range settings.MCPServers {
+		mcpNames = append(mcpNames, name)
+	}
+	sort.Strings(mcpNames)
+	for _, name := range mcpNames {
+		server := settings.MCPServers[name]
+		serverCWD := server.CWD
+		if serverCWD == "" {
+			serverCWD = cwd
+		} else if !filepath.IsAbs(serverCWD) {
+			serverCWD = filepath.Join(cwd, serverCWD)
+		}
+		mcpServers = append(mcpServers, mcptools.ServerConfig{
+			Name: name, Command: server.Command, Args: server.Args, Env: server.Env, CWD: serverCWD,
+			ConnectTimeout: time.Duration(server.ConnectTimeoutSeconds) * time.Second,
+			CallTimeout:    time.Duration(server.CallTimeoutSeconds) * time.Second,
+		})
+	}
 	return Config{
 		Provider:         provider,
 		AutoApproveTools: mode == runtime.PermissionModeBypass,
@@ -146,6 +181,7 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 			MaxProcesses: settings.Sandbox.MaxProcesses,
 			MaxOpenFiles: settings.Sandbox.MaxOpenFiles,
 		},
+		MCPServers:         mcpServers,
 		ModelConfig:        settings.Providers[provider],
 		InstructionSources: instructionSourcePaths(bundle),
 	}, nil

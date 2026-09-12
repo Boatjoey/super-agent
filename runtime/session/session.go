@@ -2,6 +2,7 @@ package session
 
 import (
 	"errors"
+	"io"
 	"sync"
 )
 
@@ -15,6 +16,30 @@ type Session struct {
 	permissionMode  PermissionMode
 	permissionRules PermissionRules
 	mu              sync.Mutex
+	closerMu        sync.Mutex
+	closers         []io.Closer
+}
+
+func (s *Session) AddCloser(closer io.Closer) {
+	if closer == nil {
+		return
+	}
+	s.closerMu.Lock()
+	defer s.closerMu.Unlock()
+	s.closers = append(s.closers, closer)
+}
+
+func (s *Session) Close() error {
+	_ = s.Cancel()
+	s.closerMu.Lock()
+	closers := s.closers
+	s.closers = nil
+	s.closerMu.Unlock()
+	var closeErr error
+	for index := len(closers) - 1; index >= 0; index-- {
+		closeErr = errors.Join(closeErr, closers[index].Close())
+	}
+	return closeErr
 }
 
 // metaID returns the active session id. Cancel runs lock-free, so meta
