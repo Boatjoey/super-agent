@@ -77,12 +77,24 @@ app creates this template if the file does not exist:
     "max_processes": 128,
     "max_open_files": 256
   },
-  "mcp_servers": {}
+  "mcp_servers": {},
+  "agent": "build",
+  "agents": {
+    "reviewer": {
+      "prompt": "Review changes and report defects.",
+      "permission_mode": "plan"
+    }
+  }
 }
 ```
 
 The built-in system prompt lives in `app/system_prompt.go` and is compiled into
 the binary.
+
+`build` and `plan` are built-in Agent profiles. Use `/agent` to list profiles,
+`/agent <name>` to switch, or `/plan` and `/build` as shortcuts. Custom entries
+may override `provider`, `model`, `prompt`, and `permission_mode`; switching
+profiles clears the current transcript.
 
 Instructions are loaded from optional `~/.superagent/AGENTS.md`, then from
 project `AGENTS.md` files from root to the working directory. `CLAUDE.md` is the
@@ -126,7 +138,7 @@ updates `settings.json` atomically.
 
 - Kernel-enforced tool isolation.
 - MCP and dynamic tool providers.
-- Agent profiles, subagents, worktrees, and cross-session memory.
+- Subagents, worktrees, and cross-session memory.
 - LSP diagnostics and review workflows.
 - Hooks, custom commands, skills, and plugins.
 - Observability, export, multimodal input, and network tools.

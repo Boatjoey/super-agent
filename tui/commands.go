@@ -9,17 +9,20 @@ import (
 
 var slashCommands = []string{
 	"/clear", "/compact", "/delete-session", "/help", "/instructions", "/permissions",
-	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo",
+	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan",
 }
 
 var slashCommandDescriptions = map[string]string{
 	"/clear":          "Reset the conversation",
+	"/agent":          "List or select an agent <name>",
+	"/build":          "Switch to the build agent",
 	"/compact":        "Compact context [summary]",
 	"/delete-session": "Delete a saved session <id>",
 	"/help":           "Show commands and shortcuts",
 	"/instructions":   "Show loaded instruction files",
 	"/mcp":            "Manage MCP servers <list|add|remove|restart>",
 	"/permissions":    "Inspect or change permission mode",
+	"/plan":           "Switch to the plan agent",
 	"/quit":           "Exit Super Agent",
 	"/rename":         "Rename a session <id> <title>",
 	"/reset":          "Reset the conversation",
@@ -153,6 +156,12 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 	a.input.SetValue("")
 	a.resizeInput()
 	switch command {
+	case "/agent":
+		a.handleAgent(parts)
+	case "/plan":
+		a.handleAgent([]string{"/agent", "plan"})
+	case "/build":
+		a.handleAgent([]string{"/agent", "build"})
 	case "/instructions":
 		a.err = ""
 		a.status = formatInstructions(a.info.InstructionPaths)
@@ -182,6 +191,38 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.err = "Unknown command: " + command
 	}
 	return a, nil
+}
+
+func (a *App) handleAgent(parts []string) {
+	if len(parts) == 1 || (len(parts) == 2 && parts[1] == "list") {
+		current := a.session.CurrentAgent().Name
+		var rows []string
+		for _, profile := range a.session.ListAgents() {
+			marker := "  "
+			if profile.Name == current {
+				marker = "* "
+			}
+			rows = append(rows, marker+profile.Name+" ("+profile.Provider+"/"+profile.Model+", "+profile.PermissionMode+")")
+		}
+		a.err = ""
+		a.status = strings.Join(rows, "\n")
+		return
+	}
+	if len(parts) != 2 {
+		a.err = "Usage: /agent <list|name>"
+		return
+	}
+	if err := a.session.UseAgent(parts[1]); err != nil {
+		a.err = "Agent failed: " + err.Error()
+		return
+	}
+	profile := a.session.CurrentAgent()
+	a.info.Provider, a.info.ModelName = profile.Provider, profile.Model
+	a.info.PermissionMode = profile.PermissionMode
+	a.info.AutoApprove = a.session.AutoApproveTools()
+	a.err = ""
+	a.status = "Using agent " + profile.Name
+	a.refreshSnapshot()
 }
 
 func (a App) handleMCP(parts []string) (tea.Model, tea.Cmd) {

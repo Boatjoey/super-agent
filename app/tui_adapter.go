@@ -14,14 +14,47 @@ import (
 type TUIConversation struct {
 	session *runtime.Session
 	mcp     *MCPController
+	agents  *AgentController
 }
 
-func NewTUIConversation(session *runtime.Session, controllers ...*MCPController) *TUIConversation {
+func NewTUIConversation(session *runtime.Session, controllers ...any) *TUIConversation {
 	conversation := &TUIConversation{session: session}
-	if len(controllers) > 0 {
-		conversation.mcp = controllers[0]
+	for _, controller := range controllers {
+		switch controller := controller.(type) {
+		case *MCPController:
+			conversation.mcp = controller
+		case *AgentController:
+			conversation.agents = controller
+		}
 	}
 	return conversation
+}
+
+func (a *TUIConversation) ListAgents() []tui.AgentSummary {
+	if a.agents == nil {
+		return nil
+	}
+	profiles := a.agents.List()
+	result := make([]tui.AgentSummary, 0, len(profiles))
+	for _, profile := range profiles {
+		result = append(result, tui.AgentSummary{Name: profile.Name, Provider: profile.Provider, Model: profile.Model, PermissionMode: string(profile.PermissionMode)})
+	}
+	return result
+}
+
+func (a *TUIConversation) CurrentAgent() tui.AgentSummary {
+	if a.agents == nil {
+		return tui.AgentSummary{}
+	}
+	profile := a.agents.Current()
+	return tui.AgentSummary{Name: profile.Name, Provider: profile.Provider, Model: profile.Model, PermissionMode: string(profile.PermissionMode)}
+}
+
+func (a *TUIConversation) UseAgent(name string) error {
+	if a.agents == nil {
+		return fmt.Errorf("agent profiles are unavailable")
+	}
+	return a.agents.Use(name)
 }
 
 func (a *TUIConversation) Snapshot() tui.ConversationView {

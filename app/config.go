@@ -30,7 +30,10 @@ type Config struct {
 	Sandbox            tools.SandboxConfig
 	MCPServers         []mcptools.ServerConfig
 	ModelConfig        llm.ProviderConfig
+	ProviderConfigs    map[string]llm.ProviderConfig
 	InstructionSources []string
+	Agents             map[string]AgentSettings
+	Agent              string
 }
 
 type Settings struct {
@@ -39,6 +42,15 @@ type Settings struct {
 	Permissions PermissionSettings            `json:"permissions"`
 	Sandbox     SandboxSettings               `json:"sandbox"`
 	MCPServers  map[string]MCPServerSettings  `json:"mcp_servers"`
+	Agent       string                        `json:"agent"`
+	Agents      map[string]AgentSettings      `json:"agents"`
+}
+
+type AgentSettings struct {
+	Provider       string `json:"provider,omitempty"`
+	Model          string `json:"model,omitempty"`
+	Prompt         string `json:"prompt,omitempty"`
+	PermissionMode string `json:"permission_mode,omitempty"`
 }
 
 type MCPServerSettings struct {
@@ -101,6 +113,8 @@ func DefaultSettings() Settings {
 			MaxOpenFiles: 256,
 		},
 		MCPServers: map[string]MCPServerSettings{},
+		Agent:      "build",
+		Agents:     map[string]AgentSettings{},
 	}
 }
 
@@ -183,7 +197,10 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 		},
 		MCPServers:         mcpServers,
 		ModelConfig:        settings.Providers[provider],
+		ProviderConfigs:    settings.Providers,
 		InstructionSources: instructionSourcePaths(bundle),
+		Agents:             settings.Agents,
+		Agent:              firstNonEmpty(settings.Agent, "build"),
 	}, nil
 }
 
@@ -226,6 +243,9 @@ func LoadSettingsFile(path string) (Settings, error) {
 		}
 		if settings.Providers == nil {
 			settings.Providers = map[string]llm.ProviderConfig{}
+		}
+		if settings.Agents == nil {
+			settings.Agents = map[string]AgentSettings{}
 		}
 		normalizeSettings(&settings)
 		return settings, nil
@@ -283,6 +303,12 @@ func SaveSettingsFile(path string, settings Settings) error {
 }
 
 func normalizeSettings(settings *Settings) {
+	if settings.Agent == "" {
+		settings.Agent = "build"
+	}
+	if settings.Agents == nil {
+		settings.Agents = map[string]AgentSettings{}
+	}
 	if settings.Permissions.Mode == "" {
 		settings.Permissions.Mode = "ask"
 	}

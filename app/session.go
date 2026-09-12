@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -22,14 +23,37 @@ func NewSession(cfg Config) (*runtime.Session, error) {
 }
 
 func NewSessionWithMCP(cfg Config) (*runtime.Session, *MCPController, error) {
+	session, mcp, _, err := NewSessionWithExtensions(cfg)
+	return session, mcp, err
+}
+
+func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *AgentController, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	model, err := llm.NewModel(cfg.Provider, cfg.ModelConfig) // 模型调用的封装
+	providers := cfg.ProviderConfigs
+	if len(providers) == 0 {
+		providers = map[string]llm.ProviderConfig{cfg.Provider: cfg.ModelConfig}
+	}
+	profiles, err := buildAgentProfiles(cfg, providers)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
+	agentName := firstNonEmpty(cfg.Agent, "build")
+	profile, ok := profiles[agentName]
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("unknown configured agent: %s", agentName)
+	}
+	providerConfig := providers[profile.Provider]
+	if profile.Model != "" {
+		providerConfig.Model = profile.Model
+	}
+	model, err := llm.NewModel(profile.Provider, providerConfig)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	router := &routedModel{model: model}
 	var (
 		toolRunner runtime.ToolRunner
 		registry   *tools.Registry
@@ -46,58 +70,59 @@ func NewSessionWithMCP(cfg Config) (*runtime.Session, *MCPController, error) {
 	} else {
 		registry, err = tools.SandboxedRegistry(cfg.Sandbox)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		manager, connectErr := mcptools.Connect(context.Background(), cfg.MCPServers)
 		if connectErr != nil {
-			return nil, nil, connectErr
+			return nil, nil, nil, connectErr
 		}
 		if addErr := registry.Add(manager.Tools()...); addErr != nil {
 			_ = manager.Close()
-			return nil, nil, addErr
+			return nil, nil, nil, addErr
 		}
 		settingsPath, pathErr := SettingsPath()
 		if pathErr != nil {
 			_ = manager.Close()
-			return nil, nil, pathErr
+			return nil, nil, nil, pathErr
 		}
 		controller = NewMCPController(manager, registry, settingsPath, cwd, settingsMap(cfg.MCPServers))
 		// The runtime session owns extension process lifetime after creation.
 		extension = manager
 		toolRunner = runtime.ToolRunner(registry) // 工具调用的封装
 	}
-	initial, bundle, err := initialMessages(cwd) //
+	initial, bundle, err := initialMessagesWithAgent(cwd, profile)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	engine := runtime.NewEngineWithExecutorAndPolicy(runtime.NewDefaultScheduledActionExecutor(model, toolRunner), runtime.NewPolicy(cfg.PermissionMode, cfg.PermissionRules), initial)
+	engine := runtime.NewEngineWithExecutorAndPolicy(runtime.NewDefaultScheduledActionExecutor(router, toolRunner), runtime.NewPolicy(profile.PermissionMode, cfg.PermissionRules), initial)
 	if cfg.AutoApproveTools {
 		engine.EnableAutoApproveTools()
 	}
 	if err := engine.Ready(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	st, err := store.OpenDefault()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	repository := store.NewRepository(st)
 	session, err := runtime.CreatePersistentSession(engine, repository, workspace.Workspace{}, runtime.SessionMetadata{
-		Provider: cfg.Provider, Model: cfg.ModelConfig.Model, CWD: cwd,
+		Provider: profile.Provider, Model: profile.Model, CWD: cwd,
 		Title: filepath.Base(cwd), InstructionSources: instructionSourcePaths(bundle),
 	}, initial)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if registry != nil {
 		registry.SetCheckpointCallback(session.Checkpoint)
 	}
-	session.ConfigurePermissions(cfg.PermissionMode, cfg.PermissionRules)
+	session.ConfigurePermissions(profile.PermissionMode, cfg.PermissionRules)
 	if extension != nil {
 		session.AddCloser(extension)
 		extension = nil
 	}
-	return session, controller, nil
+	agents := &AgentController{session: session, model: router, profiles: profiles, providers: providers, base: cwd, current: profile.Name}
+	return session, controller, agents, nil
 }
 
 func settingsMap(configs []mcptools.ServerConfig) map[string]MCPServerSettings {

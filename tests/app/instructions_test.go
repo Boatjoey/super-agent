@@ -186,6 +186,30 @@ func TestNewSessionInjectsSystemPrompt(t *testing.T) {
 	}
 }
 
+func TestAgentControllerSwitchesPlanAndBuildProfiles(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	t.Chdir(dir)
+	cfg := Config{Provider: "deepseek", NoTools: true, PermissionMode: runtime.PermissionModeAsk}
+	session, _, agents, err := NewSessionWithExtensions(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if err := agents.Use("plan"); err != nil {
+		t.Fatal(err)
+	}
+	if session.PermissionMode() != runtime.PermissionModePlan || !strings.Contains(session.Snapshot().Messages[0].Content, "Active agent profile: plan") {
+		t.Fatalf("plan profile not active: mode=%s messages=%+v", session.PermissionMode(), session.Snapshot().Messages)
+	}
+	if err := agents.Use("build"); err != nil {
+		t.Fatal(err)
+	}
+	if agents.Current().Name != "build" || session.PermissionMode() != runtime.PermissionModeAsk {
+		t.Fatalf("build profile not active: %+v mode=%s", agents.Current(), session.PermissionMode())
+	}
+}
+
 func TestLoadEmptyAgentsFallsBackToClaudeMd(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("   \n"), 0644); err != nil {

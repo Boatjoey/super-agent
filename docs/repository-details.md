@@ -50,6 +50,8 @@ During a turn the Engine owns the single scheduled-action loop. Session injects 
 
 TUI commands:
 
+- `/agent`: list built-in and configured Agent profiles.
+- `/agent <name>`: switch model, system instructions, and permission mode; `/plan` and `/build` are shortcuts.
 - `/instructions`: show loaded instruction source paths.
 - `/permissions`: show current permission mode and tool approval status.
 - `/permissions mode <ask|accept-edits|plan|bypass>`: change the active session permission mode.
@@ -182,7 +184,7 @@ Command classification is a text heuristic for approval routing, not a security 
 
 ## Config
 
-`main.go` loads `.env` with `godotenv` for runtime switches such as `NO_TOOLS` and `YOLO`. LLM provider config is read from `~/.superagent/settings.json`, including provider name, API keys, base URLs, and model names. Permission config also lives there:
+`main.go` loads `.env` with `godotenv` for runtime switches such as `NO_TOOLS` and `YOLO`. LLM provider config is read from `~/.superagent/settings.json`, including provider name, API keys, base URLs, and model names. The top-level `agent` selects `build`, `plan`, or a profile from `agents`; custom profiles may override provider, model, prompt, and permission mode. Permission config also lives there:
 
 ```json
 {

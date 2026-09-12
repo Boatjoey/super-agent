@@ -124,6 +124,22 @@ func (s *Session) Reset() error {
 	return err
 }
 
+// ReplaceConversation activates a new system context and clears prior turns.
+func (s *Session) ReplaceConversation(messages []Message) error {
+	if !s.mu.TryLock() {
+		return errors.New("session is already running a turn")
+	}
+	defer s.mu.Unlock()
+	if s.repository != nil {
+		if err := s.repository.SaveConversationReplacement(s.metaID(), messages); err != nil {
+			return err
+		}
+	}
+	s.engine.ReplaceMessages(messages)
+	s.emitter.reset(len(messages))
+	return nil
+}
+
 // Metadata returns the session metadata known to this session, including
 // the id and title used by persistence.
 func (s *Session) Metadata() Metadata {

@@ -197,7 +197,7 @@ func (a App) welcomeString() string {
 	}
 	b.WriteString(fmt.Sprintf("**Model:** %s/%s  ", a.info.Provider, a.info.ModelName))
 	b.WriteString(fmt.Sprintf("**Tools:** %s  **Approval:** %s  **Mode:** %s\n\n", toolsLabel, approveLabel, firstNonEmpty(a.info.PermissionMode, "ask")))
-	b.WriteString("**Commands:** `/help` `/instructions` `/permissions` `/mcp` `/clear` `/sessions` `/resume <id>` `/compact` `/undo` `/quit`\n")
+	b.WriteString("**Commands:** `/help` `/agent` `/plan` `/build` `/instructions` `/permissions` `/mcp` `/clear` `/sessions` `/resume <id>` `/compact` `/undo` `/quit`\n")
 	return a.renderMarkdown(b.String())
 }
 

@@ -30,18 +30,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	session, mcpController, err := app.NewSessionWithMCP(cfg) // 一次会话
+	session, mcpController, agentController, err := app.NewSessionWithExtensions(cfg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	defer session.Close()
 	cwd, _ := os.Getwd()
-	if _, err := tea.NewProgram(tui.New(app.NewTUIConversation(session, mcpController), tui.StartupInfo{
-		Provider:         cfg.Provider,
-		ModelName:        llm.ModelDisplayName(cfg.Provider, cfg.ModelConfig),
-		AutoApprove:      cfg.AutoApproveTools,
-		PermissionMode:   string(cfg.PermissionMode),
+	profile := agentController.Current()
+	if _, err := tea.NewProgram(tui.New(app.NewTUIConversation(session, mcpController, agentController), tui.StartupInfo{
+		Provider:         profile.Provider,
+		ModelName:        llm.ModelDisplayName(profile.Provider, llm.ProviderConfig{Model: profile.Model}),
+		AutoApprove:      profile.PermissionMode == "bypass",
+		PermissionMode:   string(profile.PermissionMode),
 		NoTools:          cfg.NoTools,
 		CWD:              cwd,
 		InstructionPaths: cfg.InstructionSources,

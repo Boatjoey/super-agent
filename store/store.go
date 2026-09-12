@@ -27,6 +27,7 @@ const (
 	EventError            = "error"
 	EventCheckpoint       = "checkpoint"
 	EventCompact          = "compact"
+	EventContextReplaced  = "context_replaced"
 )
 
 type SessionID string
@@ -57,6 +58,7 @@ type Record struct {
 	Error      string             `json:"error,omitempty"`
 	Checkpoint *Checkpoint        `json:"checkpoint,omitempty"`
 	Compact    *Compact           `json:"compact,omitempty"`
+	Messages   []protocol.Message `json:"messages,omitempty"`
 }
 
 type Checkpoint struct {
@@ -359,6 +361,8 @@ func messagesFromRecords(records []Record) []protocol.Message {
 			if record.Compact != nil {
 				messages = append([]protocol.Message(nil), record.Compact.KeptMessages...)
 			}
+		case EventContextReplaced:
+			messages = append([]protocol.Message(nil), record.Messages...)
 		}
 	}
 	return messages

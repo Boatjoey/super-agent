@@ -720,6 +720,10 @@ type notificationOnlyConversation struct {
 	mcpAddedArgs    []string
 }
 
+func (c *notificationOnlyConversation) ListAgents() []tui.AgentSummary { return nil }
+func (c *notificationOnlyConversation) CurrentAgent() tui.AgentSummary { return tui.AgentSummary{} }
+func (c *notificationOnlyConversation) UseAgent(string) error          { return nil }
+
 func (c *notificationOnlyConversation) Snapshot() tui.ConversationView {
 	if c.rejectSnapshots {
 		panic("unexpected Snapshot read")

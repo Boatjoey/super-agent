@@ -87,6 +87,15 @@ func (r Repository) SaveReset(id session.SessionID) error {
 	return nil
 }
 
+func (r Repository) SaveConversationReplacement(id session.SessionID, messages []protocol.Message) error {
+	copyOfMessages := append([]protocol.Message(nil), messages...)
+	if err := r.store.Append(SessionID(id), Record{Type: EventContextReplaced, Messages: copyOfMessages}); err != nil {
+		logPersistenceFailure("replace conversation", id, err)
+		return err
+	}
+	return nil
+}
+
 func (r Repository) SaveCompaction(id session.SessionID, summary string, original, kept []protocol.Message) error {
 	if err := r.store.Append(SessionID(id), Record{Type: EventCompact, Compact: &Compact{Summary: summary, OriginalMessages: original, KeptMessages: kept}}); err != nil {
 		logPersistenceFailure("save compaction", id, err)

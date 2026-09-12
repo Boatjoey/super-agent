@@ -79,6 +79,31 @@ func TestPersistentResetPreservesSystemMessages(t *testing.T) {
 	}
 }
 
+func TestConversationReplacementPersistsExactAgentContext(t *testing.T) {
+	st := store.New(t.TempDir())
+	initial := []Message{{Role: RoleSystem, Content: "build"}}
+	meta, err := st.Create(store.Metadata{Provider: "test", Model: "test-model", CWD: t.TempDir()}, initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngineWithExecutor(&staticExecutor{}, initial)
+	if err := engine.Ready(); err != nil {
+		t.Fatal(err)
+	}
+	session := persistentSession(engine, st, meta)
+	replacement := []Message{{Role: RoleSystem, Content: "plan"}}
+	if err := session.ReplaceConversation(replacement); err != nil {
+		t.Fatal(err)
+	}
+	messages, err := st.Messages(meta.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 1 || messages[0].Content != "plan" {
+		t.Fatalf("messages = %+v, want exact replacement", messages)
+	}
+}
+
 func TestCompactKeepsSystemInstructionsAndNewestContext(t *testing.T) {
 	st := store.New(t.TempDir())
 	initial := []Message{{Role: RoleSystem, Content: "rules"}}

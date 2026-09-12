@@ -49,6 +49,7 @@ type MCPServerSummary struct {
 	Name  string
 	Tools []string
 }
+type AgentSummary struct{ Name, Provider, Model, PermissionMode string }
 
 type ApprovalDecision string
 
@@ -108,4 +109,7 @@ type Conversation interface {
 	AddMCPServer(context.Context, string, string, []string) error
 	RemoveMCPServer(string) error
 	RestartMCPServer(context.Context, string) error
+	ListAgents() []AgentSummary
+	CurrentAgent() AgentSummary
+	UseAgent(string) error
 }

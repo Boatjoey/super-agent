@@ -39,6 +39,7 @@ type Repository interface {
 	SaveError(SessionID, error) error
 	SaveCancel(SessionID) error
 	SaveReset(SessionID) error
+	SaveConversationReplacement(SessionID, []Message) error
 	SaveCompaction(SessionID, string, []Message, []Message) error
 	SaveCheckpoint(SessionID, ToolCall, []FileSnapshot) error
 	List() ([]Summary, error)

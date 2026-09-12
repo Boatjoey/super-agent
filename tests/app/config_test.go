@@ -64,6 +64,26 @@ func TestLoadConfigCombinesFlagsEnvAndSettings(t *testing.T) {
 	}
 }
 
+func TestLoadConfigReadsCustomAgent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	settingsDir := filepath.Join(home, ".superagent")
+	if err := os.MkdirAll(settingsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"provider":"deepseek","providers":{"deepseek":{"model":"reasoner"}},"agent":"reviewer","agents":{"reviewer":{"prompt":"Review only.","permission_mode":"plan"}}}`
+	if err := os.WriteFile(filepath.Join(settingsDir, "settings.json"), []byte(settings), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(Flags{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Agent != "reviewer" || cfg.Agents["reviewer"].Prompt != "Review only." {
+		t.Fatalf("agent config = %+v", cfg)
+	}
+}
+
 func TestLoadConfigUsesSettingsPermissionMode(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
