@@ -73,6 +73,8 @@ TUI commands:
 - `/export <markdown|json>` and `/share`: atomically write transcript exports or standalone local HTML under `.super-agent/exports/`.
 - `/attach <path>` and `/attachments`: queue bounded workspace attachments for the next multimodal user message.
 
+Long command output is kept in the scrollable viewport, footer status is line-bounded, attachment metadata appears beside user messages, and help width follows the terminal.
+
 TUI keys: `Enter` submits when idle and cancels/restarts with steering input while a turn runs; `Tab` queues a follow-up during a run. `Ctrl+J`, `Shift+Enter`, or `Alt+Enter` inserts a newline. Typing `/` opens the command palette; arrows select and `Tab` or `Enter` completes a command. `Esc` clears input or cancels a run, `Ctrl+U` clears input, `Ctrl+C` cancels or quits, arrows otherwise navigate multiline input or recall single-line prompts without losing the current draft, and Page Up/Down scrolls.
 
 The full slash-command palette shows command descriptions and argument hints; compact mode shows names only.

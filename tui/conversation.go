@@ -22,6 +22,7 @@ type Message struct {
 	ToolName         string
 	ToolCalls        []*ToolCall
 	Interrupted      bool
+	Attachments      []AttachmentSummary
 }
 
 type PermissionRequest struct {

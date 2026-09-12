@@ -292,9 +292,13 @@ func (a *App) handleGitDiff() {
 	}
 	a.err = ""
 	if strings.TrimSpace(result) == "" {
+		a.commandOutput = ""
 		a.status = "No changes"
 	} else {
-		a.status = result
+		a.commandOutput = result
+		a.status = "Patch preview"
+		a.viewport.SetContent(a.contentString())
+		a.viewport.GotoBottom()
 	}
 }
 
@@ -305,7 +309,10 @@ func (a *App) handleGitStatus() {
 		return
 	}
 	a.err = ""
-	a.status = result
+	a.commandOutput = result
+	a.status = "Branch status"
+	a.viewport.SetContent(a.contentString())
+	a.viewport.GotoBottom()
 }
 
 func (a *App) handleFork(title string) {
@@ -529,6 +536,7 @@ func (a *App) handleUndo() {
 func (a App) submitPrompt(text string) (tea.Model, tea.Cmd) {
 	a.err = ""
 	a.status = ""
+	a.commandOutput = ""
 	a.lastActivity = text
 	a.streamingMessage = nil
 	a.agentStatus = AgentStatus{Label: "Submitting", Busy: true}

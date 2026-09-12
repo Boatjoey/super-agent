@@ -170,6 +170,9 @@ Use `/attach <path>` to queue a workspace image or file for the next prompt and
 are sent as native multimodal blocks; supported documents are sent as file or
 document blocks.
 
+Long command results such as `/diff` render in the scrollable conversation
+viewport; footer status is bounded so small terminals retain usable input.
+
 The `extensions` section supports prompt-backed slash commands, sandboxed
 `startup`/`before_turn`/`after_turn` hooks, `SKILL.md` paths, and local plugin
 directories. A plugin contains `plugin.json` with optional `commands`, `hooks`,

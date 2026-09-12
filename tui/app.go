@@ -58,6 +58,7 @@ type App struct {
 	turn              int
 	compacting        bool
 	managingMCP       bool
+	commandOutput     string
 }
 
 type submitDoneMsg struct {
@@ -209,7 +210,7 @@ func (a App) footerView() string {
 	}
 
 	if a.status != "" {
-		b.WriteString(a.styles.Status.Render(" "+a.status) + "\n")
+		b.WriteString(a.styles.Status.Render(" "+compactStatus(a.status, 3)) + "\n")
 	}
 
 	compact := a.height > 0 && a.height < 18
@@ -416,7 +417,7 @@ func (a App) contentString() string {
 
 	messages := a.messages
 
-	if len(messages) == 0 && !a.isBusy() {
+	if len(messages) == 0 && !a.isBusy() && a.commandOutput == "" {
 		return a.welcomeString()
 	}
 
@@ -439,6 +440,9 @@ func (a App) contentString() string {
 			for _, tc := range msg.ToolCalls {
 				msgBlock.WriteString(a.renderToolCall(tc) + "\n")
 			}
+		}
+		for _, attachment := range msg.Attachments {
+			msgBlock.WriteString(a.styles.Status.Render("  attachment: "+attachment.Name+" ("+attachment.MIME+")") + "\n")
 		}
 
 		if msg.Role == "tool" {
@@ -466,6 +470,10 @@ func (a App) contentString() string {
 		b.WriteString(wrapStyle.Render(msgBlock.String()) + "\n\n")
 	}
 
+	if a.commandOutput != "" {
+		b.WriteString(wrapStyle.Render(a.styles.CommandLabel.Render("COMMAND OUTPUT")+"\n"+a.commandOutput) + "\n\n")
+	}
+
 	if a.isBusy() && a.streamingMessage != nil {
 		var streamBlock strings.Builder
 		streamBlock.WriteString(a.styles.AgentLabel.Render("AGENT") + "\n")
@@ -486,4 +494,12 @@ func (a App) contentString() string {
 	}
 
 	return b.String()
+}
+
+func compactStatus(value string, maxLines int) string {
+	lines := strings.Split(value, "\n")
+	if len(lines) <= maxLines {
+		return value
+	}
+	return strings.Join(lines[:maxLines], "\n") + fmt.Sprintf("\n… %d more lines", len(lines)-maxLines)
 }

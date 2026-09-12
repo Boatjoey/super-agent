@@ -141,6 +141,7 @@ func (a App) updateKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "ctrl+l":
 		a.viewport.SetContent("")
+		a.commandOutput = ""
 		a.err = ""
 		a.status = ""
 		a.lastActivity = "Viewport cleared"

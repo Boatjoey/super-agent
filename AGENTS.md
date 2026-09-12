@@ -62,6 +62,7 @@
 - The footer shows a `states:` history of the current turn's state transitions (for example `WaitingLLM → AdvancingQueue → RunningTool`); consecutive repeats collapse and the history resets when a new turn starts.
 - Manual run cancellation clears queued prompts; steering cancellation preserves them.
 - Below 18 terminal rows, use compact footer rendering and keep viewport/input dimensions positive.
+- Keep long command output in the scrollable viewport and bound footer status height.
 - Approval UI supports arrows/Enter plus `1/y`, `2/a`, and `3/n`; ignore duplicate input after submission.
 - The composer is multiline: `Ctrl+J`, `Shift+Enter`, or `Alt+Enter` inserts a newline; `Enter` submits.
 - Typing `/` opens the command palette; arrows select and `Tab` or `Enter` completes commands.

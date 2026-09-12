@@ -296,7 +296,11 @@ func toTUIMessage(message runtime.Message) tui.Message {
 		converted := toTUIToolCall(*call)
 		calls = append(calls, &converted)
 	}
-	return tui.Message{Role: tui.Role(message.Role), Content: message.Content, ReasoningContent: message.ReasoningContent, ToolCallID: message.ToolCallID, ToolName: message.ToolName, ToolCalls: calls, Interrupted: message.Interrupted}
+	attachments := make([]tui.AttachmentSummary, 0, len(message.Attachments))
+	for _, attachment := range message.Attachments {
+		attachments = append(attachments, tui.AttachmentSummary{Name: attachment.Name, MIME: attachment.MIME})
+	}
+	return tui.Message{Role: tui.Role(message.Role), Content: message.Content, ReasoningContent: message.ReasoningContent, ToolCallID: message.ToolCallID, ToolName: message.ToolName, ToolCalls: calls, Interrupted: message.Interrupted, Attachments: attachments}
 }
 
 func toTUIToolCall(call runtime.ToolCall) tui.ToolCall {

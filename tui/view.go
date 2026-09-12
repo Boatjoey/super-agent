@@ -8,9 +8,11 @@ import (
 )
 
 func (a App) helpView() string {
-	helpStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("6")).Padding(1, 2).Width(45)
+	helpStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("6")).Padding(1, 2).Width(max(20, min(64, a.width-4)))
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6")).Render("Commands & Shortcuts")
 	items := []string{
+		a.styles.CommandLabel.Render("/agent") + "    Select agent profile",
+		a.styles.CommandLabel.Render("/attach") + "   Queue image or file",
 		a.styles.CommandLabel.Render("/clear") + "    Reset conversation",
 		a.styles.CommandLabel.Render("/sessions") + " List saved sessions",
 		a.styles.CommandLabel.Render("/resume") + "   Resume saved session",
@@ -18,6 +20,8 @@ func (a App) helpView() string {
 		a.styles.CommandLabel.Render("/undo") + "     Restore checkpoint",
 		a.styles.CommandLabel.Render("/permissions") + " Show permission policy",
 		a.styles.CommandLabel.Render("/mcp") + "      Manage MCP servers",
+		a.styles.CommandLabel.Render("/review") + "   Review current changes",
+		a.styles.CommandLabel.Render("/export") + "   Export or share session",
 		a.styles.CommandLabel.Render("/help") + "     Show this menu",
 		a.styles.CommandLabel.Render("/quit") + "     Exit application",
 		"", "enter        Submit / steer active turn", "tab          Queue while running", "ctrl+j       Insert newline", "up/down      History / move lines", "pgup/pgdn    Scroll history",
