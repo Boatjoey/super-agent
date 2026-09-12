@@ -92,6 +92,7 @@
 - MCP stdio server definitions come from the top-level `mcp_servers` settings map.
 - LSP stdio server definitions come from `lsp_servers`; configured servers expose diagnostics, symbols, definitions, references, and outlines as tools.
 - Extensions configure custom commands, `startup`/`before_turn`/`after_turn` hooks, skills, and local plugin manifests.
+- Structured JSONL telemetry correlates run/action IDs, transitions, tools, durations, errors, and token estimates.
 - Command classification routes approvals but is not a security boundary.
 - Linux command tools use strict bubblewrap isolation by default with a read-only host root, writable workspace, policy-controlled networking, ephemeral home/tmp, and `prlimit` resource bounds.
 - Strict sandbox mode fails closed when `bwrap` or `prlimit` is unavailable; unsupported platforms require explicit `sandbox.mode: off`.

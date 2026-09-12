@@ -13,6 +13,7 @@ import (
 	"super-agent/app/instructions"
 	"super-agent/llm"
 	"super-agent/runtime"
+	"super-agent/runtime/telemetry"
 	"super-agent/store"
 	"super-agent/tools"
 	lsptools "super-agent/tools/lsp"
@@ -35,6 +36,15 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if err := telemetry.Configure(cfg.TelemetryPath); err != nil {
+		return nil, nil, nil, err
+	}
+	telemetryOwned := true
+	defer func() {
+		if telemetryOwned {
+			_ = telemetry.Close()
+		}
+	}()
 	providers := cfg.ProviderConfigs
 	if len(providers) == 0 {
 		providers = map[string]llm.ProviderConfig{cfg.Provider: cfg.ModelConfig}
@@ -158,6 +168,8 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 		session.AddCloser(lspCloser)
 		lspCloser = nil
 	}
+	session.AddCloser(closerFunc(telemetry.Close))
+	telemetryOwned = false
 	if lspCloser != nil {
 		session.AddCloser(lspCloser)
 		lspCloser = nil
@@ -170,6 +182,10 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 	agents := &AgentController{session: session, model: router, profiles: profiles, providers: providers, workflows: workflows, base: cwd, current: profile.Name}
 	return session, controller, agents, nil
 }
+
+type closerFunc func() error
+
+func (f closerFunc) Close() error { return f() }
 
 func settingsMap(configs []mcptools.ServerConfig) map[string]MCPServerSettings {
 	result := make(map[string]MCPServerSettings, len(configs))

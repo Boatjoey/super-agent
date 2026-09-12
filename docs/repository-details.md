@@ -214,6 +214,8 @@ The top-level `lsp_servers` map starts stdio language servers by file extension.
 
 The `extensions` settings load prompt-backed custom slash commands, sandboxed lifecycle hooks, `SKILL.md` instructions, and local `plugin.json` bundles. Supported hook events are `startup`, `before_turn`, and `after_turn`.
 
+`runtime/telemetry` writes synchronized JSONL records for transitions, actions, runs, and tools. Records carry run/action correlation IDs, duration, errors, component names, and model token estimates. `telemetry.log_path` controls the destination.
+
 ## Build
 
 `./scripts/build-local.sh` builds the app and installs it as `/usr/local/bin/super-agent`. Set `SUPER_AGENT_INSTALL_DIR` to override the install directory for tests or automation.

@@ -3,10 +3,13 @@ package engine
 import (
 	"context"
 	"errors"
+	"reflect"
+	"time"
 
 	"super-agent/runtime/execution"
 	"super-agent/runtime/machine"
 	"super-agent/runtime/protocol"
+	"super-agent/runtime/telemetry"
 )
 
 func (e *Engine) DispatchEvent(ctx context.Context, event machine.Event, onStreamChunk func(protocol.StreamChunk)) error {
@@ -17,7 +20,10 @@ func (e *Engine) DispatchEvent(ctx context.Context, event machine.Event, onStrea
 }
 
 func (e *Engine) RunTurn(ctx context.Context, event machine.UserMessageSubmitted, onStreamChunk func(protocol.StreamChunk), approvalWaiter execution.ApprovalWaiter) error {
-	return e.dispatchEvent(ctx, event, onStreamChunk, approvalWaiter)
+	started := time.Now()
+	err := e.dispatchEvent(ctx, event, onStreamChunk, approvalWaiter)
+	telemetry.Record("run", telemetry.Fields{"run_id": string(e.runs.CurrentRunID()), "duration_ms": time.Since(started).Milliseconds(), "error": errorString(err)})
+	return err
 }
 
 func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, onStreamChunk func(protocol.StreamChunk), approvalWaiter execution.ApprovalWaiter) error {
@@ -47,7 +53,10 @@ func (e *Engine) dispatchEvent(ctx context.Context, event machine.Event, onStrea
 		e.mu.Unlock()
 		return err
 	}
+	state := e.runtimeData.State
+	runID := e.runs.CurrentRunID()
 	e.mu.Unlock()
+	telemetry.Record("transition", telemetry.Fields{"run_id": string(runID), "event": typeName(event), "state": string(state), "scheduled_actions": len(decision.ActionPlan.Schedule)})
 	e.notifyStateObserver()
 	return e.runScheduledActions(runCtx, onStreamChunk, approvalWaiter)
 }
@@ -112,14 +121,33 @@ func (e *Engine) runScheduledActions(ctx context.Context, onStreamChunk func(pro
 }
 
 func (e *Engine) executeScheduledAction(ctx context.Context, action execution.QueuedAction, onStreamChunk func(protocol.StreamChunk), approvalWaiter execution.ApprovalWaiter) error {
+	started := time.Now()
 	stream := onStreamChunk
 	if onStreamChunk != nil {
 		stream = func(chunk protocol.StreamChunk) { e.recordStreamChunk(action.RunID, chunk); onStreamChunk(chunk) }
 	}
-	completion, err := e.runner.Run(ctx, action, execution.ScheduledActionInput{Messages: e.Messages(), ToolSpecs: e.toolSpecs(), ApprovalWaiter: approvalWaiter}, stream)
+	env := execution.ScheduledActionInput{Messages: e.Messages(), ToolSpecs: e.toolSpecs(), ApprovalWaiter: approvalWaiter}
+	actionCtx := telemetry.WithIDs(ctx, string(action.RunID), string(action.ActionID))
+	completion, err := e.runner.Run(actionCtx, action, env, stream)
 	if err != nil {
+		telemetry.Record("action", telemetry.Fields{"run_id": string(action.RunID), "action_id": string(action.ActionID), "action": typeName(action.Action), "duration_ms": time.Since(started).Milliseconds(), "error": err.Error()})
 		return err
 	}
+	fields := telemetry.Fields{"run_id": string(action.RunID), "action_id": string(action.ActionID), "action": typeName(action.Action), "duration_ms": time.Since(started).Milliseconds()}
+	switch typed := action.Action.(type) {
+	case machine.CallModel:
+		fields["component"] = "model"
+	case machine.RunTool:
+		fields["component"] = "tool"
+		fields["tool"] = typed.Call.Name
+	case machine.AwaitApproval:
+		fields["component"] = "approval"
+	}
+	if reply, ok := completion.Result.(execution.ModelReplied); ok {
+		fields["input_tokens_estimate"] = estimateMessageTokens(env.Messages)
+		fields["output_tokens_estimate"] = estimateTokens(reply.Response.Content + reply.Response.ReasoningContent)
+	}
+	telemetry.Record("action", fields)
 	if !e.runs.IsCurrent(completion.RunID) {
 		return nil
 	}
@@ -145,6 +173,37 @@ func (e *Engine) executeScheduledAction(ctx context.Context, action execution.Qu
 		}
 	}
 	return err
+}
+
+func typeName(value any) string {
+	typeOf := reflect.TypeOf(value)
+	if typeOf == nil {
+		return "nil"
+	}
+	return typeOf.Name()
+}
+
+func estimateMessageTokens(messages []protocol.Message) int {
+	total := 0
+	for _, message := range messages {
+		total += estimateTokens(message.Content + message.ReasoningContent)
+	}
+	return total
+}
+
+func estimateTokens(value string) int {
+	count := len([]rune(value))
+	if count == 0 {
+		return 0
+	}
+	return (count + 3) / 4
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func cloneToolBatch(batch *machine.ToolCallBatch) *machine.ToolCallBatch {

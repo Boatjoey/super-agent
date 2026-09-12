@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"super-agent/runtime/protocol"
+	"super-agent/runtime/telemetry"
 )
 
 type Tool interface {
@@ -173,7 +175,16 @@ func (r *Registry) Specs() []protocol.ToolSpec {
 	return specs
 }
 
-func (r *Registry) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
+func (r *Registry) Run(ctx context.Context, call protocol.ToolCall) (result string, err error) {
+	started := time.Now()
+	ids := telemetry.IDsFrom(ctx)
+	defer func() {
+		errorText := ""
+		if err != nil {
+			errorText = err.Error()
+		}
+		telemetry.Record("tool", telemetry.Fields{"run_id": ids.RunID, "action_id": ids.ActionID, "tool": call.Name, "duration_ms": time.Since(started).Milliseconds(), "error": errorText})
+	}()
 	r.mu.RLock()
 	tool, ok := r.tools[call.Name]
 	checkpoint := r.checkpoint

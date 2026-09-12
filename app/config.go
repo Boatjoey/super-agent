@@ -37,6 +37,7 @@ type Config struct {
 	Agents             map[string]AgentSettings
 	Agent              string
 	Extensions         Extensions
+	TelemetryPath      string
 }
 
 type Settings struct {
@@ -49,6 +50,11 @@ type Settings struct {
 	Agent       string                        `json:"agent"`
 	Agents      map[string]AgentSettings      `json:"agents"`
 	Extensions  ExtensionSettings             `json:"extensions"`
+	Telemetry   TelemetrySettings             `json:"telemetry"`
+}
+
+type TelemetrySettings struct {
+	LogPath string `json:"log_path"`
 }
 
 type AgentSettings struct {
@@ -145,6 +151,16 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 	if err != nil {
 		return Config{}, err
 	}
+	telemetryPath := settings.Telemetry.LogPath
+	if telemetryPath == "" {
+		home, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			return Config{}, homeErr
+		}
+		telemetryPath = filepath.Join(home, ".superagent", "telemetry.jsonl")
+	} else if !filepath.IsAbs(telemetryPath) {
+		telemetryPath = filepath.Join(cwd, telemetryPath)
+	}
 	bundle, err := instructions.Load(cwd)
 	if err != nil {
 		return Config{}, err
@@ -226,6 +242,7 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 		Agents:             settings.Agents,
 		Agent:              firstNonEmpty(settings.Agent, "build"),
 		Extensions:         extensions,
+		TelemetryPath:      telemetryPath,
 	}, nil
 }
 

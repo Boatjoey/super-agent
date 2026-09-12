@@ -97,7 +97,8 @@ app creates this template if the file does not exist:
     "hooks": {"after_turn": ["go test ./..."]},
     "skills": [".superagent/skills/reviewer"],
     "plugins": [".superagent/plugins/team"]
-  }
+  },
+  "telemetry": {}
 }
 ```
 
@@ -164,11 +165,16 @@ The `extensions` section supports prompt-backed slash commands, sandboxed
 directories. A plugin contains `plugin.json` with optional `commands`, `hooks`,
 and skill paths relative to the plugin directory.
 
+Telemetry is written as JSON Lines to `~/.superagent/telemetry.jsonl` by
+default. Records correlate run/action IDs, transitions, tools, errors,
+durations, and estimated model input/output tokens. Set `telemetry.log_path`
+to an absolute path or a path relative to the workspace.
+
 ## Roadmap
 
 - Kernel-enforced tool isolation.
 - MCP and dynamic tool providers.
-- Observability, export, multimodal input, and network tools.
+- Export, multimodal input, and network tools.
 
 The Bubble Tea TUI remains the only interaction surface; headless, server, and
 alternate UI entry points are out of scope.
