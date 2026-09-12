@@ -106,6 +106,8 @@ The TUI persists sessions under `~/.superagent/sessions/`. Use `/sessions`,
 `/resume`, `/rename`, and `/delete-session` to manage them. `/compact` reduces
 model context, while `/undo` restores the latest workspace checkpoint and
 truncates the corresponding transcript.
+Use `/fork [title]` to branch the current transcript. `/remember <text>` stores
+cross-session memory, `/memory` lists it, and `/forget` clears it.
 
 ## Tools
 
@@ -140,7 +142,6 @@ updates `settings.json` atomically.
 
 - Kernel-enforced tool isolation.
 - MCP and dynamic tool providers.
-- Cross-session memory.
 - LSP diagnostics and review workflows.
 - Hooks, custom commands, skills, and plugins.
 - Observability, export, multimodal input, and network tools.

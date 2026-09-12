@@ -112,4 +112,8 @@ type Conversation interface {
 	ListAgents() []AgentSummary
 	CurrentAgent() AgentSummary
 	UseAgent(string) error
+	Fork(string) (string, error)
+	Memories() ([]string, error)
+	Remember(string) error
+	ForgetMemories() error
 }

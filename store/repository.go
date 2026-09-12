@@ -169,6 +169,9 @@ func (r Repository) TruncateAfter(id session.SessionID, index int) error {
 	return r.store.TruncateAfter(SessionID(id), index)
 }
 
+func (r Repository) LoadMemory() ([]string, error)   { return r.store.LoadMemory() }
+func (r Repository) SaveMemory(items []string) error { return r.store.SaveMemory(items) }
+
 func toSessionMetadata(meta Metadata) session.Metadata {
 	return session.Metadata{ID: session.SessionID(meta.ID), Title: meta.Title, Provider: meta.Provider, Model: meta.Model, CWD: meta.CWD, InstructionSources: meta.InstructionSources, ParentID: session.SessionID(meta.ParentID)}
 }

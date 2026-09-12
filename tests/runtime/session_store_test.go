@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -63,6 +64,62 @@ func TestSessionListPreservesParentRelationship(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].ID != created.ID || items[0].ParentID != "parent" {
 		t.Fatalf("sessions = %+v", items)
+	}
+}
+
+func TestSessionForkCopiesTranscriptAndSelectsChild(t *testing.T) {
+	st := store.New(t.TempDir())
+	initial := []Message{{Role: RoleSystem, Content: "rules"}}
+	meta, err := st.Create(store.Metadata{Title: "parent", Provider: "test", Model: "model"}, initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngineWithExecutor(&staticExecutor{}, initial)
+	if err := engine.Ready(); err != nil {
+		t.Fatal(err)
+	}
+	session := persistentSession(engine, st, meta)
+	child, err := session.Fork("experiment")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.ParentID != SessionID(meta.ID) || session.Metadata().ID != child.ID {
+		t.Fatalf("child = %+v active = %+v", child, session.Metadata())
+	}
+	messages, _, err := store.NewRepository(st).Load(child.ID)
+	if err != nil || len(messages) != 1 || messages[0].Content != "rules" {
+		t.Fatalf("fork messages = %+v err=%v", messages, err)
+	}
+}
+
+func TestCrossSessionMemoryUpdatesTranscript(t *testing.T) {
+	st := store.New(t.TempDir())
+	initial := []Message{{Role: RoleSystem, Content: "rules"}, {Role: RoleUser, Content: "hello"}}
+	meta, err := st.Create(store.Metadata{Title: "memory"}, initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine := NewEngineWithExecutor(&staticExecutor{}, initial)
+	if err := engine.Ready(); err != nil {
+		t.Fatal(err)
+	}
+	session := persistentSession(engine, st, meta)
+	if err := session.Remember("Prefer concise answers"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := session.Memories()
+	if err != nil || len(items) != 1 || items[0] != "Prefer concise answers" {
+		t.Fatalf("memory = %+v err=%v", items, err)
+	}
+	messages := session.Snapshot().Messages
+	if len(messages) != 3 || !strings.Contains(messages[0].Content, "Prefer concise answers") || messages[2].Content != "hello" {
+		t.Fatalf("messages = %+v", messages)
+	}
+	if err := session.ForgetMemories(); err != nil {
+		t.Fatal(err)
+	}
+	if len(session.Snapshot().Messages) != 2 {
+		t.Fatalf("messages after forget = %+v", session.Snapshot().Messages)
 	}
 }
 

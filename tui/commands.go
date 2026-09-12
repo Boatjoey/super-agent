@@ -9,7 +9,7 @@ import (
 
 var slashCommands = []string{
 	"/clear", "/compact", "/delete-session", "/help", "/instructions", "/permissions",
-	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan",
+	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan", "/fork", "/memory", "/remember", "/forget",
 }
 
 var slashCommandDescriptions = map[string]string{
@@ -19,12 +19,16 @@ var slashCommandDescriptions = map[string]string{
 	"/compact":        "Compact context [summary]",
 	"/delete-session": "Delete a saved session <id>",
 	"/help":           "Show commands and shortcuts",
+	"/fork":           "Fork the current transcript [title]",
+	"/forget":         "Clear cross-session memory",
 	"/instructions":   "Show loaded instruction files",
 	"/mcp":            "Manage MCP servers <list|add|remove|restart>",
+	"/memory":         "Show cross-session memory",
 	"/permissions":    "Inspect or change permission mode",
 	"/plan":           "Switch to the plan agent",
 	"/quit":           "Exit Super Agent",
 	"/rename":         "Rename a session <id> <title>",
+	"/remember":       "Add cross-session memory <text>",
 	"/reset":          "Reset the conversation",
 	"/resume":         "Resume a saved session <id>",
 	"/sessions":       "List saved sessions",
@@ -162,6 +166,14 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.handleAgent([]string{"/agent", "plan"})
 	case "/build":
 		a.handleAgent([]string{"/agent", "build"})
+	case "/fork":
+		a.handleFork(strings.TrimSpace(strings.TrimPrefix(text, command)))
+	case "/memory":
+		a.handleMemory()
+	case "/remember":
+		a.handleRemember(strings.TrimSpace(strings.TrimPrefix(text, command)))
+	case "/forget":
+		a.handleForget()
 	case "/instructions":
 		a.err = ""
 		a.status = formatInstructions(a.info.InstructionPaths)
@@ -191,6 +203,49 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.err = "Unknown command: " + command
 	}
 	return a, nil
+}
+
+func (a *App) handleFork(title string) {
+	id, err := a.session.Fork(title)
+	if err != nil {
+		a.err = "Fork failed: " + err.Error()
+		return
+	}
+	a.err = ""
+	a.status = "Forked session " + id
+	a.refreshSnapshot()
+}
+
+func (a *App) handleMemory() {
+	items, err := a.session.Memories()
+	if err != nil {
+		a.err = "Memory failed: " + err.Error()
+		return
+	}
+	a.err = ""
+	if len(items) == 0 {
+		a.status = "No cross-session memory"
+	} else {
+		a.status = "Memory:\n- " + strings.Join(items, "\n- ")
+	}
+}
+
+func (a *App) handleRemember(value string) {
+	if err := a.session.Remember(value); err != nil {
+		a.err = "Remember failed: " + err.Error()
+		return
+	}
+	a.err = ""
+	a.status = "Memory saved"
+}
+
+func (a *App) handleForget() {
+	if err := a.session.ForgetMemories(); err != nil {
+		a.err = "Forget failed: " + err.Error()
+		return
+	}
+	a.err = ""
+	a.status = "Memory cleared"
 }
 
 func (a *App) handleAgent(parts []string) {

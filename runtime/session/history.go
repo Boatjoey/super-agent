@@ -6,11 +6,113 @@ import (
 	"strings"
 )
 
+const memorySystemPrefix = "Cross-session memory:\n"
+
 func (s *Session) ListSessions() ([]Summary, error) {
 	if s.repository == nil {
 		return nil, errors.New("session store is not configured")
 	}
 	return s.repository.List()
+}
+
+func (s *Session) Fork(title string) (Metadata, error) {
+	if !s.mu.TryLock() {
+		return Metadata{}, errors.New("session is already running a turn")
+	}
+	defer s.mu.Unlock()
+	if s.repository == nil {
+		return Metadata{}, errors.New("session store is not configured")
+	}
+	current := s.Metadata()
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = current.Title + " (fork)"
+	}
+	messages := append([]Message(nil), s.Snapshot().Messages...)
+	created, err := s.repository.Create(Metadata{Title: title, Provider: current.Provider, Model: current.Model, CWD: current.CWD, InstructionSources: current.InstructionSources, ParentID: current.ID}, messages)
+	if err != nil {
+		return Metadata{}, err
+	}
+	s.engine.ReplaceMessages(messages)
+	s.metaMu.Lock()
+	s.meta = created
+	s.metaMu.Unlock()
+	s.emitter = newSnapshotEmitter()
+	s.emitter.emittedMessages = len(messages)
+	return created, nil
+}
+
+func (s *Session) Memories() ([]string, error) {
+	if s.repository == nil {
+		return nil, errors.New("session store is not configured")
+	}
+	return s.repository.LoadMemory()
+}
+
+func (s *Session) Remember(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return errors.New("memory text is required")
+	}
+	if !s.mu.TryLock() {
+		return errors.New("session is already running a turn")
+	}
+	defer s.mu.Unlock()
+	if s.repository == nil {
+		return errors.New("session store is not configured")
+	}
+	items, err := s.repository.LoadMemory()
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if item == value {
+			return nil
+		}
+	}
+	items = append(items, value)
+	if err := s.repository.SaveMemory(items); err != nil {
+		return err
+	}
+	return s.replaceMemoryContext(items)
+}
+
+func (s *Session) ForgetMemories() error {
+	if !s.mu.TryLock() {
+		return errors.New("session is already running a turn")
+	}
+	defer s.mu.Unlock()
+	if s.repository == nil {
+		return errors.New("session store is not configured")
+	}
+	if err := s.repository.SaveMemory(nil); err != nil {
+		return err
+	}
+	return s.replaceMemoryContext(nil)
+}
+
+func (s *Session) replaceMemoryContext(items []string) error {
+	kept := withMemoryContext(s.Snapshot().Messages, items)
+	if err := s.repository.SaveConversationReplacement(s.metaID(), kept); err != nil {
+		return err
+	}
+	s.engine.ReplaceMessages(kept)
+	s.emitter.reset(len(kept))
+	return nil
+}
+
+func withMemoryContext(messages []Message, items []string) []Message {
+	kept := make([]Message, 0, len(messages)+1)
+	for _, message := range messages {
+		if message.Role != RoleSystem || !strings.HasPrefix(message.Content, memorySystemPrefix) {
+			kept = append(kept, message)
+		}
+	}
+	if len(items) > 0 {
+		memory := Message{Role: RoleSystem, Content: memorySystemPrefix + "- " + strings.Join(items, "\n- ")}
+		kept = append([]Message{memory}, kept...)
+	}
+	return kept
 }
 
 func (s *Session) Resume(id SessionID) error {
@@ -23,6 +125,14 @@ func (s *Session) Resume(id SessionID) error {
 	}
 	messages, meta, err := s.repository.Load(id)
 	if err != nil {
+		return err
+	}
+	memories, err := s.repository.LoadMemory()
+	if err != nil {
+		return err
+	}
+	messages = withMemoryContext(messages, memories)
+	if err := s.repository.SaveConversationReplacement(id, messages); err != nil {
 		return err
 	}
 	s.engine.ReplaceMessages(messages)

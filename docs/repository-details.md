@@ -62,6 +62,8 @@ TUI commands:
 - `/mcp remove <name>`: stop, unregister, and remove a server from settings.
 - `/mcp restart <name>`: atomically replace a server connection and its discovered tools.
 - `/sessions`: list saved sessions.
+- `/fork [title]`: copy the active transcript into a new child session and select it.
+- `/memory`, `/remember <text>`, `/forget`: inspect, add, or clear memory injected into every session.
 - `/resume <id>`: load a prior transcript into the current engine.
 - `/rename <id> <title>`: update session title.
 - `/delete-session <id>`: remove an inactive saved session.

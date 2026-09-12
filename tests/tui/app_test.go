@@ -723,6 +723,10 @@ type notificationOnlyConversation struct {
 func (c *notificationOnlyConversation) ListAgents() []tui.AgentSummary { return nil }
 func (c *notificationOnlyConversation) CurrentAgent() tui.AgentSummary { return tui.AgentSummary{} }
 func (c *notificationOnlyConversation) UseAgent(string) error          { return nil }
+func (c *notificationOnlyConversation) Fork(string) (string, error)    { return "fork", nil }
+func (c *notificationOnlyConversation) Memories() ([]string, error)    { return nil, nil }
+func (c *notificationOnlyConversation) Remember(string) error          { return nil }
+func (c *notificationOnlyConversation) ForgetMemories() error          { return nil }
 
 func (c *notificationOnlyConversation) Snapshot() tui.ConversationView {
 	if c.rejectSnapshots {

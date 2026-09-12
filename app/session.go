@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -95,6 +96,19 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	st, err := store.OpenDefault()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	repository := store.NewRepository(st)
+	memories, err := repository.LoadMemory()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if len(memories) > 0 {
+		memory := runtime.Message{Role: runtime.RoleSystem, Content: "Cross-session memory:\n- " + strings.Join(memories, "\n- ")}
+		initial = append(initial, memory)
+	}
 	engine := runtime.NewEngineWithExecutorAndPolicy(runtime.NewDefaultScheduledActionExecutor(router, toolRunner), runtime.NewPolicy(profile.PermissionMode, cfg.PermissionRules), initial)
 	if cfg.AutoApproveTools {
 		engine.EnableAutoApproveTools()
@@ -102,11 +116,6 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 	if err := engine.Ready(); err != nil {
 		return nil, nil, nil, err
 	}
-	st, err := store.OpenDefault()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	repository := store.NewRepository(st)
 	session, err := runtime.CreatePersistentSession(engine, repository, workspace.Workspace{}, runtime.SessionMetadata{
 		Provider: profile.Provider, Model: profile.Model, CWD: cwd,
 		Title: filepath.Base(cwd), InstructionSources: instructionSourcePaths(bundle),

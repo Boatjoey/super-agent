@@ -57,6 +57,14 @@ func (a *TUIConversation) UseAgent(name string) error {
 	return a.agents.Use(name)
 }
 
+func (a *TUIConversation) Fork(title string) (string, error) {
+	meta, err := a.session.Fork(title)
+	return string(meta.ID), err
+}
+func (a *TUIConversation) Memories() ([]string, error) { return a.session.Memories() }
+func (a *TUIConversation) Remember(value string) error { return a.session.Remember(value) }
+func (a *TUIConversation) ForgetMemories() error       { return a.session.ForgetMemories() }
+
 func (a *TUIConversation) Snapshot() tui.ConversationView {
 	return toConversationView(a.session.Snapshot())
 }

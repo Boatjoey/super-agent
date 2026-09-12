@@ -55,6 +55,8 @@ type Repository interface {
 	// TruncateAfter drops every record after the given index, keeping the
 	// checkpoint record itself.
 	TruncateAfter(SessionID, int) error
+	LoadMemory() ([]string, error)
+	SaveMemory([]string) error
 }
 
 // Workspace is the outbound filesystem port used by checkpoints and undo.

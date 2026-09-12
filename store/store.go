@@ -465,6 +465,60 @@ func (s *Store) eventsPath(id SessionID) string {
 	return filepath.Join(s.sessionDir(id), "events.jsonl")
 }
 
+func (s *Store) memoryPath() string { return filepath.Join(s.root, "_memory.json") }
+
+func (s *Store) LoadMemory() ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	content, err := os.ReadFile(s.memoryPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var items []string
+	if err := json.Unmarshal(content, &items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (s *Store) SaveMemory(items []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.MkdirAll(s.root, 0o700); err != nil {
+		return err
+	}
+	content, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		return err
+	}
+	content = append(content, '\n')
+	temporary, err := os.CreateTemp(s.root, ".memory-*.json")
+	if err != nil {
+		return err
+	}
+	path := temporary.Name()
+	defer os.Remove(path)
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(content); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(path, s.memoryPath())
+}
+
 func (s *Store) removeSessionDir(id SessionID) {
 	_ = os.RemoveAll(s.sessionDir(id))
 }

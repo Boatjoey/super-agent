@@ -108,6 +108,13 @@ func (c *AgentController) Use(name string) error {
 	if err != nil {
 		return err
 	}
+	memories, err := c.session.Memories()
+	if err != nil {
+		return err
+	}
+	if len(memories) > 0 {
+		messages = append(messages, runtime.Message{Role: runtime.RoleSystem, Content: "Cross-session memory:\n- " + strings.Join(memories, "\n- ")})
+	}
 	if err := c.session.ReplaceConversation(messages); err != nil {
 		return err
 	}

@@ -86,6 +86,13 @@ func (t *subagentTool) Run(ctx context.Context, call runtime.ToolCall) (string, 
 	if err != nil {
 		return "", err
 	}
+	memories, err := t.repository.LoadMemory()
+	if err != nil {
+		return "", err
+	}
+	if len(memories) > 0 {
+		initial = append(initial, runtime.Message{Role: runtime.RoleSystem, Content: "Cross-session memory:\n- " + strings.Join(memories, "\n- ")})
+	}
 	sandbox := t.sandbox
 	sandbox.Workspace = cwd
 	registry, err := tools.SandboxedRegistry(sandbox)
