@@ -775,6 +775,7 @@ func (c *notificationOnlyConversation) CustomCommands() []string {
 func (c *notificationOnlyConversation) ExpandCustomCommand(name, arguments string) (string, error) {
 	return strings.ReplaceAll(c.customCommands[name], "$ARGUMENTS", arguments), nil
 }
+func (c *notificationOnlyConversation) Export(string) (string, error) { return "/tmp/export", nil }
 
 func (c *notificationOnlyConversation) Snapshot() tui.ConversationView {
 	if c.rejectSnapshots {

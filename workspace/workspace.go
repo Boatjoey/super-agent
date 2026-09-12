@@ -11,6 +11,42 @@ import (
 
 type Workspace struct{}
 
+func (Workspace) WriteExport(relative string, content []byte) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(cwd, relative)
+	rel, err := filepath.Rel(cwd, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", errors.New("export path is outside working directory")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", err
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".export-*")
+	if err != nil {
+		return "", err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	if _, err := temporary.Write(content); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	if err := temporary.Close(); err != nil {
+		return "", err
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 func (Workspace) Capture(paths []string) ([]session.FileSnapshot, error) {
 	files := make([]session.FileSnapshot, 0, len(paths))
 	for _, path := range paths {

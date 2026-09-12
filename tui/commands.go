@@ -10,7 +10,7 @@ import (
 
 var slashCommands = []string{
 	"/clear", "/compact", "/delete-session", "/help", "/instructions", "/permissions",
-	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan", "/fork", "/memory", "/remember", "/forget", "/review", "/diff", "/fix-ci", "/branch", "/commit-message",
+	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan", "/fork", "/memory", "/remember", "/forget", "/review", "/diff", "/fix-ci", "/branch", "/commit-message", "/export", "/share",
 }
 
 var slashCommandDescriptions = map[string]string{
@@ -22,6 +22,7 @@ var slashCommandDescriptions = map[string]string{
 	"/compact":        "Compact context [summary]",
 	"/delete-session": "Delete a saved session <id>",
 	"/diff":           "Preview the current patch",
+	"/export":         "Export session <markdown|json>",
 	"/fix-ci":         "Inspect and fix failing CI checks",
 	"/help":           "Show commands and shortcuts",
 	"/fork":           "Fork the current transcript [title]",
@@ -38,6 +39,7 @@ var slashCommandDescriptions = map[string]string{
 	"/review":         "Review the current changes",
 	"/resume":         "Resume a saved session <id>",
 	"/sessions":       "List saved sessions",
+	"/share":          "Create a local HTML share file",
 	"/undo":           "Restore the last checkpoint",
 }
 
@@ -202,6 +204,14 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		return a.submitPrompt("Inspect the repository CI configuration and current failures, reproduce them locally, implement the fixes, and verify the result.")
 	case "/commit-message":
 		return a.submitPrompt("Inspect the current git diff and suggest one concise conventional commit subject. Do not modify files or commit.")
+	case "/export":
+		if len(parts) != 2 {
+			a.err = "Usage: /export <markdown|json>"
+			break
+		}
+		a.handleExport(parts[1])
+	case "/share":
+		a.handleExport("html")
 	case "/instructions":
 		a.err = ""
 		a.status = formatInstructions(a.info.InstructionPaths)
@@ -237,6 +247,16 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		return a.submitPrompt(expanded)
 	}
 	return a, nil
+}
+
+func (a *App) handleExport(format string) {
+	path, err := a.session.Export(format)
+	if err != nil {
+		a.err = "Export failed: " + err.Error()
+		return
+	}
+	a.err = ""
+	a.status = "Exported " + path
 }
 
 func (a *App) handleGitDiff() {

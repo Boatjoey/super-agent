@@ -120,4 +120,5 @@ type Conversation interface {
 	GitStatus(context.Context) (string, error)
 	CustomCommands() []string
 	ExpandCustomCommand(string, string) (string, error)
+	Export(string) (string, error)
 }

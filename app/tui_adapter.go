@@ -89,6 +89,7 @@ func (a *TUIConversation) ExpandCustomCommand(name, arguments string) (string, e
 	}
 	return a.agents.ExpandCommand(name, arguments)
 }
+func (a *TUIConversation) Export(format string) (string, error) { return a.session.Export(format) }
 
 func (a *TUIConversation) Snapshot() tui.ConversationView {
 	return toConversationView(a.session.Snapshot())

@@ -125,6 +125,8 @@ cross-session memory, `/memory` lists it, and `/forget` clears it.
 Use `/review` for a defect-focused review, `/diff` for patch preview, `/fix-ci`
 for CI repair, `/branch` for repository status, and `/commit-message` for a
 conventional commit subject.
+Use `/export markdown`, `/export json`, or `/share` to write portable session
+files under `.super-agent/exports/`.
 
 ## Tools
 
@@ -174,7 +176,7 @@ to an absolute path or a path relative to the workspace.
 
 - Kernel-enforced tool isolation.
 - MCP and dynamic tool providers.
-- Export, multimodal input, and network tools.
+- Multimodal input and network tools.
 
 The Bubble Tea TUI remains the only interaction surface; headless, server, and
 alternate UI entry points are out of scope.
