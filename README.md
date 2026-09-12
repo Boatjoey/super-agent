@@ -17,6 +17,8 @@ Go agent runtime with a state-machine core, LLM providers, local tools, and a Bu
 
 - `go test ./...`: run all tests.
 - `gofmt -w <files>`: format changed Go files.
+- `./scripts/coverage.sh`: run external tests with whole-project coverage.
+- `./scripts/verify.sh`: run vet, tests, race detection, and coverage.
 
 ## Build
 

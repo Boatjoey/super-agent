@@ -61,6 +61,8 @@
 - Prompt-history navigation preserves and restores the current unsubmitted draft.
 - `go test ./...`: run all tests.
 - `gofmt -w <files>`: format changed Go files.
+- `./scripts/coverage.sh`: run external tests with whole-project coverage.
+- `./scripts/verify.sh`: run vet, tests, race detection, and coverage.
 - `./scripts/build-local.sh`: install `/usr/local/bin/super-agent`.
 
 ## Tests
@@ -72,6 +74,7 @@
 - Runtime changes should cover transitions and observable engine behavior when practical.
 - Transition tests should assert complete runtime-data-change/action-queue-change/scheduled-action order.
 - Reset tests should prove system messages are preserved.
+- GitHub Actions runs `./scripts/verify.sh` for pushes and pull requests.
 
 ## Security
 

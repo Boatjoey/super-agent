@@ -7,6 +7,7 @@
 # Go 测试和编译中间产物
 *.test
 *.out
+/coverage.out
 
 # IDE 目录
 .vscode/
