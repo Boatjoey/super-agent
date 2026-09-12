@@ -107,7 +107,12 @@ Default tools:
 
 ## Roadmap
 
-- MCP compatibility.
-- Skill compatibility.
-- Cross-session memory.
-- UI cleanup.
+- Kernel-enforced tool isolation.
+- MCP and dynamic tool providers.
+- Agent profiles, subagents, worktrees, and cross-session memory.
+- LSP diagnostics and review workflows.
+- Hooks, custom commands, skills, and plugins.
+- Observability, export, multimodal input, and network tools.
+
+The Bubble Tea TUI remains the only interaction surface; headless, server, and
+alternate UI entry points are out of scope.
