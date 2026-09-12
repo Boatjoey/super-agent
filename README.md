@@ -69,6 +69,13 @@ app creates this template if the file does not exist:
     "deny_paths": [],
     "allow_env": [],
     "deny_env": []
+  },
+  "sandbox": {
+    "mode": "strict",
+    "cpu_seconds": 120,
+    "memory_mb": 1024,
+    "max_processes": 128,
+    "max_open_files": 256
   }
 }
 ```
@@ -89,7 +96,7 @@ truncates the corresponding transcript.
 
 ## Tools
 
-Permission modes and command classification reduce accidental execution; they are not a sandbox. Shell syntax, absolute paths, interpreters, generated scripts, and indirect network access can evade text classification. Tools run with the current user's authority without namespace, cgroup, or seccomp isolation.
+Permission modes route approvals but are not the security boundary. On Linux, `sandbox.mode: strict` is the default and requires `bwrap` plus `prlimit`. It exposes the host root read-only, makes only the workspace writable, uses ephemeral temporary/home directories, denies network access unless `permissions.network` is `allow`, and applies CPU, address-space, process, and open-file limits. Strict mode fails closed when unavailable. Other platforms require explicit `sandbox.mode: off`, which runs commands with the current user's authority.
 
 Default tools:
 

@@ -28,7 +28,10 @@ func NewSession(cfg Config) (*runtime.Session, error) {
 	if cfg.NoTools {
 		toolRunner = tools.NoTools{}
 	} else {
-		registry = tools.DefaultRegistry()
+		registry, err = tools.SandboxedRegistry(cfg.Sandbox)
+		if err != nil {
+			return nil, err
+		}
 		toolRunner = runtime.ToolRunner(registry) // 工具调用的封装
 	}
 	initial, bundle, err := initialMessages(cwd) //

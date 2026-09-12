@@ -9,6 +9,7 @@ import (
 	"super-agent/app/instructions"
 	"super-agent/llm"
 	"super-agent/runtime"
+	"super-agent/tools"
 )
 
 type Flags struct {
@@ -23,6 +24,7 @@ type Config struct {
 	NoTools            bool
 	PermissionMode     runtime.PermissionMode
 	PermissionRules    runtime.PermissionRules
+	Sandbox            tools.SandboxConfig
 	ModelConfig        llm.ProviderConfig
 	InstructionSources []string
 }
@@ -31,6 +33,15 @@ type Settings struct {
 	Provider    string                        `json:"provider"`
 	Providers   map[string]llm.ProviderConfig `json:"providers"`
 	Permissions PermissionSettings            `json:"permissions"`
+	Sandbox     SandboxSettings               `json:"sandbox"`
+}
+
+type SandboxSettings struct {
+	Mode         string `json:"mode"`
+	CPUSeconds   int    `json:"cpu_seconds"`
+	MemoryMB     int64  `json:"memory_mb"`
+	MaxProcesses int    `json:"max_processes"`
+	MaxOpenFiles int    `json:"max_open_files"`
 }
 
 type PermissionSettings struct {
@@ -68,6 +79,13 @@ func DefaultSettings() Settings {
 			Mode:    "ask",
 			Network: "deny",
 		},
+		Sandbox: SandboxSettings{
+			Mode:         "strict",
+			CPUSeconds:   120,
+			MemoryMB:     1024,
+			MaxProcesses: 128,
+			MaxOpenFiles: 256,
+		},
 	}
 }
 
@@ -98,6 +116,10 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 	if !runtime.ValidPermissionMode(mode) {
 		return Config{}, errors.New("invalid permission mode: " + string(mode))
 	}
+	sandboxMode := tools.SandboxMode(settings.Sandbox.Mode)
+	if !tools.ValidSandboxMode(sandboxMode) {
+		return Config{}, errors.New("invalid sandbox mode: " + settings.Sandbox.Mode)
+	}
 	rules := runtime.PermissionRules{
 		AllowTools:    settings.Permissions.AllowTools,
 		DenyTools:     settings.Permissions.DenyTools,
@@ -110,11 +132,20 @@ func LoadConfig(flags Flags, lookup func(string) (string, bool)) (Config, error)
 		Network:       firstNonEmpty(settings.Permissions.Network, "deny"),
 	}
 	return Config{
-		Provider:           provider,
-		AutoApproveTools:   mode == runtime.PermissionModeBypass,
-		NoTools:            flags.NoTools || envTrue(lookup, "NO_TOOLS"),
-		PermissionMode:     mode,
-		PermissionRules:    rules,
+		Provider:         provider,
+		AutoApproveTools: mode == runtime.PermissionModeBypass,
+		NoTools:          flags.NoTools || envTrue(lookup, "NO_TOOLS"),
+		PermissionMode:   mode,
+		PermissionRules:  rules,
+		Sandbox: tools.SandboxConfig{
+			Mode:         sandboxMode,
+			Workspace:    cwd,
+			AllowNetwork: rules.Network == "allow",
+			CPUSeconds:   settings.Sandbox.CPUSeconds,
+			MemoryBytes:  settings.Sandbox.MemoryMB << 20,
+			MaxProcesses: settings.Sandbox.MaxProcesses,
+			MaxOpenFiles: settings.Sandbox.MaxOpenFiles,
+		},
 		ModelConfig:        settings.Providers[provider],
 		InstructionSources: instructionSourcePaths(bundle),
 	}, nil
@@ -179,5 +210,21 @@ func normalizeSettings(settings *Settings) {
 	}
 	if settings.Permissions.Network == "" {
 		settings.Permissions.Network = "deny"
+	}
+	defaults := DefaultSettings().Sandbox
+	if settings.Sandbox.Mode == "" {
+		settings.Sandbox.Mode = defaults.Mode
+	}
+	if settings.Sandbox.CPUSeconds <= 0 {
+		settings.Sandbox.CPUSeconds = defaults.CPUSeconds
+	}
+	if settings.Sandbox.MemoryMB <= 0 {
+		settings.Sandbox.MemoryMB = defaults.MemoryMB
+	}
+	if settings.Sandbox.MaxProcesses <= 0 {
+		settings.Sandbox.MaxProcesses = defaults.MaxProcesses
+	}
+	if settings.Sandbox.MaxOpenFiles <= 0 {
+		settings.Sandbox.MaxOpenFiles = defaults.MaxOpenFiles
 	}
 }

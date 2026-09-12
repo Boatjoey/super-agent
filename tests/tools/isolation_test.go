@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -144,6 +146,69 @@ func TestRunCommandTimeoutKillsTheProcessTree(t *testing.T) {
 	time.Sleep(4 * time.Second)
 	if _, statErr := os.Stat(marker); statErr == nil {
 		t.Fatal("background process survived the timeout")
+	}
+}
+
+func TestStrictSandboxRequiresBubblewrap(t *testing.T) {
+	if goruntime.GOOS != "linux" {
+		t.Skip("bubblewrap is Linux-only")
+	}
+	t.Setenv("PATH", t.TempDir())
+	_, err := SandboxedRegistry(DefaultSandboxConfig(t.TempDir()))
+	if err == nil || !strings.Contains(err.Error(), "requires bubblewrap") {
+		t.Fatalf("err = %v, want missing bubblewrap error", err)
+	}
+}
+
+func TestStrictSandboxRestrictsFilesystemNetworkAndResources(t *testing.T) {
+	if goruntime.GOOS != "linux" {
+		t.Skip("bubblewrap is Linux-only")
+	}
+	workspace := t.TempDir()
+	t.Chdir(workspace)
+	outside := filepath.Join(t.TempDir(), "outside")
+	config := DefaultSandboxConfig(workspace)
+	config.CPUSeconds = 7
+	config.MemoryBytes = 64 << 20
+	config.MaxProcesses = 17
+	config.MaxOpenFiles = 23
+	registry, err := SandboxedRegistry(config)
+	if err != nil {
+		t.Skipf("strict sandbox unavailable: %v", err)
+	}
+
+	probe, err := registry.Run(context.Background(), runtime.ToolCall{Name: "run_command", Input: `{"command":"printf ready"}`})
+	if err != nil {
+		t.Skipf("kernel namespaces unavailable: %v (%s)", err, probe)
+	}
+	if probe != "ready" {
+		t.Fatalf("probe = %q", probe)
+	}
+
+	inside := filepath.Join(workspace, "inside")
+	command := "touch " + inside + "; touch " + outside
+	_, err = registry.Run(context.Background(), runtime.ToolCall{Name: "run_command", Input: `{"command":` + strconv.Quote(command) + `}`})
+	if err == nil {
+		t.Fatal("write outside workspace succeeded")
+	}
+	if _, statErr := os.Stat(inside); statErr != nil {
+		t.Fatalf("workspace write failed: %v", statErr)
+	}
+	if _, statErr := os.Stat(outside); !os.IsNotExist(statErr) {
+		t.Fatalf("outside path was written: %v", statErr)
+	}
+
+	result, err := registry.Run(context.Background(), runtime.ToolCall{Name: "run_command", Input: `{"command":"awk 'NR > 1 { exit 1 }' /proc/net/route && printf isolated"}`})
+	if err != nil || !strings.Contains(result, "isolated") {
+		t.Fatalf("network namespace result = %q, err = %v", result, err)
+	}
+
+	result, err = registry.Run(context.Background(), runtime.ToolCall{Name: "run_command", Input: `{"command":"printf '%s %s %s' \"$(ulimit -v)\" \"$(ulimit -u)\" \"$(ulimit -n)\""}`})
+	if err != nil {
+		t.Fatalf("read limits: %v (%s)", err, result)
+	}
+	if result != "65536 17 23" {
+		t.Fatalf("limits = %q, want 65536 17 23", result)
 	}
 }
 

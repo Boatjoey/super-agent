@@ -22,11 +22,11 @@ const (
 	maxOutputBytes = 200000
 )
 
-type RunCommandTool struct{}
-type GoTestTool struct{}
-type FormatTool struct{}
-type GitStatusTool struct{}
-type GitDiffTool struct{}
+type RunCommandTool struct{ runner *commandRunner }
+type GoTestTool struct{ runner *commandRunner }
+type FormatTool struct{ runner *commandRunner }
+type GitStatusTool struct{ runner *commandRunner }
+type GitDiffTool struct{ runner *commandRunner }
 
 func (RunCommandTool) Spec() protocol.ToolSpec {
 	return protocol.ToolSpec{
@@ -64,7 +64,7 @@ func (t RunCommandTool) Run(ctx context.Context, call protocol.ToolCall) (string
 	if args.CWD == "" {
 		args.CWD = "."
 	}
-	output, err := runShell(ctx, cwd, args.TimeoutSeconds, args.MaxOutputBytes, args.Command)
+	output, err := runnerOrDefault(t.runner).runShell(ctx, cwd, args.TimeoutSeconds, args.MaxOutputBytes, args.Command)
 	if err != nil && !args.ContinueOnError {
 		return output, err
 	}
@@ -83,7 +83,7 @@ func (GoTestTool) Spec() protocol.ToolSpec {
 	}
 }
 
-func (GoTestTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
+func (t GoTestTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Packages []string `json:"packages"`
 		CWD      string   `json:"cwd"`
@@ -101,7 +101,7 @@ func (GoTestTool) Run(ctx context.Context, call protocol.ToolCall) (string, erro
 		return "", err
 	}
 	cmdArgs := append([]string{"test"}, args.Packages...)
-	return runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "go", cmdArgs...)
+	return runnerOrDefault(t.runner).runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "go", cmdArgs...)
 }
 
 func (FormatTool) Spec() protocol.ToolSpec {
@@ -115,7 +115,7 @@ func (FormatTool) Spec() protocol.ToolSpec {
 	}
 }
 
-func (FormatTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
+func (t FormatTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Files []string `json:"files"`
 	}
@@ -133,7 +133,7 @@ func (FormatTool) Run(ctx context.Context, call protocol.ToolCall) (string, erro
 		}
 		files = append(files, path)
 	}
-	if _, err := runExec(ctx, "", defaultCommandTimeout, defaultOutputBytes, "gofmt", append([]string{"-w"}, files...)...); err != nil {
+	if _, err := runnerOrDefault(t.runner).runExec(ctx, "", defaultCommandTimeout, defaultOutputBytes, "gofmt", append([]string{"-w"}, files...)...); err != nil {
 		return "", err
 	}
 	return "formatted " + strconv.Itoa(len(files)) + plural(len(files), " file", " files"), nil
@@ -147,7 +147,7 @@ func (GitStatusTool) Spec() protocol.ToolSpec {
 	}
 }
 
-func (GitStatusTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
+func (t GitStatusTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	if call.Input != "" && call.Input != "{}" {
 		var args map[string]any
 		if err := json.Unmarshal([]byte(call.Input), &args); err != nil {
@@ -158,7 +158,7 @@ func (GitStatusTool) Run(ctx context.Context, call protocol.ToolCall) (string, e
 	if err != nil {
 		return "", err
 	}
-	return runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "git", "status", "--short")
+	return runnerOrDefault(t.runner).runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "git", "status", "--short")
 }
 
 func (GitDiffTool) Spec() protocol.ToolSpec {
@@ -171,7 +171,7 @@ func (GitDiffTool) Spec() protocol.ToolSpec {
 	}
 }
 
-func (GitDiffTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
+func (t GitDiffTool) Run(ctx context.Context, call protocol.ToolCall) (string, error) {
 	var args struct {
 		Paths []string `json:"paths"`
 	}
@@ -192,7 +192,7 @@ func (GitDiffTool) Run(ctx context.Context, call protocol.ToolCall) (string, err
 	if err != nil {
 		return "", err
 	}
-	return runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "git", cmdArgs...)
+	return runnerOrDefault(t.runner).runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "git", cmdArgs...)
 }
 
 func commandCWD(cwd string) (string, error) {
@@ -204,13 +204,28 @@ func commandCWD(cwd string) (string, error) {
 }
 
 func runShell(ctx context.Context, cwd string, timeoutSeconds int, maxBytes int, command string) (string, error) {
-	return runExec(ctx, cwd, commandTimeout(timeoutSeconds), outputLimit(maxBytes), "bash", "-lc", command)
+	return directCommandRunner.runShell(ctx, cwd, timeoutSeconds, maxBytes, command)
 }
 
 func runExec(ctx context.Context, cwd string, timeout time.Duration, maxBytes int, name string, args ...string) (string, error) {
+	return directCommandRunner.runExec(ctx, cwd, timeout, maxBytes, name, args...)
+}
+
+func (r *commandRunner) runShell(ctx context.Context, cwd string, timeoutSeconds int, maxBytes int, command string) (string, error) {
+	return r.runExec(ctx, cwd, commandTimeout(timeoutSeconds), outputLimit(maxBytes), "bash", "-lc", command)
+}
+
+func (r *commandRunner) runExec(ctx context.Context, cwd string, timeout time.Duration, maxBytes int, name string, args ...string) (string, error) {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	if r.sandbox != nil {
+		var err error
+		name, args, cwd, err = r.sandbox.wrap(cwd, name, args)
+		if err != nil {
+			return "", err
+		}
+	}
 	cmd := exec.CommandContext(runCtx, name, args...)
 	if cwd != "" {
 		cmd.Dir = cwd

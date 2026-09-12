@@ -90,7 +90,7 @@ QueuedAction { RunID, ActionID, ScheduledAction }
 
 `ActionResultResolver` maps model/tool action results directly to events accepted by the transition table. It starts tool batches and classifies each queued call into `ToolCallNeedsApproval`, `ToolCallReadyToRun`, or `ToolCallDenied`. A denial is appended as that call's tool result, then queue processing continues so the model can choose another action. A batch is the context unit; a call is the approval and execution unit. `runtime/execution` owns command classification, protected path checks, network default-deny behavior, and structured permission requests.
 
-Command classification is a text heuristic for approval routing, not a security boundary. Absolute command paths, shell expansion, interpreters, generated scripts, and indirect dependency downloads can evade static classification. Tool processes are not isolated by namespaces, cgroups, seccomp, containers, or privilege separation; they run with the current user's authority. Real isolation must be enforced below the classifier.
+Command classification is a text heuristic for approval routing, not a security boundary. Linux command tools therefore use a strict bubblewrap adapter below the classifier. The host root is read-only, the workspace is the only writable host bind, temporary/home directories are ephemeral, networking follows the configured network policy, and `prlimit` bounds CPU, address space, process count, and open files. Strict mode fails closed when its dependencies are unavailable. Unsupported platforms require explicit `sandbox.mode: off` and then run with the current user's authority.
 
 ## Runtime Terms
 
@@ -195,7 +195,7 @@ Command classification is a text heuristic for approval routing, not a security 
 }
 ```
 
-Supported modes are `ask`, `accept-edits`, `plan`, and `bypass`; `--yolo` maps to `bypass`. The `YOLO=true` environment variable enables bypass only when no explicit `--approval-mode` flag was passed, so a checked-in `.env` cannot silently disable permission prompts. Invalid modes fail config load. If the settings file is missing, the app creates a template on startup.
+Supported permission modes are `ask`, `accept-edits`, `plan`, and `bypass`; `--yolo` maps to `bypass`. The `YOLO=true` environment variable enables bypass only when no explicit `--approval-mode` flag was passed, so a checked-in `.env` cannot silently disable permission prompts. The top-level `sandbox` settings select `strict` or `off` and configure `cpu_seconds`, `memory_mb`, `max_processes`, and `max_open_files`. Strict is the default. Invalid modes fail config load. If the settings file is missing, the app creates a template on startup.
 
 ## Build
 

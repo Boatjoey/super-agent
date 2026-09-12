@@ -35,18 +35,30 @@ func (r *Registry) SetCheckpointCallback(callback func(protocol.ToolCall) error)
 }
 
 func DefaultRegistry() *Registry {
+	return registryWithRunner(nil)
+}
+
+func SandboxedRegistry(config SandboxConfig) (*Registry, error) {
+	runner, err := newCommandRunner(config)
+	if err != nil {
+		return nil, err
+	}
+	return registryWithRunner(runner), nil
+}
+
+func registryWithRunner(runner *commandRunner) *Registry {
 	return NewRegistry(
 		ReadFileTool{},
 		ListFilesTool{},
 		SearchTool{},
 		ApplyPatchTool{},
 		WriteFileTool{},
-		RunCommandTool{},
-		GoTestTool{},
-		FormatTool{},
-		GitStatusTool{},
-		GitDiffTool{},
-		BashTool{},
+		RunCommandTool{runner: runner},
+		GoTestTool{runner: runner},
+		FormatTool{runner: runner},
+		GitStatusTool{runner: runner},
+		GitDiffTool{runner: runner},
+		BashTool{runner: runner},
 	)
 }
 

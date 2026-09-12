@@ -120,6 +120,48 @@ func TestLoadConfigCreatesDefaultSettingsWhenMissing(t *testing.T) {
 	if cfg.PermissionMode != "ask" || cfg.AutoApproveTools {
 		t.Fatalf("default permissions = mode %q, auto-approve %t; want ask, false", cfg.PermissionMode, cfg.AutoApproveTools)
 	}
+	if cfg.Sandbox.Mode != "strict" || cfg.Sandbox.AllowNetwork {
+		t.Fatalf("default sandbox = %+v, want strict with network denied", cfg.Sandbox)
+	}
+}
+
+func TestLoadConfigMapsSandboxAndNetworkSettings(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	settingsDir := filepath.Join(home, ".superagent")
+	if err := os.MkdirAll(settingsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"provider":"openai","permissions":{"network":"allow"},"sandbox":{"mode":"off","cpu_seconds":9,"memory_mb":64,"max_processes":7,"max_open_files":11},"providers":{"openai":{"api_key":"key","model":"model"}}}`
+	if err := os.WriteFile(filepath.Join(settingsDir, "settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(Flags{}, lookup(nil))
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if cfg.Sandbox.Mode != "off" || !cfg.Sandbox.AllowNetwork || cfg.Sandbox.CPUSeconds != 9 || cfg.Sandbox.MemoryBytes != 64<<20 || cfg.Sandbox.MaxProcesses != 7 || cfg.Sandbox.MaxOpenFiles != 11 {
+		t.Fatalf("Sandbox = %+v", cfg.Sandbox)
+	}
+}
+
+func TestLoadConfigRejectsInvalidSandboxMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	settingsDir := filepath.Join(home, ".superagent")
+	if err := os.MkdirAll(settingsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"provider":"openai","sandbox":{"mode":"maybe"},"providers":{"openai":{"api_key":"key","model":"model"}}}`
+	if err := os.WriteFile(filepath.Join(settingsDir, "settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadConfig(Flags{}, lookup(nil))
+	if err == nil || !strings.Contains(err.Error(), "invalid sandbox mode: maybe") {
+		t.Fatalf("err = %v, want invalid sandbox mode", err)
+	}
 }
 
 func TestLoadSettingsFileCreatesTemplateWhenMissing(t *testing.T) {

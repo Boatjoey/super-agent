@@ -83,4 +83,6 @@
 - `YOLO=true` in `.env` enables bypass only when no explicit `--approval-mode` flag was passed; the flag always wins over the environment.
 - LLM provider config comes from `~/.superagent/settings.json`.
 - Permission mode and allow/deny rules come from `~/.superagent/settings.json`.
-- Command classification routes approvals but is not a security boundary; tools still run without kernel isolation.
+- Command classification routes approvals but is not a security boundary.
+- Linux command tools use strict bubblewrap isolation by default with a read-only host root, writable workspace, policy-controlled networking, ephemeral home/tmp, and `prlimit` resource bounds.
+- Strict sandbox mode fails closed when `bwrap` or `prlimit` is unavailable; unsupported platforms require explicit `sandbox.mode: off`.
