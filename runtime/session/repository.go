@@ -11,6 +11,7 @@ type Metadata struct {
 	Model              string
 	CWD                string
 	InstructionSources []string
+	ParentID           SessionID
 }
 
 type Summary struct {
@@ -20,6 +21,7 @@ type Summary struct {
 	Provider  string
 	Model     string
 	CWD       string
+	ParentID  SessionID
 }
 
 type FileSnapshot struct {

@@ -44,7 +44,7 @@ type ConversationView struct {
 	StreamingMessage      *Message
 }
 
-type SessionSummary struct{ ID, Title, Provider, Model, CWD string }
+type SessionSummary struct{ ID, Title, Provider, Model, CWD, ParentID string }
 type MCPServerSummary struct {
 	Name  string
 	Tools []string

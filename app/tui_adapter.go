@@ -154,7 +154,7 @@ func (a *TUIConversation) ListSessions() ([]tui.SessionSummary, error) {
 	}
 	result := make([]tui.SessionSummary, 0, len(summaries))
 	for _, item := range summaries {
-		result = append(result, tui.SessionSummary{ID: string(item.ID), Title: item.Title, Provider: item.Provider, Model: item.Model, CWD: item.CWD})
+		result = append(result, tui.SessionSummary{ID: string(item.ID), Title: item.Title, Provider: item.Provider, Model: item.Model, CWD: item.CWD, ParentID: string(item.ParentID)})
 	}
 	return result, nil
 }

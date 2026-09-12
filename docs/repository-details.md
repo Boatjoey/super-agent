@@ -44,7 +44,9 @@ main.go
 
 ## Session Persistence
 
-Sessions are stored under `~/.superagent/sessions/<session-id>/` as `meta.json` plus `events.jsonl`. Metadata includes session id, turn id, timestamps, provider/model, cwd, title, instruction fingerprint, and instruction source paths. `runtime/session` owns durable event emission for messages, approvals, tool results, cancel, reset, errors, checkpoints, and compact records. The top-level `store` adapter replays messages for `/resume`.
+Sessions are stored under `~/.superagent/sessions/<session-id>/` as `meta.json` plus `events.jsonl`. Metadata includes session id, optional parent id, turn id, timestamps, provider/model, cwd, title, instruction fingerprint, and instruction source paths. `runtime/session` owns durable event emission for messages, approvals, tool results, cancel, reset, errors, checkpoints, and compact records. The top-level `store` adapter replays messages for `/resume`.
+
+The risky `delegate` tool creates a persistent child session, runs the selected Agent profile, and returns the final assistant response to the parent tool call. Parent cancellation propagates through the tool context. Optional worktree isolation creates a detached worktree under `.super-agent/worktrees/`; the reported path is retained for inspection.
 
 During a turn the Engine owns the single scheduled-action loop. Session injects the approval waiter and emits a snapshot after every state-changing transition, so the TUI header follows live states (for example `WaitingApproval` and `RunningTool`) without taking over action scheduling. The header shows raw state names such as `Idle` and `WaitingLLM`.
 

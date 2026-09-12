@@ -124,6 +124,8 @@ Default tools:
 - `git_status`: show `git status --short`.
 - `git_diff`: show `git diff` for optional paths.
 - `bash`: run shell commands after approval.
+- `delegate`: run a child Agent and return its final response. Set `worktree` to
+  create an isolated detached Git worktree under `.super-agent/worktrees/`.
 
 MCP stdio servers are configured in `mcp_servers` by name. Each entry accepts
 `command`, `args`, `env`, `cwd`, `connect_timeout_seconds`, and
@@ -138,7 +140,7 @@ updates `settings.json` atomically.
 
 - Kernel-enforced tool isolation.
 - MCP and dynamic tool providers.
-- Subagents, worktrees, and cross-session memory.
+- Cross-session memory.
 - LSP diagnostics and review workflows.
 - Hooks, custom commands, skills, and plugins.
 - Observability, export, multimodal input, and network tools.

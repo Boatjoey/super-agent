@@ -50,6 +50,22 @@ func TestPersistentSessionResumesConversationWithToolResults(t *testing.T) {
 	}
 }
 
+func TestSessionListPreservesParentRelationship(t *testing.T) {
+	st := store.New(t.TempDir())
+	repository := store.NewRepository(st)
+	created, err := repository.Create(SessionMetadata{ParentID: "parent", Provider: "test", Model: "model"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := repository.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != created.ID || items[0].ParentID != "parent" {
+		t.Fatalf("sessions = %+v", items)
+	}
+}
+
 func TestPersistentResetPreservesSystemMessages(t *testing.T) {
 	st := store.New(t.TempDir())
 	initial := []Message{{Role: RoleSystem, Content: "rules"}}

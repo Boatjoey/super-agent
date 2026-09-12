@@ -21,6 +21,7 @@ func (r Repository) Create(meta session.Metadata, messages []protocol.Message) (
 		Model:              meta.Model,
 		CWD:                meta.CWD,
 		InstructionSources: meta.InstructionSources,
+		ParentID:           SessionID(meta.ParentID),
 	}, messages)
 	if err != nil {
 		return session.Metadata{}, err
@@ -128,7 +129,7 @@ func (r Repository) List() ([]session.Summary, error) {
 	}
 	result := make([]session.Summary, 0, len(items))
 	for _, item := range items {
-		result = append(result, session.Summary{ID: session.SessionID(item.ID), Title: item.Title, UpdatedAt: item.UpdatedAt, Provider: item.Provider, Model: item.Model, CWD: item.CWD})
+		result = append(result, session.Summary{ID: session.SessionID(item.ID), Title: item.Title, UpdatedAt: item.UpdatedAt, Provider: item.Provider, Model: item.Model, CWD: item.CWD, ParentID: session.SessionID(item.ParentID)})
 	}
 	return result, nil
 }
@@ -169,5 +170,5 @@ func (r Repository) TruncateAfter(id session.SessionID, index int) error {
 }
 
 func toSessionMetadata(meta Metadata) session.Metadata {
-	return session.Metadata{ID: session.SessionID(meta.ID), Title: meta.Title, Provider: meta.Provider, Model: meta.Model, CWD: meta.CWD, InstructionSources: meta.InstructionSources}
+	return session.Metadata{ID: session.SessionID(meta.ID), Title: meta.Title, Provider: meta.Provider, Model: meta.Model, CWD: meta.CWD, InstructionSources: meta.InstructionSources, ParentID: session.SessionID(meta.ParentID)}
 }

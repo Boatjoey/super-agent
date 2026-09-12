@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"super-agent/app/instructions"
@@ -115,6 +116,11 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 	}
 	if registry != nil {
 		registry.SetCheckpointCallback(session.Checkpoint)
+		delegate := &subagentTool{parent: session, repository: repository, profiles: profiles, providers: providers, sandbox: cfg.Sandbox, rules: cfg.PermissionRules, base: cwd, sequence: &atomic.Uint64{}}
+		if err := registry.Add(delegate); err != nil {
+			_ = session.Close()
+			return nil, nil, nil, err
+		}
 	}
 	session.ConfigurePermissions(profile.PermissionMode, cfg.PermissionRules)
 	if extension != nil {

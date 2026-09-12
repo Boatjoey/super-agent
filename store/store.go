@@ -44,6 +44,7 @@ type Metadata struct {
 	InstructionFingerprint string    `json:"instruction_fingerprint"`
 	InstructionSources     []string  `json:"instruction_sources,omitempty"`
 	CurrentTurnID          TurnID    `json:"current_turn_id"`
+	ParentID               SessionID `json:"parent_id,omitempty"`
 }
 
 type Record struct {
@@ -87,6 +88,7 @@ type Summary struct {
 	Provider  string    `json:"provider"`
 	Model     string    `json:"model"`
 	CWD       string    `json:"cwd"`
+	ParentID  SessionID `json:"parent_id,omitempty"`
 }
 
 // Store serializes every access so concurrent writers, for example a
@@ -296,7 +298,7 @@ func (s *Store) List() ([]Summary, error) {
 		}
 		summaries = append(summaries, Summary{
 			ID: meta.ID, Title: meta.Title, UpdatedAt: meta.UpdatedAt,
-			Provider: meta.Provider, Model: meta.Model, CWD: meta.CWD,
+			Provider: meta.Provider, Model: meta.Model, CWD: meta.CWD, ParentID: meta.ParentID,
 		})
 	}
 	sort.Slice(summaries, func(i, j int) bool {

@@ -33,7 +33,11 @@ func formatSessions(summaries []SessionSummary) string {
 	}
 	lines := make([]string, 0, len(summaries))
 	for _, summary := range summaries {
-		lines = append(lines, fmt.Sprintf("%s  %s  %s/%s", summary.ID, summary.Title, summary.Provider, summary.Model))
+		parent := ""
+		if summary.ParentID != "" {
+			parent = "  child-of:" + summary.ParentID
+		}
+		lines = append(lines, fmt.Sprintf("%s  %s  %s/%s%s", summary.ID, summary.Title, summary.Provider, summary.Model, parent))
 	}
 	return strings.Join(lines, "\n")
 }
