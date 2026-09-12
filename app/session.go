@@ -162,7 +162,7 @@ func NewSessionWithExtensions(cfg Config) (*runtime.Session, *MCPController, *Ag
 		session.AddCloser(lspCloser)
 		lspCloser = nil
 	}
-	agents := &AgentController{session: session, model: router, profiles: profiles, providers: providers, base: cwd, current: profile.Name}
+	agents := &AgentController{session: session, model: router, profiles: profiles, providers: providers, workflows: &WorkflowController{registry: registry}, base: cwd, current: profile.Name}
 	return session, controller, agents, nil
 }
 

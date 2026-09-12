@@ -116,4 +116,6 @@ type Conversation interface {
 	Memories() ([]string, error)
 	Remember(string) error
 	ForgetMemories() error
+	GitDiff(context.Context) (string, error)
+	GitStatus(context.Context) (string, error)
 }

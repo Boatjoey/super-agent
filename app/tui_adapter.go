@@ -64,6 +64,18 @@ func (a *TUIConversation) Fork(title string) (string, error) {
 func (a *TUIConversation) Memories() ([]string, error) { return a.session.Memories() }
 func (a *TUIConversation) Remember(value string) error { return a.session.Remember(value) }
 func (a *TUIConversation) ForgetMemories() error       { return a.session.ForgetMemories() }
+func (a *TUIConversation) GitDiff(ctx context.Context) (string, error) {
+	if a.agents == nil {
+		return "", fmt.Errorf("workflow tools are unavailable")
+	}
+	return a.agents.GitDiff(ctx)
+}
+func (a *TUIConversation) GitStatus(ctx context.Context) (string, error) {
+	if a.agents == nil {
+		return "", fmt.Errorf("workflow tools are unavailable")
+	}
+	return a.agents.GitStatus(ctx)
+}
 
 func (a *TUIConversation) Snapshot() tui.ConversationView {
 	return toConversationView(a.session.Snapshot())

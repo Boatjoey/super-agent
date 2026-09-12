@@ -69,6 +69,7 @@ TUI commands:
 - `/delete-session <id>`: remove an inactive saved session.
 - `/compact [summary]`: summarize with the model when no summary is supplied, replace older non-system context with one summary message, and store original messages.
 - `/undo`: restore the latest non-empty checkpoint, truncate the stored transcript to that checkpoint, and reload the conversation so workspace and history stay consistent.
+- `/review`, `/fix-ci`, and `/commit-message`: start focused model workflows; `/diff` previews the patch and `/branch` shows branch status directly.
 
 TUI keys: `Enter` submits when idle and cancels/restarts with steering input while a turn runs; `Tab` queues a follow-up during a run. `Ctrl+J`, `Shift+Enter`, or `Alt+Enter` inserts a newline. Typing `/` opens the command palette; arrows select and `Tab` or `Enter` completes a command. `Esc` clears input or cancels a run, `Ctrl+U` clears input, `Ctrl+C` cancels or quits, arrows otherwise navigate multiline input or recall single-line prompts without losing the current draft, and Page Up/Down scrolls.
 

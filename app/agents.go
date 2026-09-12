@@ -41,8 +41,17 @@ type AgentController struct {
 	model     *routedModel
 	profiles  map[string]AgentProfile
 	providers map[string]llm.ProviderConfig
+	workflows *WorkflowController
 	base      string
 	current   string
+}
+
+func (c *AgentController) GitDiff(ctx context.Context) (string, error) {
+	return c.workflows.GitDiff(ctx)
+}
+
+func (c *AgentController) GitStatus(ctx context.Context) (string, error) {
+	return c.workflows.GitStatus(ctx)
 }
 
 func buildAgentProfiles(cfg Config, providers map[string]llm.ProviderConfig) (map[string]AgentProfile, error) {

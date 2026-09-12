@@ -9,15 +9,19 @@ import (
 
 var slashCommands = []string{
 	"/clear", "/compact", "/delete-session", "/help", "/instructions", "/permissions",
-	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan", "/fork", "/memory", "/remember", "/forget",
+	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo", "/agent", "/build", "/plan", "/fork", "/memory", "/remember", "/forget", "/review", "/diff", "/fix-ci", "/branch", "/commit-message",
 }
 
 var slashCommandDescriptions = map[string]string{
 	"/clear":          "Reset the conversation",
 	"/agent":          "List or select an agent <name>",
 	"/build":          "Switch to the build agent",
+	"/branch":         "Show branch and working-tree status",
+	"/commit-message": "Suggest a commit message",
 	"/compact":        "Compact context [summary]",
 	"/delete-session": "Delete a saved session <id>",
+	"/diff":           "Preview the current patch",
+	"/fix-ci":         "Inspect and fix failing CI checks",
 	"/help":           "Show commands and shortcuts",
 	"/fork":           "Fork the current transcript [title]",
 	"/forget":         "Clear cross-session memory",
@@ -30,6 +34,7 @@ var slashCommandDescriptions = map[string]string{
 	"/rename":         "Rename a session <id> <title>",
 	"/remember":       "Add cross-session memory <text>",
 	"/reset":          "Reset the conversation",
+	"/review":         "Review the current changes",
 	"/resume":         "Resume a saved session <id>",
 	"/sessions":       "List saved sessions",
 	"/undo":           "Restore the last checkpoint",
@@ -174,6 +179,16 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.handleRemember(strings.TrimSpace(strings.TrimPrefix(text, command)))
 	case "/forget":
 		a.handleForget()
+	case "/diff":
+		a.handleGitDiff()
+	case "/branch":
+		a.handleGitStatus()
+	case "/review":
+		return a.submitPrompt("Review the current changes. Inspect the git diff and relevant code, then report only actionable defects with file and line references. Do not modify files.")
+	case "/fix-ci":
+		return a.submitPrompt("Inspect the repository CI configuration and current failures, reproduce them locally, implement the fixes, and verify the result.")
+	case "/commit-message":
+		return a.submitPrompt("Inspect the current git diff and suggest one concise conventional commit subject. Do not modify files or commit.")
 	case "/instructions":
 		a.err = ""
 		a.status = formatInstructions(a.info.InstructionPaths)
@@ -203,6 +218,30 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.err = "Unknown command: " + command
 	}
 	return a, nil
+}
+
+func (a *App) handleGitDiff() {
+	result, err := a.session.GitDiff(context.Background())
+	if err != nil {
+		a.err = "Diff failed: " + err.Error()
+		return
+	}
+	a.err = ""
+	if strings.TrimSpace(result) == "" {
+		a.status = "No changes"
+	} else {
+		a.status = result
+	}
+}
+
+func (a *App) handleGitStatus() {
+	result, err := a.session.GitStatus(context.Background())
+	if err != nil {
+		a.err = "Branch status failed: " + err.Error()
+		return
+	}
+	a.err = ""
+	a.status = result
 }
 
 func (a *App) handleFork(title string) {

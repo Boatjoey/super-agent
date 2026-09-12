@@ -110,6 +110,20 @@ func TestTabCompletesUniqueSlashCommand(t *testing.T) {
 	}
 }
 
+func TestWorkflowCommandsShowDiffAndBranchStatus(t *testing.T) {
+	model := newEventOnlyTUI(t)
+	model = typeText(model, "/diff")
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if view := model.View(); !strings.Contains(view, "diff") {
+		t.Fatalf("diff view = %q", view)
+	}
+	model = typeText(model, "/branch")
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if view := model.View(); !strings.Contains(view, "status") {
+		t.Fatalf("branch view = %q", view)
+	}
+}
+
 func TestSlashPaletteSelectsCommandWithArrowsAndEnter(t *testing.T) {
 	model := newEventOnlyTUI(t)
 	model = typeText(model, "/")
@@ -727,6 +741,12 @@ func (c *notificationOnlyConversation) Fork(string) (string, error)    { return 
 func (c *notificationOnlyConversation) Memories() ([]string, error)    { return nil, nil }
 func (c *notificationOnlyConversation) Remember(string) error          { return nil }
 func (c *notificationOnlyConversation) ForgetMemories() error          { return nil }
+func (c *notificationOnlyConversation) GitDiff(context.Context) (string, error) {
+	return "diff", nil
+}
+func (c *notificationOnlyConversation) GitStatus(context.Context) (string, error) {
+	return "status", nil
+}
 
 func (c *notificationOnlyConversation) Snapshot() tui.ConversationView {
 	if c.rejectSnapshots {

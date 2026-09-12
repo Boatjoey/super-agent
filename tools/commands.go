@@ -142,7 +142,7 @@ func (t FormatTool) Run(ctx context.Context, call protocol.ToolCall) (string, er
 func (GitStatusTool) Spec() protocol.ToolSpec {
 	return protocol.ToolSpec{
 		Name:        "git_status",
-		Description: "Show git status --short for the workspace.",
+		Description: "Show the branch and short git status for the workspace.",
 		Parameters:  objectSchema(map[string]any{}, nil),
 	}
 }
@@ -158,7 +158,7 @@ func (t GitStatusTool) Run(ctx context.Context, call protocol.ToolCall) (string,
 	if err != nil {
 		return "", err
 	}
-	return runnerOrDefault(t.runner).runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "git", "status", "--short")
+	return runnerOrDefault(t.runner).runExec(ctx, cwd, defaultCommandTimeout, defaultOutputBytes, "git", "status", "--short", "--branch")
 }
 
 func (GitDiffTool) Spec() protocol.ToolSpec {

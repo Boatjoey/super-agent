@@ -115,6 +115,9 @@ model context, while `/undo` restores the latest workspace checkpoint and
 truncates the corresponding transcript.
 Use `/fork [title]` to branch the current transcript. `/remember <text>` stores
 cross-session memory, `/memory` lists it, and `/forget` clears it.
+Use `/review` for a defect-focused review, `/diff` for patch preview, `/fix-ci`
+for CI repair, `/branch` for repository status, and `/commit-message` for a
+conventional commit subject.
 
 ## Tools
 
@@ -154,7 +157,6 @@ Language servers use stdio and are configured in `lsp_servers` with `command`,
 
 - Kernel-enforced tool isolation.
 - MCP and dynamic tool providers.
-- Review workflows.
 - Hooks, custom commands, skills, and plugins.
 - Observability, export, multimodal input, and network tools.
 
