@@ -202,11 +202,19 @@ func firstNonEmpty(values ...string) string {
 }
 
 func LoadSettings() (Settings, error) {
-	home, err := os.UserHomeDir()
+	path, err := SettingsPath()
 	if err != nil {
 		return Settings{}, err
 	}
-	return LoadSettingsFile(filepath.Join(home, ".superagent", "settings.json"))
+	return LoadSettingsFile(path)
+}
+
+func SettingsPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".superagent", "settings.json"), nil
 }
 
 func LoadSettingsFile(path string) (Settings, error) {
@@ -238,6 +246,40 @@ func LoadSettingsFile(path string) (Settings, error) {
 		return settings, nil
 	}
 	return Settings{}, err
+}
+
+func SaveSettingsFile(path string, settings Settings) error {
+	content, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	content = append(content, '\n')
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(dir, ".settings-*.json")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(content); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
 }
 
 func normalizeSettings(settings *Settings) {

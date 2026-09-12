@@ -9,7 +9,7 @@ import (
 
 var slashCommands = []string{
 	"/clear", "/compact", "/delete-session", "/help", "/instructions", "/permissions",
-	"/quit", "/rename", "/reset", "/resume", "/sessions", "/undo",
+	"/mcp", "/quit", "/rename", "/reset", "/resume", "/sessions", "/undo",
 }
 
 var slashCommandDescriptions = map[string]string{
@@ -18,6 +18,7 @@ var slashCommandDescriptions = map[string]string{
 	"/delete-session": "Delete a saved session <id>",
 	"/help":           "Show commands and shortcuts",
 	"/instructions":   "Show loaded instruction files",
+	"/mcp":            "Manage MCP servers <list|add|remove|restart>",
 	"/permissions":    "Inspect or change permission mode",
 	"/quit":           "Exit Super Agent",
 	"/rename":         "Rename a session <id> <title>",
@@ -84,8 +85,8 @@ func (a App) completeSelectedSlashCommand() (App, bool) {
 }
 
 func (a App) submit() (tea.Model, tea.Cmd) {
-	if a.compacting {
-		a.status = "Compacting conversation…"
+	if a.compacting || a.managingMCP {
+		a.status = "Background operation in progress…"
 		return a, nil
 	}
 	text := strings.TrimSpace(a.input.Value())
@@ -157,6 +158,8 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.status = formatInstructions(a.info.InstructionPaths)
 	case "/permissions":
 		a.handlePermissions(parts)
+	case "/mcp":
+		return a.handleMCP(parts)
 	case "/clear", "/reset":
 		a.handleReset()
 	case "/sessions":
@@ -179,6 +182,51 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.err = "Unknown command: " + command
 	}
 	return a, nil
+}
+
+func (a App) handleMCP(parts []string) (tea.Model, tea.Cmd) {
+	if len(parts) == 1 || (len(parts) == 2 && parts[1] == "list") {
+		a.err = ""
+		a.status = formatMCPServers(a.session.ListMCPServers())
+		return a, nil
+	}
+	operation := parts[1]
+	ctx := context.Background()
+	var run func() error
+	var status string
+	switch operation {
+	case "add":
+		if len(parts) < 4 {
+			a.err = "Usage: /mcp add <name> <command> [args...]"
+			return a, nil
+		}
+		name, command, args := parts[2], parts[3], append([]string(nil), parts[4:]...)
+		run = func() error { return a.session.AddMCPServer(ctx, name, command, args) }
+		status = "Added MCP server " + name
+	case "remove":
+		if len(parts) != 3 {
+			a.err = "Usage: /mcp remove <name>"
+			return a, nil
+		}
+		name := parts[2]
+		run = func() error { return a.session.RemoveMCPServer(name) }
+		status = "Removed MCP server " + name
+	case "restart":
+		if len(parts) != 3 {
+			a.err = "Usage: /mcp restart <name>"
+			return a, nil
+		}
+		name := parts[2]
+		run = func() error { return a.session.RestartMCPServer(ctx, name) }
+		status = "Restarted MCP server " + name
+	default:
+		a.err = "Usage: /mcp <list|add|remove|restart>"
+		return a, nil
+	}
+	a.err = ""
+	a.managingMCP = true
+	a.status = "Updating MCP servers…"
+	return a, func() tea.Msg { return mcpDoneMsg{status: status, err: run()} }
 }
 
 func (a *App) handlePermissions(parts []string) {

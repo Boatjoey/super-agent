@@ -53,6 +53,10 @@ TUI commands:
 - `/instructions`: show loaded instruction source paths.
 - `/permissions`: show current permission mode and tool approval status.
 - `/permissions mode <ask|accept-edits|plan|bypass>`: change the active session permission mode.
+- `/mcp list`: list active MCP stdio servers and their tools.
+- `/mcp add <name> <command> [args...]`: start and persist a server.
+- `/mcp remove <name>`: stop, unregister, and remove a server from settings.
+- `/mcp restart <name>`: atomically replace a server connection and its discovered tools.
 - `/sessions`: list saved sessions.
 - `/resume <id>`: load a prior transcript into the current engine.
 - `/rename <id> <title>`: update session title.
@@ -132,6 +136,7 @@ Command classification is a text heuristic for approval routing, not a security 
 - `runtime/execution/scheduled_action_result.go`: scheduled-action result vocabulary.
 - `runtime/execution/action_result_resolver.go`: maps action results to transition-ready events and classifies tool calls.
 - `runtime/session/session.go`: serializes turns and coordinates application use cases.
+- `app/mcp.go`: coordinates MCP lifecycle, dynamic tool registration, rollback, and atomic settings persistence.
 - `runtime/session/notifications.go`: session-to-UI notification protocol.
 - `runtime/session/turn.go`: turn I/O wiring and approval waiter.
 - `runtime/session/history.go`: resume, rename, delete, compact, and undo use cases.
@@ -147,6 +152,7 @@ Command classification is a text heuristic for approval routing, not a security 
 - `store/store.go`: writes and replays durable session records. All access is serialized; creation writes the transcript first and `meta.json` last so partial failures cannot leave orphan sessions; undo uses `CheckpointUndo` (skipping empty checkpoints) and an atomic `TruncateAfter`.
 - `runtime/api_*.go`: compatibility facade grouped by model, machine, execution, engine, and session. It exposes session persistence ports and metadata without importing concrete adapters. The pre-facade `ToolCallsReceived`, `ToolCallAvailable`, `EventClassifier`, and `ResultResolver` names were intentionally retired in favor of `ToolBatchReceived`/`ToolCallNeedsApproval` and `ActionResultResolver` and are not re-exported.
 - `runtime/execution/command_analyzer.go`: shell command classification and metadata extraction.
+- `tools/mcp/client.go`: MCP stdio sessions, discovery, normalized calls, deadlines, bounded results, and lifecycle management.
 
 ## Transition Table
 

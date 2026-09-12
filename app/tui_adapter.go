@@ -11,10 +11,17 @@ import (
 
 // TUIConversation adapts the runtime application API to the terminal port.
 // Conversion stays at the composition edge so neither side knows the other.
-type TUIConversation struct{ session *runtime.Session }
+type TUIConversation struct {
+	session *runtime.Session
+	mcp     *MCPController
+}
 
-func NewTUIConversation(session *runtime.Session) *TUIConversation {
-	return &TUIConversation{session: session}
+func NewTUIConversation(session *runtime.Session, controllers ...*MCPController) *TUIConversation {
+	conversation := &TUIConversation{session: session}
+	if len(controllers) > 0 {
+		conversation.mcp = controllers[0]
+	}
+	return conversation
 }
 
 func (a *TUIConversation) Snapshot() tui.ConversationView {
@@ -72,6 +79,39 @@ func (a *TUIConversation) PermissionMode() string {
 }
 func (a *TUIConversation) AutoApproveTools() bool {
 	return a.session.AutoApproveTools()
+}
+
+func (a *TUIConversation) ListMCPServers() []tui.MCPServerSummary {
+	if a.mcp == nil {
+		return nil
+	}
+	servers := a.mcp.List()
+	result := make([]tui.MCPServerSummary, 0, len(servers))
+	for _, server := range servers {
+		result = append(result, tui.MCPServerSummary{Name: server.Name, Tools: server.Tools})
+	}
+	return result
+}
+
+func (a *TUIConversation) AddMCPServer(ctx context.Context, name, command string, args []string) error {
+	if a.mcp == nil {
+		return fmt.Errorf("MCP management is unavailable")
+	}
+	return a.mcp.Add(ctx, name, command, args)
+}
+
+func (a *TUIConversation) RemoveMCPServer(name string) error {
+	if a.mcp == nil {
+		return fmt.Errorf("MCP management is unavailable")
+	}
+	return a.mcp.Remove(name)
+}
+
+func (a *TUIConversation) RestartMCPServer(ctx context.Context, name string) error {
+	if a.mcp == nil {
+		return fmt.Errorf("MCP management is unavailable")
+	}
+	return a.mcp.Restart(ctx, name)
 }
 
 func (a *TUIConversation) ListSessions() ([]tui.SessionSummary, error) {

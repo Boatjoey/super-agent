@@ -57,6 +57,7 @@ type App struct {
 	streamingMessage  *Message
 	turn              int
 	compacting        bool
+	managingMCP       bool
 }
 
 type submitDoneMsg struct {
@@ -65,6 +66,11 @@ type submitDoneMsg struct {
 
 type compactDoneMsg struct {
 	err error
+}
+
+type mcpDoneMsg struct {
+	status string
+	err    error
 }
 
 type conversationNotificationMsg struct {
@@ -170,7 +176,7 @@ func (a App) infoBar() string {
 }
 
 func (a App) isBusy() bool {
-	return a.compacting || a.agentStatus.Busy
+	return a.compacting || a.managingMCP || a.agentStatus.Busy
 }
 
 func (a App) needsInput() bool {
@@ -191,7 +197,7 @@ func (a App) welcomeString() string {
 	}
 	b.WriteString(fmt.Sprintf("**Model:** %s/%s  ", a.info.Provider, a.info.ModelName))
 	b.WriteString(fmt.Sprintf("**Tools:** %s  **Approval:** %s  **Mode:** %s\n\n", toolsLabel, approveLabel, firstNonEmpty(a.info.PermissionMode, "ask")))
-	b.WriteString("**Commands:** `/help` `/instructions` `/permissions` `/clear` `/sessions` `/resume <id>` `/compact` `/undo` `/quit`\n")
+	b.WriteString("**Commands:** `/help` `/instructions` `/permissions` `/mcp` `/clear` `/sessions` `/resume <id>` `/compact` `/undo` `/quit`\n")
 	return a.renderMarkdown(b.String())
 }
 

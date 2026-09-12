@@ -45,6 +45,10 @@ type ConversationView struct {
 }
 
 type SessionSummary struct{ ID, Title, Provider, Model, CWD string }
+type MCPServerSummary struct {
+	Name  string
+	Tools []string
+}
 
 type ApprovalDecision string
 
@@ -100,4 +104,8 @@ type Conversation interface {
 	// TUI never derives behavior locally.
 	PermissionMode() string
 	AutoApproveTools() bool
+	ListMCPServers() []MCPServerSummary
+	AddMCPServer(context.Context, string, string, []string) error
+	RemoveMCPServer(string) error
+	RestartMCPServer(context.Context, string) error
 }

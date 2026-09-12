@@ -45,6 +45,15 @@ func (a App) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			a.refreshSnapshot()
 		}
 		return a, nil
+	case mcpDoneMsg:
+		a.managingMCP = false
+		if message.err != nil {
+			a.err = "MCP failed: " + message.err.Error()
+		} else {
+			a.err = ""
+			a.status = message.status
+		}
+		return a, nil
 	default:
 		var command tea.Cmd
 		a.input, command = a.input.Update(message)

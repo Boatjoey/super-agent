@@ -78,9 +78,14 @@ func TestMCPManagerAddsRemovesAndRestartsServers(t *testing.T) {
 	if len(servers) != 1 || servers[0].Name != "dynamic" || len(servers[0].Tools) != 1 || servers[0].Tools[0] != "echo" {
 		t.Fatalf("Servers = %+v", servers)
 	}
-	oldNames, replacement, err := manager.Restart(context.Background(), "dynamic")
-	if err != nil || len(oldNames) != 1 || len(replacement) != 1 {
-		t.Fatalf("Restart = %+v, %d, %v", oldNames, len(replacement), err)
+	err = manager.Restart(context.Background(), "dynamic", func(oldNames []string, replacement []Tool) error {
+		if len(oldNames) != 1 || len(replacement) != 1 {
+			t.Fatalf("replacement = %+v, %d", oldNames, len(replacement))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Restart: %v", err)
 	}
 	removed, err := manager.Remove("dynamic")
 	if err != nil || len(removed) != 1 || len(manager.Tools()) != 0 {

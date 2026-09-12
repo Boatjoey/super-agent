@@ -31,6 +31,7 @@
 - Keep the TUI as the only interaction surface; do not add headless, server, or alternate UI entry points.
 - LLM and tool adapters may import `runtime/protocol`, not the root `runtime` facade.
 - MCP stdio adapters live in `tools/mcp`; discovered tools join `tools.Registry` atomically and remain risky under the common permission policy.
+- `app.MCPController` coordinates MCP lifecycle, dynamic registry changes, and atomic settings persistence; TUI only calls its application-facing adapter.
 - More detail: `docs/repository-details.md`.
 - Transition teaching guide: `teach/agent-transition.md`.
 - Agent-loop teaching guide: `teach/agent-loop.md`.
@@ -49,7 +50,7 @@
 - `go run . --no-tools`: run without tools.
 - `go run . --yolo`: auto-approve tools.
 - `go run . --approval-mode <ask|accept-edits|plan|bypass>`: set permission mode.
-- TUI session commands: `/instructions`, `/permissions`, `/permissions mode <mode>`, `/sessions`, `/resume <id>`, `/rename <id> <title>`, `/delete-session <id>`, `/compact`, `/undo`.
+- TUI session commands: `/instructions`, `/permissions`, `/permissions mode <mode>`, `/mcp list`, `/mcp add <name> <command> [args...]`, `/mcp remove <name>`, `/mcp restart <name>`, `/sessions`, `/resume <id>`, `/rename <id> <title>`, `/delete-session <id>`, `/compact`, `/undo`.
 - While a turn runs, `Enter` cancels and steers with the new prompt; `Tab` queues a follow-up. Queued prompts run in order.
 - The footer previews the first three queued prompts and the remaining count.
 - The footer shows a `states:` history of the current turn's state transitions (for example `WaitingLLM → AdvancingQueue → RunningTool`); consecutive repeats collapse and the history resets when a new turn starts.

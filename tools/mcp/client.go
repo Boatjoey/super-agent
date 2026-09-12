@@ -161,16 +161,22 @@ func (m *Manager) Remove(name string) ([]string, error) {
 	return append([]string(nil), connected.toolNames...), connected.session.Close()
 }
 
-func (m *Manager) Restart(ctx context.Context, name string) ([]string, []builtintools.Tool, error) {
+func (m *Manager) Restart(ctx context.Context, name string, replace func([]string, []builtintools.Tool) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	old, exists := m.servers[name]
 	if !exists {
-		return nil, nil, fmt.Errorf("MCP server %q not found", name)
+		return fmt.Errorf("MCP server %q not found", name)
 	}
 	replacement, batch, err := connectServer(ctx, old.config)
 	if err != nil {
-		return nil, nil, err
+		return err
+	}
+	if replace != nil {
+		if err := replace(append([]string(nil), old.toolNames...), append([]builtintools.Tool(nil), batch...)); err != nil {
+			_ = replacement.session.Close()
+			return err
+		}
 	}
 	kept := m.tools[:0]
 	for _, tool := range m.tools {
@@ -182,7 +188,7 @@ func (m *Manager) Restart(ctx context.Context, name string) ([]string, []builtin
 	m.tools = append(kept, batch...)
 	m.servers[name] = replacement
 	_ = old.session.Close()
-	return append([]string(nil), old.toolNames...), append([]builtintools.Tool(nil), batch...), nil
+	return nil
 }
 
 func (m *Manager) Servers() []ServerInfo {

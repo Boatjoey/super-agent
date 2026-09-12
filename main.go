@@ -30,14 +30,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	session, err := app.NewSession(cfg) // 一次会话
+	session, mcpController, err := app.NewSessionWithMCP(cfg) // 一次会话
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	defer session.Close()
 	cwd, _ := os.Getwd()
-	if _, err := tea.NewProgram(tui.New(app.NewTUIConversation(session), tui.StartupInfo{
+	if _, err := tea.NewProgram(tui.New(app.NewTUIConversation(session, mcpController), tui.StartupInfo{
 		Provider:         cfg.Provider,
 		ModelName:        llm.ModelDisplayName(cfg.Provider, cfg.ModelConfig),
 		AutoApprove:      cfg.AutoApproveTools,

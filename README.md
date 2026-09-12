@@ -118,7 +118,9 @@ MCP stdio servers are configured in `mcp_servers` by name. Each entry accepts
 `call_timeout_seconds`. Discovered schemas join the built-in registry; MCP tools
 are treated as risky and use the same approval flow. Server environment
 variables are explicit except for basic process variables such as `PATH` and
-`HOME`.
+`HOME`. Use `/mcp list`, `/mcp add <name> <command> [args...]`,
+`/mcp remove <name>`, and `/mcp restart <name>` to manage servers. Add/remove
+updates `settings.json` atomically.
 
 ## Roadmap
 

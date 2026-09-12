@@ -17,6 +17,7 @@ func (a App) helpView() string {
 		a.styles.CommandLabel.Render("/compact") + "  Compact context",
 		a.styles.CommandLabel.Render("/undo") + "     Restore checkpoint",
 		a.styles.CommandLabel.Render("/permissions") + " Show permission policy",
+		a.styles.CommandLabel.Render("/mcp") + "      Manage MCP servers",
 		a.styles.CommandLabel.Render("/help") + "     Show this menu",
 		a.styles.CommandLabel.Render("/quit") + "     Exit application",
 		"", "enter        Submit / steer active turn", "tab          Queue while running", "ctrl+j       Insert newline", "up/down      History / move lines", "pgup/pgdn    Scroll history",
@@ -33,6 +34,21 @@ func formatSessions(summaries []SessionSummary) string {
 	lines := make([]string, 0, len(summaries))
 	for _, summary := range summaries {
 		lines = append(lines, fmt.Sprintf("%s  %s  %s/%s", summary.ID, summary.Title, summary.Provider, summary.Model))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatMCPServers(servers []MCPServerSummary) string {
+	if len(servers) == 0 {
+		return "No MCP servers"
+	}
+	lines := make([]string, 0, len(servers))
+	for _, server := range servers {
+		tools := strings.Join(server.Tools, ", ")
+		if tools == "" {
+			tools = "no tools"
+		}
+		lines = append(lines, fmt.Sprintf("%s  %s", server.Name, tools))
 	}
 	return strings.Join(lines, "\n")
 }

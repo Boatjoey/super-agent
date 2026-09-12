@@ -642,6 +642,34 @@ func TestPermissionsModeCommandRejectsInvalidMode(t *testing.T) {
 	}
 }
 
+func TestMCPCommandsListAndAddServer(t *testing.T) {
+	session := &notificationOnlyConversation{mcpServers: []tui.MCPServerSummary{{Name: "files", Tools: []string{"read_remote"}}}}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	for _, r := range "/mcp list" {
+		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if view := model.View(); !strings.Contains(view, "files  read_remote") {
+		t.Fatalf("view = %q, want MCP server list", view)
+	}
+	for _, r := range "/mcp add local helper --stdio" {
+		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	var command tea.Cmd
+	model, command = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if command == nil {
+		t.Fatal("add command did not run asynchronously")
+	}
+	model, _ = model.Update(command())
+	if session.mcpAddedName != "local" || session.mcpAddedCommand != "helper" || len(session.mcpAddedArgs) != 1 || session.mcpAddedArgs[0] != "--stdio" {
+		t.Fatalf("add = %q %q %+v", session.mcpAddedName, session.mcpAddedCommand, session.mcpAddedArgs)
+	}
+	if view := model.View(); !strings.Contains(view, "Added MCP server local") {
+		t.Fatalf("view = %q, want add status", view)
+	}
+}
+
 type approvalModel struct {
 	responses []runtime.ModelResponse
 }
@@ -686,6 +714,10 @@ type notificationOnlyConversation struct {
 	queries         []string
 	contextCanceled []bool
 	extraMessages   int
+	mcpServers      []tui.MCPServerSummary
+	mcpAddedName    string
+	mcpAddedCommand string
+	mcpAddedArgs    []string
 }
 
 func (c *notificationOnlyConversation) Snapshot() tui.ConversationView {
@@ -752,6 +784,20 @@ func (c *notificationOnlyConversation) PermissionMode() string {
 
 func (c *notificationOnlyConversation) AutoApproveTools() bool {
 	return c.permissionMode == "bypass"
+}
+
+func (c *notificationOnlyConversation) ListMCPServers() []tui.MCPServerSummary {
+	return c.mcpServers
+}
+func (c *notificationOnlyConversation) AddMCPServer(_ context.Context, name, command string, args []string) error {
+	c.mcpAddedName = name
+	c.mcpAddedCommand = command
+	c.mcpAddedArgs = append([]string(nil), args...)
+	return nil
+}
+func (c *notificationOnlyConversation) RemoveMCPServer(string) error { return nil }
+func (c *notificationOnlyConversation) RestartMCPServer(context.Context, string) error {
+	return nil
 }
 
 func runCommandAsync(t *testing.T, cmd tea.Cmd) <-chan tea.Msg {

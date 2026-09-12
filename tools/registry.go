@@ -84,6 +84,51 @@ func (r *Registry) Remove(names ...string) {
 	r.order = order
 }
 
+// Replace atomically removes old names and registers a replacement batch.
+func (r *Registry) Replace(removeNames []string, items ...Tool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	remove := make(map[string]struct{}, len(removeNames))
+	for _, name := range removeNames {
+		remove[name] = struct{}{}
+	}
+	existing := make(map[string]Tool, len(r.tools))
+	for name, tool := range r.tools {
+		if _, removed := remove[name]; !removed {
+			existing[name] = tool
+		}
+	}
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		if item == nil || item.Spec().Name == "" {
+			return errors.New("replacement contains invalid tool")
+		}
+		name := item.Spec().Name
+		if _, found := existing[name]; found {
+			return fmt.Errorf("tool %q is already registered", name)
+		}
+		if _, found := seen[name]; found {
+			return fmt.Errorf("tool %q is duplicated", name)
+		}
+		seen[name] = struct{}{}
+	}
+	order := r.order[:0]
+	for _, name := range r.order {
+		if _, removed := remove[name]; !removed {
+			order = append(order, name)
+		} else {
+			delete(r.tools, name)
+		}
+	}
+	for _, item := range items {
+		name := item.Spec().Name
+		order = append(order, name)
+		r.tools[name] = item
+	}
+	r.order = order
+	return nil
+}
+
 func (r *Registry) SetCheckpointCallback(callback func(protocol.ToolCall) error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
