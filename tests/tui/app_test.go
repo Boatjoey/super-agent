@@ -1,9 +1,11 @@
 package tui_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -60,8 +62,8 @@ func TestSubmitShowsBusyPresentationWhileModelCommandStarts(t *testing.T) {
 	waitForState(t, session, runtime.StateWaitingLLM)
 
 	view := model.View()
-	if !strings.Contains(view, "Submitting") {
-		t.Fatalf("view = %q, want submitting presentation", view)
+	if !strings.Contains(view, "Thinking...") {
+		t.Fatalf("view = %q, want compact thinking presentation", view)
 	}
 	close(release)
 	if msg := <-done; msg == nil {
@@ -288,7 +290,7 @@ func TestInfoBarKeepsModeWhenWorkingDirectoryIsLong(t *testing.T) {
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
 	view := model.View()
-	if !strings.Contains(view, "mode:ask") {
+	if !strings.Contains(view, "ask · test-model · tools on") {
 		t.Fatalf("view = %q, want permission mode kept after dropping the working directory", view)
 	}
 	assertLinesFitWidth(t, view, 40)
@@ -345,13 +347,12 @@ func TestResizeRecomputesClampedBudget(t *testing.T) {
 	assertLinesFitWidth(t, model.View(), 60)
 }
 
-func TestWelcomeIsCommittedToScrollbackOnce(t *testing.T) {
+func TestWelcomeIsPartOfManagedTranscript(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	printed := &recordedOutput{}
-	model := tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"}, printed.option())
-	_ = model.Init()
-	if got := strings.Join(printed.items, "\n"); !strings.Contains(got, "Welcome back!") || !strings.Contains(got, "test-model") {
-		t.Fatalf("output = %q, want welcome block", got)
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: "/repo", InstructionPaths: []string{"/repo/AGENTS.md"}})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if got := model.View(); !strings.Contains(got, "Super Agent") || !strings.Contains(got, "test-model · /repo · AGENTS.md") {
+		t.Fatalf("view = %q, want compact welcome block", got)
 	}
 }
 
@@ -360,7 +361,7 @@ func TestStatusLineKeepsModelAndMode(t *testing.T) {
 	var narrow tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	narrow, _ = narrow.Update(tea.WindowSizeMsg{Width: 50, Height: 24})
 	narrowView := narrow.View()
-	if !strings.Contains(narrowView, "test-model") || !strings.Contains(narrowView, "mode:ask") {
+	if !strings.Contains(narrowView, "ask · test-model · tools on") {
 		t.Fatalf("view = %q, want model and mode", narrowView)
 	}
 	assertLinesFitWidth(t, narrowView, 50)
@@ -525,7 +526,7 @@ func TestApprovalUsesShortcutKeys(t *testing.T) {
 	}
 }
 
-func TestToolRunShowsRunningToolState(t *testing.T) {
+func TestToolRunClearsApprovalPresentation(t *testing.T) {
 	tools := &blockingTools{started: make(chan struct{}), release: make(chan struct{})}
 	engine := runtime.NewEngine(&approvalModel{responses: []runtime.ModelResponse{
 		{ToolCalls: []runtime.ToolCall{{Name: "bash", Input: "printf ok"}}},
@@ -550,7 +551,17 @@ func TestToolRunShowsRunningToolState(t *testing.T) {
 
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	<-tools.started
-	model, eventCmd = drainEventsUntil(t, model, eventCmd, "RunningTool")
+	for range 2 {
+		var next tea.Cmd
+		model, next = model.Update(eventCmd())
+		eventCmd = next
+	}
+	if view := model.View(); strings.Contains(view, "ACTION REQUIRED") {
+		t.Fatalf("view = %q, approval presentation was not cleared", view)
+	}
+	if view := model.View(); !strings.Contains(view, "Thinking...") {
+		t.Fatalf("view = %q, want compact busy presentation while tool runs", view)
+	}
 
 	close(tools.release)
 	if msg := <-done; msg == nil {
@@ -687,9 +698,90 @@ func TestTUIRendersSessionNotificationsWithoutSnapshotReads(t *testing.T) {
 		eventCmd = next
 	}
 
-	output := strings.Join(printed.items, "\n")
-	if !strings.Contains(output, "from notification") || strings.Contains(model.View(), "from notification") {
-		t.Fatalf("output = %q view = %q, want assistant only in scrollback", output, model.View())
+	if view := model.View(); !strings.Contains(view, "from notification") {
+		t.Fatalf("view = %q, want assistant in managed transcript", view)
+	}
+}
+
+func TestDefaultPrinterCommitsMessagesToTerminalOutput(t *testing.T) {
+	output := &lockedBuffer{}
+	program := tea.NewProgram(
+		tui.New(&notificationOnlyConversation{}, tui.StartupInfo{ModelName: "test-model"}),
+		tea.WithInput(nil),
+		tea.WithOutput(output),
+		tea.WithoutSignalHandler(),
+	)
+	done := make(chan error, 1)
+	go func() {
+		_, err := program.Run()
+		done <- err
+	}()
+	program.Send(tea.WindowSizeMsg{Width: 80, Height: 24})
+	program.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	program.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	program.Send(tea.KeyMsg{Type: tea.KeyEnter})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for !strings.Contains(output.String(), "from notification") && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	program.Quit()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if got := output.String(); !strings.Contains(got, "❯ hi") || !strings.Contains(got, "from notification") {
+		t.Fatalf("terminal output = %q, want submitted user and assistant messages", got)
+	}
+}
+
+func TestToolCallsAreSummarizedAndExpandOnDemand(t *testing.T) {
+	session := &toolNotificationConversation{}
+	printed := &recordedOutput{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"}, printed.option())
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	model = typeText(model, "inspect")
+	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	batch := cmd().(tea.BatchMsg)
+	_ = batch[len(batch)-1]()
+	for eventCmd := batch[0]; eventCmd != nil; {
+		msg := eventCmd()
+		if msg == nil {
+			break
+		}
+		model, eventCmd = model.Update(msg)
+	}
+
+	view := model.View()
+	if !strings.Contains(view, "● Read 2 files") || !strings.Contains(view, "● Edited tui/view.go") {
+		t.Fatalf("view = %q, want compact tool summaries", view)
+	}
+	if strings.Contains(view, "private reasoning") || strings.Contains(view, `{"path":`) {
+		t.Fatalf("view = %q, reasoning and raw tool inputs must stay hidden", view)
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
+	latest := model.View()
+	if !strings.Contains(latest, "tui/view.go") || strings.Contains(latest, "tui/app.go") {
+		t.Fatalf("transcript = %q, want only latest tool group expanded", latest)
+	}
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}, Alt: true})
+	all := model.View()
+	if !strings.Contains(all, "tui/app.go") || !strings.Contains(all, "tui/view.go") {
+		t.Fatalf("transcript = %q, want all tool groups expanded", all)
+	}
+	if read, path, edit := strings.Index(all, "● Read"), strings.Index(all, "tui/app.go"), strings.Index(all, "● Edited"); !(read < path && path < edit) {
+		t.Fatalf("transcript = %q, expanded details must remain below their tool call", all)
+	}
+
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	latestThinking := model.View()
+	if !strings.Contains(latestThinking, "patch reasoning") || strings.Contains(latestThinking, "private reasoning") {
+		t.Fatalf("view = %q, want only latest reasoning expanded", latestThinking)
+	}
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}, Alt: true})
+	allThinking := model.View()
+	if !strings.Contains(allThinking, "patch reasoning") || !strings.Contains(allThinking, "private reasoning") {
+		t.Fatalf("view = %q, want all reasoning expanded", allThinking)
 	}
 }
 
@@ -834,6 +926,23 @@ type recordedOutput struct {
 	items []string
 }
 
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.Write(data)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.b.String()
+}
+
 func (r *recordedOutput) option() tui.Option {
 	return tui.WithOutputPrinter(func(content string) tea.Cmd {
 		r.items = append(r.items, content)
@@ -855,6 +964,24 @@ type notificationOnlyConversation struct {
 	mcpAddedCommand string
 	mcpAddedArgs    []string
 	customCommands  map[string]string
+}
+
+type toolNotificationConversation struct{ notificationOnlyConversation }
+
+func (c *toolNotificationConversation) RunTurn(_ context.Context, query string, notifications chan<- tui.ConversationNotification, _ <-chan tui.ApprovalDecision) error {
+	notifications <- tui.MessageAppended{Message: tui.Message{Role: "user", Content: query}}
+	notifications <- tui.MessageAppended{Message: tui.Message{
+		Role:             tui.RoleAssistant,
+		Content:          "Answer",
+		ReasoningContent: "private reasoning",
+		ToolCalls: []*tui.ToolCall{
+			{Name: "read_file", Input: `{"path":"tui/app.go"}`},
+			{Name: "read_file", Input: `{"path":"tui/update.go"}`},
+		},
+	}}
+	notifications <- tui.MessageAppended{Message: tui.Message{Role: tui.RoleAssistant, ReasoningContent: "patch reasoning", ToolCalls: []*tui.ToolCall{{Name: "apply_patch", Input: `{"path":"tui/view.go"}`}}}}
+	close(notifications)
+	return nil
 }
 
 func (c *notificationOnlyConversation) ListAgents() []tui.AgentSummary { return nil }

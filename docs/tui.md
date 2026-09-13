@@ -55,6 +55,10 @@ Extensions:
 | `Ctrl+C` | Cancel a run, or quit |
 | Arrows | Navigate multiline input, or recall a single-line prompt without losing the draft |
 | `Ctrl+Y` | Copy the latest assistant code block |
+| `Ctrl+O` | Expand or collapse the latest tool-call group |
+| `Alt+O` | Expand or collapse all tool-call groups |
+| `Ctrl+T` | Expand or collapse the latest reasoning block |
+| `Alt+T` | Expand or collapse all reasoning blocks |
 
 ## Mouse
 
@@ -76,16 +80,23 @@ Run rules:
 
 ## Layout
 
-The TUI uses the terminal's main screen. Completed messages, command results, and the welcome block
-are printed once above the program and remain in terminal scrollback. `View` owns only live streaming
-content, approval and command menus, the composer, and the status line.
+The TUI uses the terminal's main screen. `View` owns the welcome block, conversation, live streaming
+content, approval and command menus, composer, and status line. This single managed transcript lets
+tool details expand in place without duplicating conversation history.
 
-- The dynamic area is clamped to the terminal width and height. A long stream shows its tail until the
-  complete message is committed to scrollback.
-- Reset, resume, compact, and undo cannot rewrite terminal scrollback. They print a divider describing
-  the new conversation state.
+- The compact welcome block contains the product name, model, working directory, and final loaded
+  instruction-source filename.
+- User prompts are visually prominent. Assistant prose uses the available width without an extra
+  left indent.
+- Reasoning defaults to a compact `Thinking...` line. The reasoning text expands in place for the
+  latest or all model steps with the keys above.
+- Tool calls are printed as compact action summaries. Expanding or collapsing rebuilds the visible
+  transcript so inputs and affected paths stay directly below their owning tool-call summary.
+- The dynamic area is clamped to the terminal width and height and shows its tail when content exceeds
+  the available rows.
+- Reset, resume, compact, and undo rebuild the managed transcript from current conversation state.
 - Below 18 terminal rows, queue details and command choices use their compact forms.
-- Model, working directory, and permission mode appear on the bottom status line.
+- The bottom status line contains permission mode, model, and whether tools are enabled.
 
 ## Approval UI
 

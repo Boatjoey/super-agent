@@ -73,6 +73,24 @@ func (a App) updateKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	}
+	switch message.String() {
+	case "ctrl+o":
+		a.expandLatestTools = !a.expandLatestTools
+		a.expandAllTools = false
+		return a, nil
+	case "alt+o":
+		a.expandAllTools = !a.expandAllTools
+		a.expandLatestTools = false
+		return a, nil
+	case "ctrl+t":
+		a.expandLatestThink = !a.expandLatestThink
+		a.expandAllThink = false
+		return a, nil
+	case "alt+t":
+		a.expandAllThink = !a.expandAllThink
+		a.expandLatestThink = false
+		return a, nil
+	}
 	if a.pendingTool != nil && message.String() != "ctrl+c" && message.String() != "esc" {
 		return a.handleApprovalKey(message)
 	}
@@ -236,7 +254,6 @@ func (a App) updateConversationNotification(notification ConversationNotificatio
 		if notification.Message.Role == RoleAssistant {
 			a.streamingMessage = nil
 		}
-		return a, tea.Sequence(a.printCommand(a.renderMessage(notification.Message)), waitForNotification(a.notificationsCh, a.turn))
 	case ConversationError:
 		if notification.Err != nil && !errors.Is(notification.Err, context.Canceled) {
 			a.err = notification.Err.Error()

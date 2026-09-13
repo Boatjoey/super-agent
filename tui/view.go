@@ -25,7 +25,7 @@ func (a App) helpView() string {
 		a.styles.CommandLabel.Render("/help") + "     Show this menu",
 		a.styles.CommandLabel.Render("/quit") + "     Exit application",
 		"", "enter        Submit / steer active turn", "tab          Queue while running", "ctrl+j       Insert newline", "up/down      History / move lines",
-		"tab          Complete slash command", "up/down      Select slash command", "esc/ctrl+u   Clear input / Cancel", "ctrl+l       Clear screen", "ctrl+y       Copy last code block", "ctrl+c       Quit / Cancel", "?            Toggle help",
+		"tab          Complete slash command", "up/down      Select slash command", "esc/ctrl+u   Clear input / Cancel", "ctrl+l       Clear screen", "ctrl+y       Copy last code block", "ctrl+o       Toggle latest tools", "alt+o        Toggle all tools", "ctrl+t       Toggle latest reasoning", "alt+t        Toggle all reasoning", "ctrl+c       Quit / Cancel", "?            Toggle help",
 		"", "Tool Approval:", "up/down      Select decision", "enter        Confirm decision", "1/y          Approve once", "2/a          Always allow", "3/n          Deny call",
 	}
 	return helpStyle.Render(title + "\n\n" + strings.Join(items, "\n"))
@@ -108,7 +108,10 @@ func (a App) View() string {
 	if a.showHelp {
 		return fitDynamicArea(a.width, a.height, a.helpView())
 	}
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, 3)
+	if transcript := a.renderTranscript(); transcript != "" {
+		parts = append(parts, transcript)
+	}
 	if stream := a.streamingView(); stream != "" {
 		parts = append(parts, stream)
 	}

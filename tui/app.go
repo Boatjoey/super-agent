@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -56,6 +58,10 @@ type App struct {
 	compacting        bool
 	managingMCP       bool
 	commandOutput     string
+	expandLatestTools bool
+	expandAllTools    bool
+	expandLatestThink bool
+	expandAllThink    bool
 	writeClipboard    func(string) error
 	printOutput       func(string) tea.Cmd
 }
@@ -92,6 +98,8 @@ type conversationNotificationMsg struct {
 	turn         int
 }
 
+// outputCommittedMsg advances dynamic state only after the renderer has put
+// completed content into terminal scrollback.
 // waitForNotification listens on ch and tags the delivered notification with
 // its turn so stale notifications from a replaced channel can be discarded.
 func waitForNotification(ch <-chan ConversationNotification, turn int) tea.Cmd {
@@ -150,24 +158,22 @@ func (a App) Init() tea.Cmd {
 	// would leak a goroutine for the app's lifetime. submitPrompt arms the
 	// first listener on the real turn channel.
 	return tea.Batch(
-		a.printCommand(a.welcomeString()),
 		a.input.Cursor.BlinkCmd(),
 		a.spinner.Tick,
 	)
 }
 
 func (a App) infoBar() string {
-	modelStr := strings.Trim(a.info.Provider+"/"+a.info.ModelName, "/")
-	cwdStr := displayCWD(a.info.CWD)
-	toolsStr := "tools:on"
+	modelStr := a.info.ModelName
+	toolsStr := "tools on"
 	if a.info.NoTools {
-		toolsStr = "tools:off"
+		toolsStr = "tools off"
 	}
-	approveStr := "mode:" + a.info.PermissionMode
-	if approveStr == "mode:" {
-		approveStr = "mode:ask"
+	mode := a.info.PermissionMode
+	if mode == "" {
+		mode = "ask"
 	}
-	sep := a.styles.Footer.Render(" │ ")
+	sep := a.styles.Footer.Render(" · ")
 	join := func(parts []string) string {
 		styled := make([]string, len(parts))
 		for i, part := range parts {
@@ -175,22 +181,7 @@ func (a App) infoBar() string {
 		}
 		return strings.Join(styled, sep)
 	}
-	state := a.agentStatus.Label
-	if a.isBusy() {
-		state = a.spinner.View() + " " + state
-	} else if a.needsInput() {
-		state = "✋ " + state
-	}
-	parts := []string{state, modelStr}
-	if cwdStr != "" {
-		parts = append(parts, cwdStr)
-	}
-	parts = append(parts, toolsStr, approveStr)
-	line := join(parts)
-	if lipgloss.Width(line) > a.width {
-		line = join([]string{state, modelStr, approveStr})
-	}
-	return clampLines(a.width, line)
+	return clampLines(a.width, join([]string{mode, modelStr, toolsStr}))
 }
 
 func (a App) isBusy() bool {
@@ -202,11 +193,14 @@ func (a App) needsInput() bool {
 }
 
 func (a App) welcomeString() string {
-	location := displayCWD(a.info.CWD)
-	if location == "" {
-		return fmt.Sprintf("Super Agent\n\nWelcome back!\n\n%s", a.info.ModelName)
+	parts := []string{a.info.ModelName}
+	if location := displayCWD(a.info.CWD); location != "" {
+		parts = append(parts, location)
 	}
-	return fmt.Sprintf("Super Agent\n\nWelcome back!\n\n%s · %s", a.info.ModelName, location)
+	if count := len(a.info.InstructionPaths); count > 0 {
+		parts = append(parts, filepath.Base(a.info.InstructionPaths[count-1]))
+	}
+	return "Super Agent\n" + strings.Join(parts, " · ")
 }
 
 func (a App) footerView() string {
@@ -214,10 +208,10 @@ func (a App) footerView() string {
 
 	if a.err != "" {
 		b.WriteString(a.styles.Error.Render(" !! error: "+a.err) + "\n")
-	}
-
-	if a.status != "" {
+	} else if a.status != "" {
 		b.WriteString(a.styles.Status.Render(" "+compactStatus(a.status, 3)) + "\n")
+	} else {
+		b.WriteByte('\n')
 	}
 
 	compact := a.height > 0 && a.height < 18
@@ -319,8 +313,8 @@ func (a App) footerView() string {
 	}
 
 	line := " " + strings.Repeat("─", max(1, a.width-2))
-	b.WriteString(line + "\n\n")
-	b.WriteString(a.input.View() + "\n\n")
+	b.WriteString(line + "\n")
+	b.WriteString(a.input.View() + "\n")
 	b.WriteString(line + "\n")
 	b.WriteString(a.infoBar())
 
@@ -355,55 +349,200 @@ func (a App) renderMarkdown(content string) string {
 	return strings.TrimSpace(out)
 }
 
-func (a App) renderToolCall(tc *ToolCall) string {
-	header := a.styles.ToolLabel.Render("● " + tc.Name)
-	input := tc.Input
-	if len(input) > 200 {
-		input = input[:200] + "..."
+type toolDisplayGroup struct {
+	verb  string
+	kind  string
+	items []string
+}
+
+func toolGroups(calls []*ToolCall) []toolDisplayGroup {
+	groups := make([]toolDisplayGroup, 0, len(calls))
+	for _, call := range calls {
+		verb, kind, items := toolDisplay(call)
+		if len(groups) > 0 && groups[len(groups)-1].verb == verb && groups[len(groups)-1].kind == kind {
+			groups[len(groups)-1].items = append(groups[len(groups)-1].items, items...)
+			continue
+		}
+		groups = append(groups, toolDisplayGroup{verb: verb, kind: kind, items: items})
 	}
-	body := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("  └ " + input)
-	return header + "\n" + body
+	return groups
+}
+
+func toolDisplay(call *ToolCall) (string, string, []string) {
+	args := map[string]any{}
+	_ = json.Unmarshal([]byte(call.Input), &args)
+	value := func(key string) string {
+		text, _ := args[key].(string)
+		return text
+	}
+	item := func(value, fallback string) []string {
+		if value == "" {
+			value = fallback
+		}
+		return []string{value}
+	}
+	switch call.Name {
+	case "read_file":
+		return "Read", "files", item(value("path"), call.Name)
+	case "write_file":
+		return "Edited", "files", item(value("path"), call.Name)
+	case "apply_patch":
+		return "Edited", "files", item(value("path"), call.Name)
+	case "go_test":
+		packages := stringSlice(args["packages"])
+		if len(packages) == 0 {
+			packages = []string{"./..."}
+		}
+		return "Ran", "commands", []string{"go test " + strings.Join(packages, " ")}
+	case "run_command", "bash":
+		return "Ran", "commands", item(value("command"), call.Name)
+	case "search":
+		return "Searched", "queries", item(value("query"), call.Name)
+	case "web_search":
+		return "Searched", "queries", item(value("query"), call.Name)
+	case "browser_fetch":
+		return "Fetched", "pages", item(value("url"), call.Name)
+	case "list_files":
+		return "Listed", "paths", item(value("path"), ".")
+	case "format":
+		files := stringSlice(args["files"])
+		if len(files) == 0 {
+			files = []string{call.Name}
+		}
+		return "Formatted", "files", files
+	case "git_status":
+		return "Ran", "commands", []string{"git status --short"}
+	case "git_diff":
+		return "Ran", "commands", []string{"git diff"}
+	default:
+		return "Called", "tools", []string{call.Name}
+	}
+}
+
+func stringSlice(value any) []string {
+	values, _ := value.([]any)
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if text, ok := value.(string); ok {
+			result = append(result, text)
+		}
+	}
+	return result
+}
+
+func toolGroupSummary(group toolDisplayGroup) string {
+	if len(group.items) == 1 {
+		return group.verb + " " + group.items[0]
+	}
+	return fmt.Sprintf("%s %d %s", group.verb, len(group.items), group.kind)
+}
+
+func (a App) renderToolCalls(calls []*ToolCall, expanded bool) string {
+	var blocks []string
+	for _, group := range toolGroups(calls) {
+		block := a.styles.ToolLabel.Render("● " + toolGroupSummary(group))
+		if expanded {
+			for index, item := range group.items {
+				branch := "├"
+				if index == len(group.items)-1 {
+					branch = "└"
+				}
+				block += "\n" + a.styles.Footer.Render("  "+branch+" "+item)
+			}
+		}
+		blocks = append(blocks, block)
+	}
+	return strings.Join(blocks, "\n")
 }
 
 func (a App) renderMessage(msg Message) string {
+	return a.renderMessageWithTools(msg, false)
+}
+
+func (a App) renderMessageWithTools(msg Message, expanded bool) string {
 	var b strings.Builder
-	width := a.width - 2
+	width := a.width
 	if width <= 0 {
 		width = 80
 	}
-	wrap := func(content string) string {
-		return lipgloss.NewStyle().PaddingLeft(1).Render(ansi.Wrap(strings.TrimSpace(content), max(1, width-1), " "))
+	wrap := func(content string, indent int) string {
+		return lipgloss.NewStyle().PaddingLeft(indent).Render(ansi.Wrap(strings.TrimSpace(content), max(1, width-indent), " "))
 	}
 	if msg.Role == "user" {
 		b.WriteString(a.styles.UserLabel.Render("❯ ") + msg.Content)
-		return wrap(b.String())
-	}
-	if msg.ReasoningContent != "" {
-		b.WriteString(a.styles.Thinking.Render("● "+msg.ReasoningContent) + "\n\n")
+		return wrap(b.String(), 1)
 	}
 	if msg.Content != "" {
 		if msg.Role == "assistant" {
 			b.WriteString(a.renderMarkdown(msg.Content))
-		} else {
-			content := msg.Content
-			if len(content) > 1000 {
-				content = content[:1000] + "... (truncated)"
-			}
-			b.WriteString(a.styles.ToolLabel.Render("● "+msg.ToolName) + "\n  └ " + content)
 		}
 	}
-	for _, tc := range msg.ToolCalls {
-		b.WriteString("\n" + a.renderToolCall(tc))
+	if len(msg.ToolCalls) > 0 {
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(a.renderToolCalls(msg.ToolCalls, expanded))
 	}
 	for _, attachment := range msg.Attachments {
 		b.WriteString("\n" + a.styles.Status.Render("  attachment: "+attachment.Name+" ("+attachment.MIME+")"))
 	}
-	return wrap(b.String())
+	return wrap(b.String(), 0)
+}
+
+func (a App) renderCommittedMessage(msg Message, toolsExpanded, thinkingExpanded bool) string {
+	content := a.renderMessageWithTools(msg, toolsExpanded)
+	if msg.Role != RoleAssistant {
+		return content
+	}
+	thinking := a.styles.Thinking.Render("Thinking...")
+	if thinkingExpanded && strings.TrimSpace(msg.ReasoningContent) != "" {
+		wrapped := ansi.Wrap(strings.TrimSpace(msg.ReasoningContent), max(1, a.width-4), " ")
+		lines := strings.Split(wrapped, "\n")
+		for index, line := range lines {
+			prefix := "    "
+			if index == 0 {
+				prefix = "  └ "
+			}
+			thinking += "\n" + a.styles.Thinking.Render(prefix+line)
+		}
+	}
+	if strings.TrimSpace(content) == "" {
+		return thinking
+	}
+	return thinking + "\n" + content
+}
+
+func (a App) renderTranscript() string {
+	latestTool := -1
+	latestThinking := -1
+	for index, message := range a.messages {
+		if len(message.ToolCalls) > 0 {
+			latestTool = index
+		}
+		if message.Role == RoleAssistant && strings.TrimSpace(message.ReasoningContent) != "" {
+			latestThinking = index
+		}
+	}
+	blocks := []string{a.welcomeString()}
+	for index, message := range a.messages {
+		toolsExpanded := a.expandAllTools || a.expandLatestTools && index == latestTool
+		thinkingExpanded := a.expandAllThink || a.expandLatestThink && index == latestThinking
+		if content := a.renderCommittedMessage(message, toolsExpanded, thinkingExpanded); strings.TrimSpace(content) != "" {
+			blocks = append(blocks, content)
+		}
+	}
+	return strings.Join(blocks, "\n")
 }
 
 func (a App) streamingView() string {
 	if a.streamingMessage == nil {
+		if a.agentStatus.Busy {
+			return a.styles.Thinking.Render("Thinking...")
+		}
 		return ""
+	}
+	if a.streamingMessage.Content == "" && a.streamingMessage.ReasoningContent != "" {
+		return a.styles.Thinking.Render("Thinking...")
 	}
 	return a.renderMessage(*a.streamingMessage)
 }
