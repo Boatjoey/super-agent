@@ -152,7 +152,7 @@ func (a App) headerView() string {
 
 	header := title + status
 	version := a.styles.Version.Width(max(0, a.width-lipgloss.Width(header))).Render("v0.1.0")
-	return header + version + "\n" + a.infoBar() + "\n"
+	return clampLines(a.width, header+version) + "\n" + a.infoBar() + "\n"
 }
 
 func (a App) infoBar() string {
@@ -170,10 +170,18 @@ func (a App) infoBar() string {
 		approveStr = "mode:ask"
 	}
 	sep := a.styles.Footer.Render(" │ ")
-	return a.styles.Footer.Render(modelStr) + sep +
-		a.styles.Footer.Render(cwdStr) + sep +
-		a.styles.Footer.Render(toolsStr) + sep +
-		a.styles.Footer.Render(approveStr)
+	join := func(parts []string) string {
+		styled := make([]string, len(parts))
+		for i, part := range parts {
+			styled[i] = a.styles.Footer.Render(part)
+		}
+		return strings.Join(styled, sep)
+	}
+	line := join([]string{modelStr, cwdStr, toolsStr, approveStr})
+	if lipgloss.Width(line) > a.width {
+		line = join([]string{modelStr, toolsStr, approveStr})
+	}
+	return clampLines(a.width, line)
 }
 
 func (a App) isBusy() bool {
@@ -339,13 +347,12 @@ func (a App) footerView() string {
 		shortcut += fmt.Sprintf(" • queued: %d", len(a.queuedInputs))
 	}
 	footerText := a.styles.Footer.Render(" " + shortcut)
-	padding := a.width - lipgloss.Width(footerText) - lipgloss.Width(stats)
-	if padding < 0 {
-		padding = 0
+	if padding := a.width - lipgloss.Width(footerText) - lipgloss.Width(stats); padding >= 0 {
+		footerText += strings.Repeat(" ", padding) + stats
 	}
-	b.WriteString(footerText + strings.Repeat(" ", padding) + stats)
+	b.WriteString(footerText)
 
-	return b.String()
+	return clampLines(a.width, b.String())
 }
 
 func (a *App) refreshSnapshot() {
@@ -418,7 +425,7 @@ func (a App) contentString() string {
 	messages := a.messages
 
 	if len(messages) == 0 && !a.isBusy() && a.commandOutput == "" {
-		return a.welcomeString()
+		return wrapStyle.Render(a.welcomeString())
 	}
 
 	for _, msg := range messages {

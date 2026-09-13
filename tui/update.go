@@ -66,8 +66,7 @@ func (a App) resize(message tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	a.width, a.height = max(1, message.Width), max(1, message.Height)
 	headerHeight := lipgloss.Height(a.headerView())
 	footerHeight := lipgloss.Height(a.footerView())
-	minViewportHeight := a.styles.ViewportBorder.GetVerticalFrameSize() + 1
-	viewportHeight := max(minViewportHeight, a.height-headerHeight-footerHeight)
+	viewportHeight := a.viewportHeightFor(headerHeight, footerHeight)
 	if a.ready {
 		a.viewport.SetYOffset(0)
 	}

@@ -95,16 +95,30 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+// clampLines truncates every line of block to at most width columns so the
+// terminal never hard-wraps it. Truncation is ANSI- and width-aware.
+func clampLines(width int, block string) string {
+	return lipgloss.NewStyle().MaxWidth(max(1, width)).Render(block)
+}
+
+// viewportHeightFor is the shared vertical budget for the scrollable viewport:
+// terminal height minus the clamped header/footer, floored so the bordered
+// viewport keeps at least one content row.
+func (a App) viewportHeightFor(headerHeight, footerHeight int) int {
+	minHeight := a.styles.ViewportBorder.GetVerticalFrameSize() + 1
+	return max(minHeight, a.height-headerHeight-footerHeight)
+}
+
 func (a App) View() string {
 	if !a.ready {
 		return "\n  Initializing..."
 	}
 	header, footer := a.headerView(), a.footerView()
-	minViewportHeight := a.styles.ViewportBorder.GetVerticalFrameSize() + 1
-	a.viewport.Height = max(minViewportHeight, a.height-lipgloss.Height(header)-lipgloss.Height(footer))
+	a.viewport.Height = a.viewportHeightFor(lipgloss.Height(header), lipgloss.Height(footer))
 	main := lipgloss.JoinVertical(lipgloss.Left, header, a.viewport.View(), footer)
 	if !a.showHelp {
 		return main
 	}
-	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, a.helpView(), lipgloss.WithWhitespaceChars(" "), lipgloss.WithWhitespaceForeground(lipgloss.Color("8")))
+	help := clampLines(a.width, a.helpView())
+	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, help, lipgloss.WithWhitespaceChars(" "), lipgloss.WithWhitespaceForeground(lipgloss.Color("8")))
 }
