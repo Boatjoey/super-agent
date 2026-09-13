@@ -105,23 +105,23 @@ func TestTabCompletesUniqueSlashCommand(t *testing.T) {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if view := model.View(); !strings.Contains(view, "No instruction files loaded") {
-		t.Fatalf("view = %q, want completed /instructions command", view)
+	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil || !strings.Contains(model.View(), "Instructions") {
+		t.Fatalf("view = %q, want completed /instructions command", model.View())
 	}
 }
 
 func TestWorkflowCommandsShowDiffAndBranchStatus(t *testing.T) {
 	model := newEventOnlyTUI(t)
 	model = typeText(model, "/diff")
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if view := model.View(); !strings.Contains(view, "diff") {
-		t.Fatalf("diff view = %q", view)
+	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil || !strings.Contains(model.View(), "Patch preview") {
+		t.Fatalf("diff view = %q", model.View())
 	}
 	model = typeText(model, "/branch")
-	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if view := model.View(); !strings.Contains(view, "status") {
-		t.Fatalf("branch view = %q", view)
+	model, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil || !strings.Contains(model.View(), "Branch status") {
+		t.Fatalf("branch view = %q", model.View())
 	}
 }
 
@@ -312,8 +312,8 @@ func TestNarrowWindowKeepsComposerVisible(t *testing.T) {
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 30, Height: 10})
 	view := model.View()
-	if !strings.Contains(view, "enter: send") {
-		t.Fatalf("view = %q, want composer shortcut visible", view)
+	if !strings.Contains(view, "Ask me anything") {
+		t.Fatalf("view = %q, want composer visible", view)
 	}
 	assertLinesFitWidth(t, view, 30)
 }
@@ -345,35 +345,25 @@ func TestResizeRecomputesClampedBudget(t *testing.T) {
 	assertLinesFitWidth(t, model.View(), 60)
 }
 
-func TestWelcomeContentReflowsToViewportWidth(t *testing.T) {
+func TestWelcomeIsCommittedToScrollbackOnce(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
-	model, _ = model.Update(tea.WindowSizeMsg{Width: 50, Height: 24})
-	view := model.View()
-	if !strings.Contains(view, "get started") {
-		t.Fatalf("view = %q, want welcome text wrapped to the viewport width, not truncated", view)
+	printed := &recordedOutput{}
+	model := tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"}, printed.option())
+	_ = model.Init()
+	if got := strings.Join(printed.items, "\n"); !strings.Contains(got, "Welcome back!") || !strings.Contains(got, "test-model") {
+		t.Fatalf("output = %q, want welcome block", got)
 	}
-	assertLinesFitWidth(t, view, 50)
 }
 
-func TestFooterDropsStatsWhenTerminalIsNarrow(t *testing.T) {
+func TestStatusLineKeepsModelAndMode(t *testing.T) {
 	session := &notificationOnlyConversation{}
 	var narrow tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
 	narrow, _ = narrow.Update(tea.WindowSizeMsg{Width: 50, Height: 24})
 	narrowView := narrow.View()
-	if !strings.Contains(narrowView, "enter: send") {
-		t.Fatalf("view = %q, want shortcut hints kept", narrowView)
-	}
-	if strings.Contains(narrowView, "0/2000") {
-		t.Fatalf("view = %q, want statistics dropped when they do not fit", narrowView)
+	if !strings.Contains(narrowView, "test-model") || !strings.Contains(narrowView, "mode:ask") {
+		t.Fatalf("view = %q, want model and mode", narrowView)
 	}
 	assertLinesFitWidth(t, narrowView, 50)
-
-	var wide tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
-	wide, _ = wide.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
-	if !strings.Contains(wide.View(), "0/2000") {
-		t.Fatalf("view = %q, want statistics shown when they fit", wide.View())
-	}
 }
 
 func TestEscCancelsTurnAndClearsQueuedFollowUps(t *testing.T) {
@@ -462,11 +452,11 @@ func TestHistoryNavigationRestoresUnsubmittedDraft(t *testing.T) {
 
 	model = typeText(model, "draft")
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
-	if view := model.View(); !strings.Contains(view, "◇ previous") {
+	if view := model.View(); !strings.Contains(view, "❯ previous") {
 		t.Fatalf("view = %q, want previous prompt", view)
 	}
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if view := model.View(); !strings.Contains(view, "◇ draft") {
+	if view := model.View(); !strings.Contains(view, "❯ draft") {
 		t.Fatalf("view = %q, want restored draft", view)
 	}
 }
@@ -504,7 +494,7 @@ func TestApprovalUsesShortcutKeys(t *testing.T) {
 	}
 	session := runtime.NewSession(engine)
 
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "run bash" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -546,7 +536,7 @@ func TestToolRunShowsRunningToolState(t *testing.T) {
 	}
 	session := runtime.NewSession(engine)
 
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 	model = typeText(model, "run bash")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -566,7 +556,7 @@ func TestToolRunShowsRunningToolState(t *testing.T) {
 	if msg := <-done; msg == nil {
 		t.Fatal("done message is nil")
 	}
-	// Drain the remaining turn events so the footer state history is final.
+	// Drain the remaining turn events.
 	for {
 		msg := eventCmd()
 		if msg == nil {
@@ -579,9 +569,6 @@ func TestToolRunShowsRunningToolState(t *testing.T) {
 		}
 		eventCmd = next
 	}
-	if view := model.View(); !strings.Contains(view, "states: WaitingLLM → AdvancingQueue → WaitingApproval → RunningTool → AdvancingQueue") {
-		t.Fatalf("view = %q, want state history line with AdvancingQueue", view)
-	}
 }
 
 func TestApprovalMenuUsesArrowsAndEnter(t *testing.T) {
@@ -593,7 +580,7 @@ func TestApprovalMenuUsesArrowsAndEnter(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := runtime.NewSession(engine)
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "run bash")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -628,7 +615,7 @@ func TestEscCancelsPendingApproval(t *testing.T) {
 	}
 	session := runtime.NewSession(engine)
 
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "run bash" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -663,7 +650,8 @@ func TestEscCancelsPendingApproval(t *testing.T) {
 
 func TestTUIRendersSessionNotificationsWithoutSnapshotReads(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	printed := &recordedOutput{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"}, printed.option())
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	for _, r := range "hello" {
@@ -699,15 +687,15 @@ func TestTUIRendersSessionNotificationsWithoutSnapshotReads(t *testing.T) {
 		eventCmd = next
 	}
 
-	view := model.View()
-	if !strings.Contains(view, "ASSISTANT") || !strings.Contains(view, "from notification") {
-		t.Fatalf("view = %q, want assistant message from notification", view)
+	output := strings.Join(printed.items, "\n")
+	if !strings.Contains(output, "from notification") || strings.Contains(model.View(), "from notification") {
+		t.Fatalf("output = %q view = %q, want assistant only in scrollback", output, model.View())
 	}
 }
 
-func TestPageKeysScrollConversationAndReturnToBottom(t *testing.T) {
+func TestPageKeysDoNotReplaceTerminalScrollback(t *testing.T) {
 	session := &notificationOnlyConversation{extraMessages: 30}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 	model = typeText(model, "hello")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -721,18 +709,10 @@ func TestPageKeysScrollConversationAndReturnToBottom(t *testing.T) {
 		}
 		model, eventCmd = model.Update(msg)
 	}
-	if view := model.View(); !strings.Contains(view, "100%") {
-		t.Fatalf("view = %q, want viewport at bottom", view)
-	}
+	before := model.View()
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
-	if view := model.View(); strings.Contains(view, "100%") {
-		t.Fatalf("view = %q, page up should leave bottom", view)
-	}
-	for range 50 {
-		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
-	}
-	if view := model.View(); !strings.Contains(view, "100%") {
-		t.Fatalf("view = %q, repeated page down should return to bottom", view)
+	if view := model.View(); view != before {
+		t.Fatalf("view changed on page key: before=%q after=%q", before, view)
 	}
 }
 
@@ -742,22 +722,23 @@ func TestInstructionsCommandDisplaysLoadedSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := runtime.NewSession(engine)
+	printed := &recordedOutput{}
 	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{
 		Provider:         "test",
 		ModelName:        "test-model",
 		InstructionPaths: []string{"/repo/AGENTS.md", "/repo/pkg/CLAUDE.md"},
-	})
+	}, printed.option())
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "/instructions" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 
-	view := model.View()
-	if !strings.Contains(view, "Loaded instruction sources") ||
-		!strings.Contains(view, "/repo/AGENTS.md") ||
-		!strings.Contains(view, "/repo/pkg/CLAUDE.md") {
-		t.Fatalf("view = %q, want instruction sources", view)
+	output := strings.Join(printed.items, "\n")
+	if !strings.Contains(output, "Loaded instruction sources") ||
+		!strings.Contains(output, "/repo/AGENTS.md") ||
+		!strings.Contains(output, "/repo/pkg/CLAUDE.md") {
+		t.Fatalf("output = %q, want instruction sources", output)
 	}
 }
 
@@ -785,14 +766,15 @@ func TestPermissionsModeCommandRejectsInvalidMode(t *testing.T) {
 
 func TestMCPCommandsListAndAddServer(t *testing.T) {
 	session := &notificationOnlyConversation{mcpServers: []tui.MCPServerSummary{{Name: "files", Tools: []string{"read_remote"}}}}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	printed := &recordedOutput{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"}, printed.option())
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "/mcp list" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if view := model.View(); !strings.Contains(view, "files  read_remote") {
-		t.Fatalf("view = %q, want MCP server list", view)
+	if output := strings.Join(printed.items, "\n"); !strings.Contains(output, "files  read_remote") {
+		t.Fatalf("output = %q, want MCP server list", output)
 	}
 	for _, r := range "/mcp add local helper --stdio" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -847,6 +829,19 @@ func (t *blockingTools) Run(_ context.Context, _ runtime.ToolCall) (string, erro
 func (t *blockingTools) Specs() []runtime.ToolSpec {
 	return []runtime.ToolSpec{{Name: "bash", Risky: true}}
 }
+
+type recordedOutput struct {
+	items []string
+}
+
+func (r *recordedOutput) option() tui.Option {
+	return tui.WithOutputPrinter(func(content string) tea.Cmd {
+		r.items = append(r.items, content)
+		return nil
+	})
+}
+
+var discardOutputOption = tui.WithOutputPrinter(func(string) tea.Cmd { return nil })
 
 type notificationOnlyConversation struct {
 	rejectSnapshots bool

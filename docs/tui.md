@@ -51,30 +51,15 @@ Extensions:
 | `/` | Open the command palette; arrows select, `Tab` or `Enter` completes |
 | `Esc` | Clear input, or cancel a run |
 | `Ctrl+U` | Clear input |
+| `Ctrl+L` | Clear the visible main screen; terminal scrollback remains available |
 | `Ctrl+C` | Cancel a run, or quit |
 | Arrows | Navigate multiline input, or recall a single-line prompt without losing the draft |
-| Page Up/Down | Scroll the viewport |
-| Wheel, drag | Scroll, select, and copy — see Mouse |
+| `Ctrl+Y` | Copy the latest assistant code block |
 
 ## Mouse
 
-The program enables terminal mouse tracking, so mouse events reach the TUI and the wheel, clicks, and
-text selection are handled in-app:
-
-- The wheel scrolls the transcript.
-- Click-drag selects text in the transcript. Releasing copies the selection; a click that never moved
-  copies nothing.
-- Dragging past the top or bottom edge of the transcript scrolls it while the selection grows.
-- The highlight clears on the next key press, on a click that does not drag, and whenever the
-  transcript is replaced rather than appended to.
-- Selection copies the text as rendered on screen, including the markdown renderer's own layout, not
-  the original markdown source.
-- Copying prefers a native clipboard tool and falls back to `OSC 52`, which reaches the terminal's
-  clipboard over SSH and inside tmux when `set-clipboard` is on.
-
-Because the TUI captures the mouse, the terminal's own selection needs its bypass modifier: `Shift` on
-most terminals, `Option` on iTerm2. Some terminals do not forward the modifier, so the bypass is
-best-effort.
+The program does not capture the mouse. Selection, copying, wheel scrolling, and scrollback belong to
+the terminal and use its normal bindings.
 
 Composer rules worth knowing:
 
@@ -88,26 +73,19 @@ Run rules:
 - Queued prompts run in order. The footer previews the first three and summarises the remainder.
 - Manual cancellation with `Esc` or `Ctrl+C` clears queued prompts. Steering cancellation preserves
   them, because the user is mid-thought rather than abandoning the work.
-- The footer shows a `states:` history of the current turn's transitions, for example
-  `WaitingLLM → AdvancingQueue → RunningTool`. Consecutive repeats collapse, and the history resets
-  when a new turn starts.
 
 ## Layout
 
-- Below 18 terminal rows the footer switches to compact rendering: queue details collapse, the slash
-  palette shows three scrolling choices, and viewport and input dimensions stay positive.
-- Long command output stays in the scrollable viewport and footer status height is bounded, so a large
-  result never squeezes out the input.
-- The header, footer, and help overlay are clamped to the terminal width: a line wider than the
-  terminal is truncated (ANSI-aware) rather than hard-wrapped, so the rows the layout reserves for
-  the viewport match what the terminal actually draws after every resize.
-- When the info bar exceeds the terminal width, the working-directory segment is dropped before the
-  model, tools, and permission-mode segments, which stay visible; the remainder is clamped if it is
-  still too wide.
-- Viewport content — transcript messages and the welcome screen alike — is reflowed to the available
-  width after every resize, so no line is clipped horizontally.
-- When the input statistics cannot fit beside the shortcut hints, the statistics are dropped rather
-  than truncated mid-value; the shortcut hints always remain.
+The TUI uses the terminal's main screen. Completed messages, command results, and the welcome block
+are printed once above the program and remain in terminal scrollback. `View` owns only live streaming
+content, approval and command menus, the composer, and the status line.
+
+- The dynamic area is clamped to the terminal width and height. A long stream shows its tail until the
+  complete message is committed to scrollback.
+- Reset, resume, compact, and undo cannot rewrite terminal scrollback. They print a divider describing
+  the new conversation state.
+- Below 18 terminal rows, queue details and command choices use their compact forms.
+- Model, working directory, and permission mode appear on the bottom status line.
 
 ## Approval UI
 

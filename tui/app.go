@@ -8,9 +8,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type StartupInfo struct {
@@ -26,7 +26,6 @@ type StartupInfo struct {
 type App struct {
 	session           Conversation
 	input             textarea.Model
-	viewport          viewport.Model
 	spinner           spinner.Model
 	styles            Styles
 	info              StartupInfo
@@ -41,12 +40,10 @@ type App struct {
 	showHelp          bool
 	err               string
 	status            string
-	lastActivity      string
 	cancel            context.CancelFunc
 	notificationsCh   chan ConversationNotification
 	approvalsCh       chan ApprovalDecision
 	agentStatus       AgentStatus
-	stateHistory      []string
 	messages          []Message
 	pendingTool       *ToolCall
 	pendingRequest    PermissionRequest
@@ -59,11 +56,8 @@ type App struct {
 	compacting        bool
 	managingMCP       bool
 	commandOutput     string
-	content           string
-	contentLines      []string
-	selection         selection
-	selectionGen      int
 	writeClipboard    func(string) error
+	printOutput       func(string) tea.Cmd
 }
 
 // Option customizes the model as New builds it.
@@ -73,6 +67,11 @@ type Option func(*App)
 // copy produced without depending on a system clipboard.
 func WithClipboardWriter(write func(string) error) Option {
 	return func(a *App) { a.writeClipboard = write }
+}
+
+// WithOutputPrinter replaces terminal scrollback output for tests.
+func WithOutputPrinter(print func(string) tea.Cmd) Option {
+	return func(a *App) { a.printOutput = print }
 }
 
 type submitDoneMsg struct {
@@ -115,7 +114,7 @@ func New(session Conversation, info StartupInfo, options ...Option) App {
 	input.ShowLineNumbers = false
 	input.SetPromptFunc(3, func(line int) string {
 		if line == 0 {
-			return " ◇ "
+			return " ❯ "
 		}
 		return "   "
 	})
@@ -138,6 +137,7 @@ func New(session Conversation, info StartupInfo, options ...Option) App {
 		approvalsCh:     make(chan ApprovalDecision, 1),
 		agentStatus:     AgentStatus{Label: "Idle"},
 		writeClipboard:  defaultClipboardWrite,
+		printOutput:     func(content string) tea.Cmd { return tea.Println(content) },
 	}
 	for _, option := range options {
 		option(&app)
@@ -145,60 +145,20 @@ func New(session Conversation, info StartupInfo, options ...Option) App {
 	return app
 }
 
-// setViewportContent is the only writer of the viewport content, so the text a
-// selection is resolved against is always the text that is on screen. Replacing
-// the transcript invalidates a live selection; appending to it does not,
-// because the earlier lines still address the same text.
-func (a *App) setViewportContent(content string) {
-	if !strings.HasPrefix(content, a.content) {
-		a.clearSelection()
-	}
-	a.content = content
-	a.contentLines = strings.Split(content, "\n")
-	a.viewport.SetContent(content)
-}
-
-// clearSelection drops the highlight and ends any auto-scroll tick chain.
-func (a *App) clearSelection() {
-	a.selection = selection{}
-	a.selectionGen++
-}
-
 func (a App) Init() tea.Cmd {
 	// The initial events channel has no producer; arming a listener on it
 	// would leak a goroutine for the app's lifetime. submitPrompt arms the
 	// first listener on the real turn channel.
 	return tea.Batch(
+		a.printCommand(a.welcomeString()),
 		a.input.Cursor.BlinkCmd(),
 		a.spinner.Tick,
 	)
 }
 
-func (a App) headerView() string {
-	var icon string
-	switch {
-	case a.isBusy():
-		icon = a.spinner.View()
-	case a.needsInput():
-		icon = "✋"
-	default:
-		icon = "◇"
-	}
-
-	title := a.styles.Header.Render(" SUPER AGENT ")
-	status := a.styles.Status.Render(fmt.Sprintf(" %s %s", icon, a.agentStatus.Label))
-
-	header := title + status
-	version := a.styles.Version.Width(max(0, a.width-lipgloss.Width(header))).Render("v0.1.0")
-	return clampLines(a.width, header+version) + "\n" + a.infoBar() + "\n"
-}
-
 func (a App) infoBar() string {
-	modelStr := a.info.Provider + "/" + a.info.ModelName
-	cwdStr := a.info.CWD
-	if home, err := os.UserHomeDir(); err == nil {
-		cwdStr = strings.Replace(cwdStr, home, "~", 1)
-	}
+	modelStr := strings.Trim(a.info.Provider+"/"+a.info.ModelName, "/")
+	cwdStr := displayCWD(a.info.CWD)
 	toolsStr := "tools:on"
 	if a.info.NoTools {
 		toolsStr = "tools:off"
@@ -215,9 +175,20 @@ func (a App) infoBar() string {
 		}
 		return strings.Join(styled, sep)
 	}
-	line := join([]string{modelStr, cwdStr, toolsStr, approveStr})
+	state := a.agentStatus.Label
+	if a.isBusy() {
+		state = a.spinner.View() + " " + state
+	} else if a.needsInput() {
+		state = "✋ " + state
+	}
+	parts := []string{state, modelStr}
+	if cwdStr != "" {
+		parts = append(parts, cwdStr)
+	}
+	parts = append(parts, toolsStr, approveStr)
+	line := join(parts)
 	if lipgloss.Width(line) > a.width {
-		line = join([]string{modelStr, toolsStr, approveStr})
+		line = join([]string{state, modelStr, approveStr})
 	}
 	return clampLines(a.width, line)
 }
@@ -231,21 +202,11 @@ func (a App) needsInput() bool {
 }
 
 func (a App) welcomeString() string {
-	var b strings.Builder
-	b.WriteString("# Welcome to Super Agent\n\n")
-	b.WriteString("An AI coding assistant. Type a message below to get started.\n\n")
-	toolsLabel := "enabled"
-	if a.info.NoTools {
-		toolsLabel = "disabled"
+	location := displayCWD(a.info.CWD)
+	if location == "" {
+		return fmt.Sprintf("Super Agent\n\nWelcome back!\n\n%s", a.info.ModelName)
 	}
-	approveLabel := "manual"
-	if a.info.AutoApprove {
-		approveLabel = "auto"
-	}
-	b.WriteString(fmt.Sprintf("**Model:** %s/%s  ", a.info.Provider, a.info.ModelName))
-	b.WriteString(fmt.Sprintf("**Tools:** %s  **Approval:** %s  **Mode:** %s\n\n", toolsLabel, approveLabel, firstNonEmpty(a.info.PermissionMode, "ask")))
-	b.WriteString("**Commands:** `/help` `/agent` `/plan` `/build` `/instructions` `/permissions` `/mcp` `/clear` `/sessions` `/fork` `/memory` `/compact` `/undo` `/quit`\n")
-	return a.renderMarkdown(b.String())
+	return fmt.Sprintf("Super Agent\n\nWelcome back!\n\n%s · %s", a.info.ModelName, location)
 }
 
 func (a App) footerView() string {
@@ -260,14 +221,6 @@ func (a App) footerView() string {
 	}
 
 	compact := a.height > 0 && a.height < 18
-	if len(a.stateHistory) > 0 && !compact {
-		b.WriteString(a.styles.Footer.Render(" states: "+stateHistoryString(a.stateHistory)) + "\n")
-	}
-
-	if a.lastActivity != "" && !compact {
-		b.WriteString(a.styles.Footer.Render(" Last: "+a.lastActivity) + "\n")
-	}
-
 	if len(a.queuedInputs) > 0 {
 		b.WriteString(a.styles.Status.Render(fmt.Sprintf(" Queued (%d)", len(a.queuedInputs))) + "\n")
 		limit := min(3, len(a.queuedInputs))
@@ -365,30 +318,11 @@ func (a App) footerView() string {
 		}
 	}
 
-	count := fmt.Sprintf("%d/%d", a.input.Length(), a.input.CharLimit)
-	scrollPercent := "  0%"
-	if a.ready {
-		scrollPercent = fmt.Sprintf("%3.f%%", a.viewport.ScrollPercent()*100)
-	}
-
-	stats := a.styles.Footer.Render(fmt.Sprintf("%s  •  %s", count, scrollPercent))
-	inputView := a.styles.InputFocused.Width(max(1, a.width-2)).Render(a.input.View())
-	b.WriteString(inputView + "\n")
-
-	shortcut := "enter: send • ctrl+j: newline • ?: help • esc: clear"
-	if a.pendingTool != nil {
-		shortcut = "↑↓: select • enter: confirm • 1/y once • 2/a always • 3/n deny"
-	} else if a.cancel != nil {
-		shortcut = "enter: steer • tab: queue • ctrl+j: newline • esc: cancel"
-	}
-	if len(a.queuedInputs) > 0 {
-		shortcut += fmt.Sprintf(" • queued: %d", len(a.queuedInputs))
-	}
-	footerText := a.styles.Footer.Render(" " + shortcut)
-	if padding := a.width - lipgloss.Width(footerText) - lipgloss.Width(stats); padding >= 0 {
-		footerText += strings.Repeat(" ", padding) + stats
-	}
-	b.WriteString(footerText)
+	line := " " + strings.Repeat("─", max(1, a.width-2))
+	b.WriteString(line + "\n\n")
+	b.WriteString(a.input.View() + "\n\n")
+	b.WriteString(line + "\n")
+	b.WriteString(a.infoBar())
 
 	return clampLines(a.width, b.String())
 }
@@ -396,7 +330,6 @@ func (a App) footerView() string {
 func (a *App) refreshSnapshot() {
 	snapshot := a.session.Snapshot()
 	a.agentStatus = snapshot.AgentStatus
-	a.recordState(a.agentStatus.Label)
 	a.messages = append([]Message(nil), snapshot.Messages...)
 	a.pendingTool = snapshot.PendingTool
 	if snapshot.PendingPermission != nil {
@@ -409,25 +342,6 @@ func (a *App) refreshSnapshot() {
 	// batch index in the same committed transition, so it is already one-based.
 	a.pendingToolIndex = snapshot.PendingToolBatchIndex
 	a.pendingToolTotal = snapshot.PendingToolBatchTotal
-	a.setViewportContent(a.contentString())
-	a.viewport.GotoBottom()
-}
-
-// recordState appends the state to the footer history, collapsing
-// consecutive repeats so duplicated snapshot emissions do not spam the
-// line. The history resets when a new turn starts.
-func (a *App) recordState(state string) {
-	if len(a.stateHistory) > 0 && a.stateHistory[len(a.stateHistory)-1] == state {
-		return
-	}
-	a.stateHistory = append(a.stateHistory, state)
-	if len(a.stateHistory) > 8 {
-		a.stateHistory = append([]string(nil), a.stateHistory[len(a.stateHistory)-8:]...)
-	}
-}
-
-func stateHistoryString(history []string) string {
-	return strings.Join(history, " → ")
 }
 
 func (a App) renderMarkdown(content string) string {
@@ -442,103 +356,90 @@ func (a App) renderMarkdown(content string) string {
 }
 
 func (a App) renderToolCall(tc *ToolCall) string {
-	header := a.styles.ToolLabel.Render("  " + tc.Name)
+	header := a.styles.ToolLabel.Render("● " + tc.Name)
 	input := tc.Input
 	if len(input) > 200 {
 		input = input[:200] + "..."
 	}
-	body := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("  " + input)
-	return a.styles.ToolCard.Render(header + "\n" + body)
+	body := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("  └ " + input)
+	return header + "\n" + body
 }
 
-func (a App) contentString() string {
+func (a App) renderMessage(msg Message) string {
 	var b strings.Builder
-
-	width := a.viewport.Width - 4
+	width := a.width - 2
 	if width <= 0 {
 		width = 80
 	}
-	wrapStyle := lipgloss.NewStyle().Width(width).Padding(0, 1)
-
-	messages := a.messages
-
-	if len(messages) == 0 && !a.isBusy() && a.commandOutput == "" {
-		return wrapStyle.Render(a.welcomeString())
+	wrap := func(content string) string {
+		return lipgloss.NewStyle().PaddingLeft(1).Render(ansi.Wrap(strings.TrimSpace(content), max(1, width-1), " "))
 	}
-
-	for _, msg := range messages {
-		var msgBlock strings.Builder
-
-		role := strings.ToUpper(string(msg.Role))
-		switch msg.Role {
-		case "user":
-			msgBlock.WriteString(a.styles.UserLabel.Render(role) + "\n")
-		case "assistant":
-			msgBlock.WriteString(a.styles.AgentLabel.Render(role) + "\n")
-		case "tool":
-			msgBlock.WriteString(a.styles.ToolLabel.Render(fmt.Sprintf("%s (%s)", role, msg.ToolName)) + "\n")
-		default:
-			msgBlock.WriteString(lipgloss.NewStyle().Bold(true).Render(role) + "\n")
-		}
-
-		if len(msg.ToolCalls) > 0 {
-			for _, tc := range msg.ToolCalls {
-				msgBlock.WriteString(a.renderToolCall(tc) + "\n")
-			}
-		}
-		for _, attachment := range msg.Attachments {
-			msgBlock.WriteString(a.styles.Status.Render("  attachment: "+attachment.Name+" ("+attachment.MIME+")") + "\n")
-		}
-
-		if msg.Role == "tool" {
+	if msg.Role == "user" {
+		b.WriteString(a.styles.UserLabel.Render("❯ ") + msg.Content)
+		return wrap(b.String())
+	}
+	if msg.ReasoningContent != "" {
+		b.WriteString(a.styles.Thinking.Render("● "+msg.ReasoningContent) + "\n\n")
+	}
+	if msg.Content != "" {
+		if msg.Role == "assistant" {
+			b.WriteString(a.renderMarkdown(msg.Content))
+		} else {
 			content := msg.Content
 			if len(content) > 1000 {
 				content = content[:1000] + "... (truncated)"
 			}
-			resultHeader := a.styles.ToolLabel.Render("  " + msg.ToolName + " result")
-			resultBody := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(content)
-			msgBlock.WriteString(a.styles.ToolCard.Render(resultHeader+"\n"+resultBody) + "\n")
-		} else {
-			if msg.ReasoningContent != "" {
-				msgBlock.WriteString(a.styles.Thinking.Render(msg.ReasoningContent) + "\n\n")
-			}
-			if msg.Content != "" {
-				if msg.Role == "assistant" {
-					msgBlock.WriteString(a.renderMarkdown(msg.Content))
-				} else {
-					msgBlock.WriteString(msg.Content)
-				}
-				msgBlock.WriteString("\n")
-			}
-		}
-
-		b.WriteString(wrapStyle.Render(msgBlock.String()) + "\n\n")
-	}
-
-	if a.commandOutput != "" {
-		b.WriteString(wrapStyle.Render(a.styles.CommandLabel.Render("COMMAND OUTPUT")+"\n"+a.commandOutput) + "\n\n")
-	}
-
-	if a.isBusy() && a.streamingMessage != nil {
-		var streamBlock strings.Builder
-		streamBlock.WriteString(a.styles.AgentLabel.Render("AGENT") + "\n")
-
-		if a.streamingMessage.ReasoningContent != "" {
-			streamBlock.WriteString(a.styles.Thinking.Render(a.streamingMessage.ReasoningContent))
-		}
-		if a.streamingMessage.Content != "" {
-			if a.streamingMessage.ReasoningContent != "" {
-				streamBlock.WriteString("\n\n")
-			}
-			streamBlock.WriteString(a.streamingMessage.Content)
-		}
-
-		if a.streamingMessage.ReasoningContent != "" || a.streamingMessage.Content != "" {
-			b.WriteString(wrapStyle.Render(streamBlock.String()) + "\n")
+			b.WriteString(a.styles.ToolLabel.Render("● "+msg.ToolName) + "\n  └ " + content)
 		}
 	}
+	for _, tc := range msg.ToolCalls {
+		b.WriteString("\n" + a.renderToolCall(tc))
+	}
+	for _, attachment := range msg.Attachments {
+		b.WriteString("\n" + a.styles.Status.Render("  attachment: "+attachment.Name+" ("+attachment.MIME+")"))
+	}
+	return wrap(b.String())
+}
 
-	return b.String()
+func (a App) streamingView() string {
+	if a.streamingMessage == nil {
+		return ""
+	}
+	return a.renderMessage(*a.streamingMessage)
+}
+
+func (a App) printCommand(content string) tea.Cmd {
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+	print := a.printOutput
+	if print == nil {
+		print = func(content string) tea.Cmd { return tea.Println(content) }
+	}
+	return print(strings.TrimRight(content, "\n"))
+}
+
+func displayCWD(cwd string) string {
+	if home, err := os.UserHomeDir(); err == nil {
+		return strings.Replace(cwd, home, "~", 1)
+	}
+	return cwd
+}
+
+func (a *App) queueOutput(content string) {
+	if strings.TrimSpace(content) != "" {
+		a.commandOutput = content
+	}
+}
+
+func (a *App) takeOutput() string {
+	content := a.commandOutput
+	a.commandOutput = ""
+	return content
+}
+
+func divider(label string) string {
+	return "── " + label + " ──"
 }
 
 func compactStatus(value string, maxLines int) string {

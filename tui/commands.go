@@ -246,14 +246,18 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 			for _, attachment := range attachments {
 				names = append(names, attachment.Name+" ("+attachment.MIME+")")
 			}
-			a.status = "Attachments:\n- " + strings.Join(names, "\n- ")
+			a.queueOutput("Attachments:\n- " + strings.Join(names, "\n- "))
+			a.status = "Attachments"
 		}
 	case "/commands":
-		a.status = formatNamedItems("Custom commands", a.session.CustomCommands())
+		a.queueOutput(formatNamedItems("Custom commands", a.session.CustomCommands()))
+		a.status = "Custom commands"
 	case "/skills":
-		a.status = formatNamedItems("Skills", a.session.Skills())
+		a.queueOutput(formatNamedItems("Skills", a.session.Skills()))
+		a.status = "Skills"
 	case "/plugins":
-		a.status = formatNamedItems("Plugins", a.session.Plugins())
+		a.queueOutput(formatNamedItems("Plugins", a.session.Plugins()))
+		a.status = "Plugins"
 	case "/diagnostics":
 		if len(parts) != 2 {
 			a.err = "Usage: /diagnostics <path>"
@@ -265,13 +269,12 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 			break
 		}
 		a.err = ""
-		a.commandOutput = result
+		a.queueOutput(result)
 		a.status = "Diagnostics"
-		a.setViewportContent(a.contentString())
-		a.viewport.GotoBottom()
 	case "/instructions":
 		a.err = ""
-		a.status = formatInstructions(a.info.InstructionPaths)
+		a.queueOutput(formatInstructions(a.info.InstructionPaths))
+		a.status = "Instructions"
 	case "/permissions":
 		a.handlePermissions(parts)
 	case "/mcp":
@@ -303,7 +306,8 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		}
 		return a.submitPrompt(expanded)
 	}
-	return a, nil
+	output := a.takeOutput()
+	return a, a.printCommand(output)
 }
 
 func formatNamedItems(label string, items []string) string {
@@ -331,13 +335,10 @@ func (a *App) handleGitDiff() {
 	}
 	a.err = ""
 	if strings.TrimSpace(result) == "" {
-		a.commandOutput = ""
 		a.status = "No changes"
 	} else {
-		a.commandOutput = result
+		a.queueOutput(result)
 		a.status = "Patch preview"
-		a.setViewportContent(a.contentString())
-		a.viewport.GotoBottom()
 	}
 }
 
@@ -348,10 +349,8 @@ func (a *App) handleGitStatus() {
 		return
 	}
 	a.err = ""
-	a.commandOutput = result
+	a.queueOutput(result)
 	a.status = "Branch status"
-	a.setViewportContent(a.contentString())
-	a.viewport.GotoBottom()
 }
 
 func (a *App) handleFork(title string) {
@@ -375,7 +374,8 @@ func (a *App) handleMemory() {
 	if len(items) == 0 {
 		a.status = "No cross-session memory"
 	} else {
-		a.status = "Memory:\n- " + strings.Join(items, "\n- ")
+		a.queueOutput("Memory:\n- " + strings.Join(items, "\n- "))
+		a.status = "Memory"
 	}
 }
 
@@ -409,7 +409,8 @@ func (a *App) handleAgent(parts []string) {
 			rows = append(rows, marker+profile.Name+" ("+profile.Provider+"/"+profile.Model+", "+profile.PermissionMode+")")
 		}
 		a.err = ""
-		a.status = strings.Join(rows, "\n")
+		a.queueOutput(strings.Join(rows, "\n"))
+		a.status = "Agents"
 		return
 	}
 	if len(parts) != 2 {
@@ -432,8 +433,9 @@ func (a *App) handleAgent(parts []string) {
 func (a App) handleMCP(parts []string) (tea.Model, tea.Cmd) {
 	if len(parts) == 1 || (len(parts) == 2 && parts[1] == "list") {
 		a.err = ""
-		a.status = formatMCPServers(a.session.ListMCPServers())
-		return a, nil
+		a.queueOutput(formatMCPServers(a.session.ListMCPServers()))
+		a.status = "MCP servers"
+		return a, a.printCommand(a.takeOutput())
 	}
 	operation := parts[1]
 	ctx := context.Background()
@@ -487,7 +489,8 @@ func (a *App) handlePermissions(parts []string) {
 		a.info.PermissionMode = a.session.PermissionMode()
 		a.info.AutoApprove = a.session.AutoApproveTools()
 	}
-	a.status = formatPermissions(a.info)
+	a.queueOutput(formatPermissions(a.info))
+	a.status = "Permissions"
 }
 
 func (a *App) handleReset() {
@@ -495,9 +498,9 @@ func (a *App) handleReset() {
 		a.err = "Reset failed: " + err.Error()
 	} else {
 		a.err = ""
+		a.queueOutput(divider("New conversation"))
 	}
 	a.refreshSnapshot()
-	a.lastActivity = "Conversation reset"
 }
 
 func (a *App) handleSessions() {
@@ -507,7 +510,8 @@ func (a *App) handleSessions() {
 		return
 	}
 	a.err = ""
-	a.status = formatSessions(summaries)
+	a.queueOutput(formatSessions(summaries))
+	a.status = "Sessions"
 }
 
 func (a *App) handleResume(parts []string) {
@@ -521,6 +525,7 @@ func (a *App) handleResume(parts []string) {
 	}
 	a.err = ""
 	a.status = "Resumed " + parts[1]
+	a.queueOutput(divider("Resumed session " + parts[1]))
 	a.refreshSnapshot()
 }
 
@@ -569,6 +574,7 @@ func (a *App) handleUndo() {
 	}
 	a.err = ""
 	a.status = "Restored last checkpoint"
+	a.queueOutput(divider("Restored checkpoint"))
 	a.refreshSnapshot()
 }
 
@@ -576,10 +582,8 @@ func (a App) submitPrompt(text string) (tea.Model, tea.Cmd) {
 	a.err = ""
 	a.status = ""
 	a.commandOutput = ""
-	a.lastActivity = text
 	a.streamingMessage = nil
 	a.agentStatus = AgentStatus{Label: "Submitting", Busy: true}
-	a.stateHistory = nil
 	a.pendingTool = nil
 	a.pendingRequest = PermissionRequest{}
 	a.input.SetValue("")
@@ -589,8 +593,6 @@ func (a App) submitPrompt(text string) (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 	a.turn++
-	a.setViewportContent(a.contentString())
-	a.viewport.GotoBottom()
 	run := func() tea.Msg {
 		return submitDoneMsg{err: a.session.RunTurn(ctx, text, a.notificationsCh, a.approvalsCh)}
 	}

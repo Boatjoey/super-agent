@@ -107,12 +107,11 @@ alias facade.
 
 `tui` follows the same separation:
 
-- `app.go`: Bubble Tea model construction and conversation rendering.
+- `app.go`: Bubble Tea model construction and completed-output rendering.
 - `update.go`: Bubble Tea message routing and state updates.
 - `commands.go`: slash commands and turn submission.
 - `actions.go`: cancellation and clipboard actions.
-- `selection.go`: mouse text selection — coordinate mapping, highlight, and copied text.
-- `view.go`: top-level layout and informational views.
+- `view.go`: live streaming, interactive controls, and informational views.
 - `styles.go`: visual theme.
 
 `store` and `workspace` are the storage and filesystem adapters. `store/store.go` writes and replays

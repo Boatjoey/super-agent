@@ -46,7 +46,7 @@ func main() {
 		NoTools:          cfg.NoTools,
 		CWD:              cwd,
 		InstructionPaths: cfg.InstructionSources,
-	}), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run(); err != nil {
+	})).Run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

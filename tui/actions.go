@@ -52,7 +52,7 @@ func (a *App) copyLastCodeBlock() tea.Cmd {
 }
 
 // copyCommand writes text to the clipboard off the update loop: the native
-// clipboard tools are child processes, and copying a large selection must not
+// clipboard tools are child processes, and copying a large block must not
 // stall rendering.
 func (a App) copyCommand(text string) tea.Cmd {
 	if strings.TrimSpace(text) == "" {
