@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"super-agent/app"
 	"super-agent/runtime"
@@ -275,6 +276,106 @@ func TestSmallWindowCollapsesQueueDetails(t *testing.T) {
 	}
 }
 
+func TestNarrowWindowClampsEveryRenderedLine(t *testing.T) {
+	session := &notificationOnlyConversation{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 30, Height: 12})
+	assertLinesFitWidth(t, model.View(), 30)
+}
+
+func TestInfoBarKeepsModeWhenWorkingDirectoryIsLong(t *testing.T) {
+	session := &notificationOnlyConversation{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
+	view := model.View()
+	if !strings.Contains(view, "mode:ask") {
+		t.Fatalf("view = %q, want permission mode kept after dropping the working directory", view)
+	}
+	assertLinesFitWidth(t, view, 40)
+}
+
+func TestOverlongErrorIsClampedNotWrapped(t *testing.T) {
+	session := &notificationOnlyConversation{permissionErr: errors.New(strings.Repeat("boom", 40))}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", PermissionMode: "ask"})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
+	model = typeText(model, "/permissions mode root")
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	view := model.View()
+	if !strings.Contains(view, "!! error:") {
+		t.Fatalf("view = %q, want permission error", view)
+	}
+	assertLinesFitWidth(t, view, 40)
+}
+
+func TestNarrowWindowKeepsComposerVisible(t *testing.T) {
+	session := &notificationOnlyConversation{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 30, Height: 10})
+	view := model.View()
+	if !strings.Contains(view, "enter: send") {
+		t.Fatalf("view = %q, want composer shortcut visible", view)
+	}
+	assertLinesFitWidth(t, view, 30)
+}
+
+func TestQueuedPreviewIsClampedToTerminalWidth(t *testing.T) {
+	session := &notificationOnlyConversation{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 24, Height: 12})
+	model = typeText(model, "active")
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = typeText(model, strings.Repeat("queued prompt ", 6))
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	assertLinesFitWidth(t, model.View(), 24)
+}
+
+func TestHelpOverlayIsClampedToTerminalWidth(t *testing.T) {
+	model := newEventOnlyTUI(t)
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 20, Height: 8})
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	assertLinesFitWidth(t, model.View(), 20)
+}
+
+func TestResizeRecomputesClampedBudget(t *testing.T) {
+	session := &notificationOnlyConversation{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 24, Height: 14})
+	assertLinesFitWidth(t, model.View(), 24)
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	assertLinesFitWidth(t, model.View(), 60)
+}
+
+func TestWelcomeContentReflowsToViewportWidth(t *testing.T) {
+	session := &notificationOnlyConversation{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 50, Height: 24})
+	view := model.View()
+	if !strings.Contains(view, "get started") {
+		t.Fatalf("view = %q, want welcome text wrapped to the viewport width, not truncated", view)
+	}
+	assertLinesFitWidth(t, view, 50)
+}
+
+func TestFooterDropsStatsWhenTerminalIsNarrow(t *testing.T) {
+	session := &notificationOnlyConversation{}
+	var narrow tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	narrow, _ = narrow.Update(tea.WindowSizeMsg{Width: 50, Height: 24})
+	narrowView := narrow.View()
+	if !strings.Contains(narrowView, "enter: send") {
+		t.Fatalf("view = %q, want shortcut hints kept", narrowView)
+	}
+	if strings.Contains(narrowView, "0/2000") {
+		t.Fatalf("view = %q, want statistics dropped when they do not fit", narrowView)
+	}
+	assertLinesFitWidth(t, narrowView, 50)
+
+	var wide tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	wide, _ = wide.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
+	if !strings.Contains(wide.View(), "0/2000") {
+		t.Fatalf("view = %q, want statistics shown when they fit", wide.View())
+	}
+}
+
 func TestEscCancelsTurnAndClearsQueuedFollowUps(t *testing.T) {
 	session := &notificationOnlyConversation{}
 	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
@@ -377,6 +478,15 @@ func typeText(model tea.Model, text string) tea.Model {
 	return model
 }
 
+func assertLinesFitWidth(t *testing.T, view string, width int) {
+	t.Helper()
+	for i, line := range strings.Split(view, "\n") {
+		if got := lipgloss.Width(line); got > width {
+			t.Fatalf("line %d width %d exceeds terminal %d: %q", i, got, width, line)
+		}
+	}
+}
+
 func newEventOnlyTUI(t *testing.T) tea.Model {
 	t.Helper()
 	var model tea.Model = tui.New(&notificationOnlyConversation{}, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
@@ -437,7 +547,7 @@ func TestToolRunShowsRunningToolState(t *testing.T) {
 	session := runtime.NewSession(engine)
 
 	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
-	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 	model = typeText(model, "run bash")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {

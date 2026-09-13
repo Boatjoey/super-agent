@@ -77,6 +77,16 @@ Run rules:
   palette shows three scrolling choices, and viewport and input dimensions stay positive.
 - Long command output stays in the scrollable viewport and footer status height is bounded, so a large
   result never squeezes out the input.
+- The header, footer, and help overlay are clamped to the terminal width: a line wider than the
+  terminal is truncated (ANSI-aware) rather than hard-wrapped, so the rows the layout reserves for
+  the viewport match what the terminal actually draws after every resize.
+- When the info bar exceeds the terminal width, the working-directory segment is dropped before the
+  model, tools, and permission-mode segments, which stay visible; the remainder is clamped if it is
+  still too wide.
+- Viewport content — transcript messages and the welcome screen alike — is reflowed to the available
+  width after every resize, so no line is clipped horizontally.
+- When the input statistics cannot fit beside the shortcut hints, the statistics are dropped rather
+  than truncated mid-value; the shortcut hints always remain.
 
 ## Approval UI
 
