@@ -59,6 +59,20 @@ type App struct {
 	compacting        bool
 	managingMCP       bool
 	commandOutput     string
+	content           string
+	contentLines      []string
+	selection         selection
+	selectionGen      int
+	writeClipboard    func(string) error
+}
+
+// Option customizes the model as New builds it.
+type Option func(*App)
+
+// WithClipboardWriter replaces the clipboard write, so tests can observe what a
+// copy produced without depending on a system clipboard.
+func WithClipboardWriter(write func(string) error) Option {
+	return func(a *App) { a.writeClipboard = write }
 }
 
 type submitDoneMsg struct {
@@ -91,7 +105,7 @@ func waitForNotification(ch <-chan ConversationNotification, turn int) tea.Cmd {
 	}
 }
 
-func New(session Conversation, info StartupInfo) App {
+func New(session Conversation, info StartupInfo, options ...Option) App {
 	styles := DefaultStyles()
 
 	input := textarea.New()
@@ -113,7 +127,7 @@ func New(session Conversation, info StartupInfo) App {
 	s.Spinner = spinner.Pulse
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 
-	return App{
+	app := App{
 		session:         session,
 		input:           input,
 		spinner:         s,
@@ -123,7 +137,31 @@ func New(session Conversation, info StartupInfo) App {
 		notificationsCh: make(chan ConversationNotification, 100),
 		approvalsCh:     make(chan ApprovalDecision, 1),
 		agentStatus:     AgentStatus{Label: "Idle"},
+		writeClipboard:  defaultClipboardWrite,
 	}
+	for _, option := range options {
+		option(&app)
+	}
+	return app
+}
+
+// setViewportContent is the only writer of the viewport content, so the text a
+// selection is resolved against is always the text that is on screen. Replacing
+// the transcript invalidates a live selection; appending to it does not,
+// because the earlier lines still address the same text.
+func (a *App) setViewportContent(content string) {
+	if !strings.HasPrefix(content, a.content) {
+		a.clearSelection()
+	}
+	a.content = content
+	a.contentLines = strings.Split(content, "\n")
+	a.viewport.SetContent(content)
+}
+
+// clearSelection drops the highlight and ends any auto-scroll tick chain.
+func (a *App) clearSelection() {
+	a.selection = selection{}
+	a.selectionGen++
 }
 
 func (a App) Init() tea.Cmd {
@@ -371,7 +409,7 @@ func (a *App) refreshSnapshot() {
 	// batch index in the same committed transition, so it is already one-based.
 	a.pendingToolIndex = snapshot.PendingToolBatchIndex
 	a.pendingToolTotal = snapshot.PendingToolBatchTotal
-	a.viewport.SetContent(a.contentString())
+	a.setViewportContent(a.contentString())
 	a.viewport.GotoBottom()
 }
 

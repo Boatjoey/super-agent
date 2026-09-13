@@ -54,6 +54,27 @@ Extensions:
 | `Ctrl+C` | Cancel a run, or quit |
 | Arrows | Navigate multiline input, or recall a single-line prompt without losing the draft |
 | Page Up/Down | Scroll the viewport |
+| Wheel, drag | Scroll, select, and copy — see Mouse |
+
+## Mouse
+
+The program enables terminal mouse tracking, so mouse events reach the TUI and the wheel, clicks, and
+text selection are handled in-app:
+
+- The wheel scrolls the transcript.
+- Click-drag selects text in the transcript. Releasing copies the selection; a click that never moved
+  copies nothing.
+- Dragging past the top or bottom edge of the transcript scrolls it while the selection grows.
+- The highlight clears on the next key press, on a click that does not drag, and whenever the
+  transcript is replaced rather than appended to.
+- Selection copies the text as rendered on screen, including the markdown renderer's own layout, not
+  the original markdown source.
+- Copying prefers a native clipboard tool and falls back to `OSC 52`, which reaches the terminal's
+  clipboard over SSH and inside tmux when `set-clipboard` is on.
+
+Because the TUI captures the mouse, the terminal's own selection needs its bypass modifier: `Shift` on
+most terminals, `Option` on iTerm2. Some terminals do not forward the modifier, so the bypass is
+best-effort.
 
 Composer rules worth knowing:
 

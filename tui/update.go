@@ -20,9 +20,11 @@ func (a App) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		return a.resize(message)
 	case tea.MouseMsg:
-		var command tea.Cmd
-		a.viewport, command = a.viewport.Update(message)
-		return a, command
+		return a.updateMouse(message)
+	case selectionTickMsg:
+		return a.autoScrollStep(message)
+	case clipboardDoneMsg:
+		return a.finishCopy(message)
 	case tea.KeyMsg:
 		return a.updateKey(message)
 	case conversationNotificationMsg:
@@ -64,6 +66,9 @@ func (a App) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a App) resize(message tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	a.width, a.height = max(1, message.Width), max(1, message.Height)
+	// Content is reflowed to the new width, so every line index a selection
+	// holds now addresses different text.
+	a.clearSelection()
 	headerHeight := lipgloss.Height(a.headerView())
 	footerHeight := lipgloss.Height(a.footerView())
 	viewportHeight := a.viewportHeightFor(headerHeight, footerHeight)
@@ -79,7 +84,7 @@ func (a App) resize(message tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		a.viewport.Height = viewportHeight
 	}
 	a.input.SetWidth(max(1, a.width-4))
-	a.viewport.SetContent(a.contentString())
+	a.setViewportContent(a.contentString())
 	a.viewport.GotoBottom()
 	return a, nil
 }
@@ -90,6 +95,10 @@ func (a App) updateKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.showHelp = false
 		}
 		return a, nil
+	}
+	if a.selection.active {
+		// Any key dismisses the highlight; the text is already copied.
+		a.clearSelection()
 	}
 	if a.pendingTool != nil && message.String() != "ctrl+c" && message.String() != "esc" {
 		return a.handleApprovalKey(message)
@@ -139,7 +148,7 @@ func (a App) updateKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 	case "ctrl+l":
-		a.viewport.SetContent("")
+		a.setViewportContent("")
 		a.commandOutput = ""
 		a.err = ""
 		a.status = ""
@@ -294,8 +303,84 @@ func (a *App) clearPendingTool() {
 
 func (a *App) refreshContent() {
 	wasAtBottom := a.viewport.AtBottom()
-	a.viewport.SetContent(a.contentString())
+	a.setViewportContent(a.contentString())
 	if wasAtBottom {
 		a.viewport.GotoBottom()
 	}
+}
+
+func (a App) updateMouse(message tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if !a.ready || a.showHelp {
+		return a, nil
+	}
+	if message.Button == tea.MouseButtonWheelUp || message.Button == tea.MouseButtonWheelDown {
+		// Shift+wheel is the viewport's horizontal scroll, which this layout
+		// never needs: ignoring it keeps the transcript from being clipped.
+		if message.Shift {
+			return a, nil
+		}
+		// The viewport scrolls against its own height, which only a resize
+		// updates; use the height the last frame was laid out with.
+		a.viewport.Height = a.layout().blockHeight
+		var command tea.Cmd
+		a.viewport, command = a.viewport.Update(message)
+		return a, command
+	}
+	if message.Shift {
+		// The terminal is running its own selection; leave it to the terminal.
+		return a, nil
+	}
+	switch message.Action {
+	case tea.MouseActionPress:
+		return a.pressMouse(message)
+	case tea.MouseActionMotion:
+		return a.dragMouse(message)
+	case tea.MouseActionRelease:
+		return a.releaseMouse()
+	}
+	return a, nil
+}
+
+func (a App) pressMouse(message tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// A press always starts a fresh selection, even if the previous drag never
+	// saw its release: that is what recovers the model from a lost release
+	// instead of leaving the drag stuck on.
+	if message.Button != tea.MouseButtonLeft {
+		return a, nil
+	}
+	point, ok := a.contentPoint(message.Y, message.X, false)
+	if !ok {
+		return a, nil
+	}
+	a.selectionGen++
+	a.selection = selection{active: true, dragging: true, anchor: point, focus: point}
+	return a, selectionTickCommand(a.selectionGen)
+}
+
+func (a App) dragMouse(message tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if !a.selection.dragging {
+		return a, nil
+	}
+	point, ok := a.contentPoint(message.Y, message.X, true)
+	if !ok {
+		return a, nil
+	}
+	a.selection.focus = point
+	a.selection.autoScroll = a.autoScrollDirection(message.Y)
+	return a, nil
+}
+
+func (a App) releaseMouse() (tea.Model, tea.Cmd) {
+	if !a.selection.dragging {
+		return a, nil
+	}
+	a.selection.dragging = false
+	a.selection.autoScroll = 0
+	a.selectionGen++ // end the auto-scroll chain
+	if a.selection.empty() {
+		// A press that never moved selects nothing.
+		a.clearSelection()
+		return a, nil
+	}
+	return a, a.copyCommand(a.selection.text(a.contentLines))
 }

@@ -267,7 +267,7 @@ func (a App) runSlashCommand(text string) (tea.Model, tea.Cmd) {
 		a.err = ""
 		a.commandOutput = result
 		a.status = "Diagnostics"
-		a.viewport.SetContent(a.contentString())
+		a.setViewportContent(a.contentString())
 		a.viewport.GotoBottom()
 	case "/instructions":
 		a.err = ""
@@ -336,7 +336,7 @@ func (a *App) handleGitDiff() {
 	} else {
 		a.commandOutput = result
 		a.status = "Patch preview"
-		a.viewport.SetContent(a.contentString())
+		a.setViewportContent(a.contentString())
 		a.viewport.GotoBottom()
 	}
 }
@@ -350,7 +350,7 @@ func (a *App) handleGitStatus() {
 	a.err = ""
 	a.commandOutput = result
 	a.status = "Branch status"
-	a.viewport.SetContent(a.contentString())
+	a.setViewportContent(a.contentString())
 	a.viewport.GotoBottom()
 }
 
@@ -589,7 +589,7 @@ func (a App) submitPrompt(text string) (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 	a.turn++
-	a.viewport.SetContent(a.contentString())
+	a.setViewportContent(a.contentString())
 	a.viewport.GotoBottom()
 	run := func() tea.Msg {
 		return submitDoneMsg{err: a.session.RunTurn(ctx, text, a.notificationsCh, a.approvalsCh)}

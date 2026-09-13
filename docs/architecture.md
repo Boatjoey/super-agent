@@ -111,6 +111,7 @@ alias facade.
 - `update.go`: Bubble Tea message routing and state updates.
 - `commands.go`: slash commands and turn submission.
 - `actions.go`: cancellation and clipboard actions.
+- `selection.go`: mouse text selection — coordinate mapping, highlight, and copied text.
 - `view.go`: top-level layout and informational views.
 - `styles.go`: visual theme.
 
