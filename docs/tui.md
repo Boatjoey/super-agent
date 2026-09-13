@@ -4,7 +4,66 @@
 and its own display DTOs, never on `runtime` — see `architecture.md`. Runtime values become TUI values
 at the composition boundary in `app/tui_adapter.go`.
 
+## Feature Architecture
+
+The TUI is feature-oriented and has one-way dependencies. A stateful user capability is a feature;
+stateless formatting helpers and visual primitives are not.
+
+Each feature owns its state, update logic, effects, and view. Feature state is private: one feature
+must not read or mutate another feature's model. Features collaborate only through explicit typed
+messages or intents. They must not import sibling features or share mutable state.
+
+The root `App` owns only application lifecycle, global message routing, focus, terminal dimensions,
+and layout composition. It may contain feature models, route messages to them, and compose their
+rendered output. It must not contain feature-specific state, key semantics, or business branches.
+Only genuinely cross-feature state belongs at the root; convenience is not a reason to promote state.
+
+Input belongs to the feature that currently owns focus. The root handles only truly global input,
+such as application exit or terminal resize, and otherwise forwards input to the focused feature.
+Meanings such as submitting a prompt, choosing an approval, or navigating a menu belong to their
+respective features.
+
+Views are pure renderers. A view may read only its feature model; it must not call a port or service,
+mutate state, start work, or emit business events. I/O and other side effects run as Bubble Tea
+commands returned by the update/effect layer, and their typed result messages drive later updates.
+
+Each feature defines the narrow ports required by its own use cases. TUI features must not depend on
+runtime types, global services, or a shared interface that aggregates unrelated capabilities. The
+composition boundary in `app` implements feature ports and converts runtime values to feature-owned
+display DTOs. New capabilities extend the owning feature port instead of widening a common service
+interface.
+
+A TUI feature change should remain within that feature and its direct messages, ports, and adapters.
+A change that requires knowledge of unrelated feature internals indicates a failed boundary and must
+first be resolved by changing ownership or dependencies. Legitimate cross-feature flows may change
+the participating features and their explicit contract, but must not create direct feature coupling.
+The goal is controlled change propagation: changing one feature does not require synchronized edits
+to unrelated features.
+
+### Feature ownership
+
+| Feature | Owns |
+|---|---|
+| `tui/composer` | The prompt input, its history, queued follow-ups, and the slash-command palette. Emits `Submit`, `Queue`, `Steer`, and `Clear` intents. |
+| `tui/transcript` | Committed messages, live streaming content, tool-call and reasoning expansion, and copying the latest code block. |
+| `tui/approval` | The pending tool-approval request, its selection, and the decision the runtime receives. |
+| `tui/attachments` | Files queued for the next turn. |
+| `tui/commands` | The slash-command catalogue, each command's input semantics, and the compact and MCP operations they start. |
+
+The root `App` owns the turn lifecycle, the cross-feature error and status line, the help overlay,
+the welcome block, terminal dimensions, and layout composition. A feature request that reaches
+another feature — a prompt, an attachment, a snapshot refresh — travels as an explicit field of the
+requesting feature's outcome, and the root performs the wiring.
+
+`tui` may not import `runtime`, and a feature may not import a sibling feature or the root package.
+Both rules are enforced by `tests/architecture/dependencies_test.go`.
+
 ## Commands
+
+A command reports its whole effect at once: the error line, the status line, and any scrollback
+output. A command that succeeds clears a previous error, and one that fails leaves the status line
+untouched, because the error line takes precedence over it. Command output goes to terminal
+scrollback rather than the live view, so long listings stay scrollable.
 
 Session and configuration:
 

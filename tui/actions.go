@@ -8,6 +8,8 @@ import (
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"super-agent/tui/transcript"
 )
 
 // clipboardDoneMsg reports the outcome of an asynchronous clipboard write.
@@ -17,38 +19,7 @@ type clipboardDoneMsg struct {
 }
 
 func ExtractCodeBlocks(content string) []string {
-	var blocks []string
-	lines := strings.Split(content, "\n")
-	inBlock := false
-	var current strings.Builder
-	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "```") {
-			if inBlock {
-				blocks = append(blocks, strings.TrimSuffix(current.String(), "\n"))
-				current.Reset()
-			}
-			inBlock = !inBlock
-			continue
-		}
-		if inBlock {
-			current.WriteString(line + "\n")
-		}
-	}
-	return blocks
-}
-
-func (a *App) copyLastCodeBlock() tea.Cmd {
-	for i := len(a.messages) - 1; i >= 0; i-- {
-		blocks := ExtractCodeBlocks(a.messages[i].Content)
-		if len(blocks) == 0 {
-			continue
-		}
-		a.err = ""
-		return a.copyCommand(blocks[len(blocks)-1])
-	}
-	a.err = "No code blocks found to copy"
-	a.status = ""
-	return nil
+	return transcript.ExtractCodeBlocks(content)
 }
 
 // copyCommand writes text to the clipboard off the update loop: the native
@@ -98,8 +69,8 @@ func defaultClipboardWrite(text string) error {
 }
 
 func (a *App) cancelRun(clearQueue bool) {
-	if a.pendingTool != nil {
-		if err := a.session.Cancel(); err != nil {
+	if a.approval.Active() {
+		if err := a.turnPort.Cancel(); err != nil {
 			a.err = err.Error()
 		}
 	}
@@ -107,7 +78,7 @@ func (a *App) cancelRun(clearQueue bool) {
 		a.cancel()
 	}
 	if clearQueue {
-		a.queuedInputs = nil
+		a.composer.ClearQueue()
 		a.status = "Turn canceled"
 	}
 }

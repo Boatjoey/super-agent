@@ -2,21 +2,21 @@ package tui
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
+
+	"super-agent/tui/approval"
+	"super-agent/tui/attachments"
+	"super-agent/tui/commands"
+	"super-agent/tui/composer"
+	"super-agent/tui/transcript"
 )
 
 type StartupInfo struct {
-	Provider         string
 	ModelName        string
 	AutoApprove      bool
 	PermissionMode   string
@@ -25,83 +25,50 @@ type StartupInfo struct {
 	InstructionPaths []string
 }
 
+// App is the composition root and the global router. It owns application
+// lifecycle, terminal dimensions, layout, and the cross-feature status line;
+// every user capability lives in the feature that owns it.
 type App struct {
-	session           Conversation
-	input             textarea.Model
-	spinner           spinner.Model
-	styles            Styles
-	info              StartupInfo
-	history           []string
-	historyIdx        int
-	historyDraft      string
-	queuedInputs      []string
-	slashSelection    int
-	ready             bool
-	width             int
-	height            int
-	showHelp          bool
-	err               string
-	status            string
-	cancel            context.CancelFunc
-	notificationsCh   chan ConversationNotification
-	approvalsCh       chan ApprovalDecision
-	agentStatus       AgentStatus
-	messages          []Message
-	pendingTool       *ToolCall
-	pendingRequest    PermissionRequest
-	pendingToolIndex  int
-	pendingToolTotal  int
-	approvalSelection int
-	approvalSubmitted bool
-	streamingMessage  *Message
-	turn              int
-	compacting        bool
-	managingMCP       bool
-	commandOutput     string
-	expandLatestTools bool
-	expandAllTools    bool
-	expandLatestThink bool
-	expandAllThink    bool
-	writeClipboard    func(string) error
-	printOutput       func(string) tea.Cmd
+	snapshot        SnapshotPort
+	turnPort        TurnPort
+	commands        commands.Model
+	composer        composer.Model
+	approval        approval.Model
+	attachments     attachments.Model
+	transcript      transcript.Model
+	styles          Styles
+	info            StartupInfo
+	ready           bool
+	width           int
+	height          int
+	showHelp        bool
+	err             string
+	status          string
+	cancel          context.CancelFunc
+	notificationsCh chan ConversationNotification
+	approvalsCh     chan ApprovalDecision
+	agentStatus     AgentStatus
+	turn            int
+	writeClipboard  func(string) error
+	printOutput     func(string) tea.Cmd
 }
 
-// Option customizes the model as New builds it.
 type Option func(*App)
 
-// WithClipboardWriter replaces the clipboard write, so tests can observe what a
-// copy produced without depending on a system clipboard.
 func WithClipboardWriter(write func(string) error) Option {
 	return func(a *App) { a.writeClipboard = write }
 }
 
-// WithOutputPrinter replaces terminal scrollback output for tests.
 func WithOutputPrinter(print func(string) tea.Cmd) Option {
 	return func(a *App) { a.printOutput = print }
 }
 
-type submitDoneMsg struct {
-	err error
-}
-
-type compactDoneMsg struct {
-	err error
-}
-
-type mcpDoneMsg struct {
-	status string
-	err    error
-}
-
+type submitDoneMsg struct{ err error }
 type conversationNotificationMsg struct {
 	notification ConversationNotification
 	turn         int
 }
 
-// outputCommittedMsg advances dynamic state only after the renderer has put
-// completed content into terminal scrollback.
-// waitForNotification listens on ch and tags the delivered notification with
-// its turn so stale notifications from a replaced channel can be discarded.
 func waitForNotification(ch <-chan ConversationNotification, turn int) tea.Cmd {
 	return func() tea.Msg {
 		notification, ok := <-ch
@@ -115,82 +82,61 @@ func waitForNotification(ch <-chan ConversationNotification, turn int) tea.Cmd {
 func New(session Conversation, info StartupInfo, options ...Option) App {
 	styles := DefaultStyles()
 
-	input := textarea.New()
-	input.Placeholder = "Ask me anything... (try /help)"
-	input.Focus()
-	input.CharLimit = 2000
-	input.ShowLineNumbers = false
-	input.SetPromptFunc(3, func(line int) string {
-		if line == 0 {
-			return " ❯ "
-		}
-		return "   "
-	})
-	input.FocusedStyle.Prompt = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-	input.FocusedStyle.Text = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-	input.SetHeight(1)
-
-	s := spinner.New()
-	s.Spinner = spinner.Pulse
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
-
 	app := App{
-		session:         session,
-		input:           input,
-		spinner:         s,
-		styles:          styles,
-		info:            info,
-		history:         []string{},
-		notificationsCh: make(chan ConversationNotification, 100),
-		approvalsCh:     make(chan ApprovalDecision, 1),
-		agentStatus:     AgentStatus{Label: "Idle"},
-		writeClipboard:  defaultClipboardWrite,
-		printOutput:     func(content string) tea.Cmd { return tea.Println(content) },
+		snapshot: session, turnPort: session,
+		commands: commands.New(
+			commands.Config{CWD: info.CWD, InstructionPaths: info.InstructionPaths, NoTools: info.NoTools},
+			commands.Ports{Sessions: session, Permissions: session, MCP: session, Agents: session,
+				Memory: session, Workspace: session, Extensions: session},
+		),
+		attachments: attachments.New(session), styles: styles, info: info,
+		notificationsCh: make(chan ConversationNotification, 100), approvalsCh: make(chan ApprovalDecision, 1),
+		agentStatus: AgentStatus{Label: "Idle"}, writeClipboard: defaultClipboardWrite,
+		printOutput: func(content string) tea.Cmd { return tea.Println(content) },
 	}
+	app.composer = composer.New(composerCommands(app.commands.Palette()))
+	app.transcript = transcript.New(app.welcomeString(), transcript.Styles{
+		Status: styles.Status, UserLabel: styles.UserLabel, ToolLabel: styles.ToolLabel,
+		Thinking: styles.Thinking, Footer: styles.Footer, MarkdownRenderer: styles.MarkdownRenderer,
+	})
 	for _, option := range options {
 		option(&app)
 	}
 	return app
 }
 
+// composerCommands maps the command feature's palette onto the composer's own
+// entry type, so the composer never learns the command catalogue.
+func composerCommands(palette []commands.Command) []composer.Command {
+	entries := make([]composer.Command, 0, len(palette))
+	for _, command := range palette {
+		entries = append(entries, composer.Command{Name: command.Name, Description: command.Description})
+	}
+	return entries
+}
+
 func (a App) Init() tea.Cmd {
-	// The initial events channel has no producer; arming a listener on it
-	// would leak a goroutine for the app's lifetime. submitPrompt arms the
-	// first listener on the real turn channel.
-	return tea.Batch(
-		a.input.Cursor.BlinkCmd(),
-		a.spinner.Tick,
-	)
+	return tea.Batch(a.composer.Init(), a.attachments.Init())
 }
 
 func (a App) infoBar() string {
-	modelStr := a.info.ModelName
-	toolsStr := "tools on"
+	tools := "tools on"
 	if a.info.NoTools {
-		toolsStr = "tools off"
+		tools = "tools off"
 	}
 	mode := a.info.PermissionMode
 	if mode == "" {
 		mode = "ask"
 	}
-	sep := a.styles.Footer.Render(" · ")
-	join := func(parts []string) string {
-		styled := make([]string, len(parts))
-		for i, part := range parts {
-			styled[i] = a.styles.Footer.Render(part)
-		}
-		return strings.Join(styled, sep)
+	separator := a.styles.Footer.Render(" · ")
+	parts := []string{mode, a.info.ModelName, tools}
+	for index, part := range parts {
+		parts[index] = a.styles.Footer.Render(part)
 	}
-	return clampLines(a.width, join([]string{mode, modelStr, toolsStr}))
+	return clampLines(a.width, strings.Join(parts, separator))
 }
 
-func (a App) isBusy() bool {
-	return a.compacting || a.managingMCP || a.agentStatus.Busy
-}
-
-func (a App) needsInput() bool {
-	return a.agentStatus.AwaitingApproval
-}
+func (a App) needsInput() bool { return a.agentStatus.AwaitingApproval }
 
 func (a App) welcomeString() string {
 	parts := []string{a.info.ModelName}
@@ -204,347 +150,82 @@ func (a App) welcomeString() string {
 }
 
 func (a App) footerView() string {
-	var b strings.Builder
-
+	var rendered strings.Builder
 	if a.err != "" {
-		b.WriteString(a.styles.Error.Render(" !! error: "+a.err) + "\n")
+		rendered.WriteString(a.styles.Error.Render(" !! error: "+a.err) + "\n")
 	} else if a.status != "" {
-		b.WriteString(a.styles.Status.Render(" "+compactStatus(a.status, 3)) + "\n")
+		rendered.WriteString(a.styles.Status.Render(" "+compactStatus(a.status, 3)) + "\n")
 	} else {
-		b.WriteByte('\n')
+		rendered.WriteByte('\n')
 	}
-
-	compact := a.height > 0 && a.height < 18
-	if len(a.queuedInputs) > 0 {
-		b.WriteString(a.styles.Status.Render(fmt.Sprintf(" Queued (%d)", len(a.queuedInputs))) + "\n")
-		limit := min(3, len(a.queuedInputs))
-		if compact {
-			limit = 0
-		}
-		for index := 0; index < limit; index++ {
-			preview := strings.Join(strings.Fields(a.queuedInputs[index]), " ")
-			if len([]rune(preview)) > 72 {
-				preview = string([]rune(preview)[:72]) + "…"
-			}
-			b.WriteString(a.styles.Footer.Render(fmt.Sprintf(" %d. %s", index+1, preview)) + "\n")
-		}
-		if remaining := len(a.queuedInputs) - limit; remaining > 0 {
-			b.WriteString(a.styles.Footer.Render(fmt.Sprintf(" … %d more", remaining)) + "\n")
-		}
+	if view := a.attachments.View(); view != "" {
+		rendered.WriteString(view + "\n")
 	}
-
-	if attachments := a.session.PendingAttachments(); len(attachments) > 0 {
-		names := make([]string, 0, len(attachments))
-		for _, attachment := range attachments {
-			names = append(names, attachment.Name)
-		}
-		b.WriteString(a.styles.Status.Render(" Attachments: "+strings.Join(names, ", ")) + "\n")
+	if view := a.approval.View(a.info.CWD); view != "" {
+		rendered.WriteString(view + "\n")
 	}
-
-	if call := a.pendingTool; call != nil {
-		prompt := lipgloss.NewStyle().
-			Background(lipgloss.Color("3")).
-			Foreground(lipgloss.Color("0")).
-			Padding(0, 1).
-			Render(" ACTION REQUIRED ")
-		progress := ""
-		if a.pendingToolTotal > 0 {
-			progress = fmt.Sprintf(" tool %d/%d:", a.pendingToolIndex, a.pendingToolTotal)
-		}
-		b.WriteString(prompt + progress + " approve " + lipgloss.NewStyle().Bold(true).Render(call.Name) + "?\n")
-		options := []string{"1. Yes, run once", "2. Yes, always allow", "3. No, deny"}
-		for index, option := range options {
-			prefix := "  "
-			style := a.styles.Footer
-			if index == a.approvalSelection {
-				prefix = "› "
-				style = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-			}
-			b.WriteString(style.Render(prefix+option) + "\n")
-		}
-		if a.approvalSubmitted {
-			b.WriteString(a.styles.Status.Render(" Decision submitted…") + "\n")
-		}
-		if a.pendingRequest.ToolName != "" || a.pendingRequest.Reason != "" {
-			meta := fmt.Sprintf(" class: %s cwd: %s", a.pendingRequest.CommandClass, firstNonEmpty(a.pendingRequest.CWD, a.info.CWD))
-			if len(a.pendingRequest.TouchedPaths) > 0 {
-				meta += " paths: " + strings.Join(a.pendingRequest.TouchedPaths, ",")
-			}
-			if a.pendingRequest.Reason != "" {
-				meta += " reason: " + a.pendingRequest.Reason
-			}
-			b.WriteString(a.styles.Footer.Render(meta) + "\n")
-		} else if call.Input != "" {
-			input := call.Input
-			if len(input) > 240 {
-				input = input[:240] + "..."
-			}
-			b.WriteString(a.styles.Footer.Render(" cwd: "+a.info.CWD+" input: "+input) + "\n")
-		}
-	}
-
-	if matches := a.slashMatches(); len(matches) > 0 && a.cancel == nil && a.pendingTool == nil {
-		visible := 6
-		if compact {
-			visible = 3
-		}
-		start := 0
-		if a.slashSelection >= visible {
-			start = a.slashSelection - visible + 1
-		}
-		end := min(start+visible, len(matches))
-		for index := start; index < end; index++ {
-			prefix := "  "
-			style := a.styles.Footer
-			if index == a.slashSelection {
-				prefix = "› "
-				style = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-			}
-			label := matches[index]
-			if !compact {
-				description := slashCommandDescriptions[matches[index]]
-				if description == "" {
-					description = "Custom command"
-				}
-				label = fmt.Sprintf("%-17s %s", label, description)
-			}
-			b.WriteString(style.Render(prefix+label) + "\n")
-		}
-	}
-
-	line := " " + strings.Repeat("─", max(1, a.width-2))
-	b.WriteString(line + "\n")
-	b.WriteString(a.input.View() + "\n")
-	b.WriteString(line + "\n")
-	b.WriteString(a.infoBar())
-
-	return clampLines(a.width, b.String())
+	rendered.WriteString(a.composer.View() + "\n")
+	rendered.WriteString(a.infoBar())
+	return clampLines(a.width, rendered.String())
 }
 
 func (a *App) refreshSnapshot() {
-	snapshot := a.session.Snapshot()
+	snapshot := a.snapshot.Snapshot()
 	a.agentStatus = snapshot.AgentStatus
-	a.messages = append([]Message(nil), snapshot.Messages...)
-	a.pendingTool = snapshot.PendingTool
-	if snapshot.PendingPermission != nil {
-		a.pendingRequest = *snapshot.PendingPermission
+	a.transcript.Replace(snapshot.Messages)
+	a.transcript.SetBusy(snapshot.AgentStatus.Busy)
+	a.approval.Clear()
+	if snapshot.PendingPermission != nil && snapshot.PendingTool != nil {
+		call := snapshot.PendingTool
+		request := snapshot.PendingPermission
+		a.approval.Open(approval.Request{ToolName: call.Name, Input: call.Input, CommandClass: request.CommandClass,
+			CWD: request.CWD, TouchedPaths: request.TouchedPaths, Reason: request.Reason,
+			BatchIndex: snapshot.PendingToolBatchIndex, BatchTotal: snapshot.PendingToolBatchTotal})
+	}
+	a.transcript.SetStreaming(snapshot.StreamingMessage)
+}
+
+// applyOutcome carries out a command feature's requests. It only routes and
+// applies: the feature owns the semantics, the root owns the effects and the
+// wiring to the features a command reaches across.
+func (a App) applyOutcome(outcome *commands.Outcome, command tea.Cmd) (tea.Model, tea.Cmd) {
+	if outcome == nil {
+		return a, command
+	}
+	if outcome.Err != "" {
+		a.err = outcome.Err
 	} else {
-		a.pendingRequest = PermissionRequest{}
-	}
-	a.streamingMessage = snapshot.StreamingMessage
-	// Match the notification path: entering WaitingApproval advances the
-	// batch index in the same committed transition, so it is already one-based.
-	a.pendingToolIndex = snapshot.PendingToolBatchIndex
-	a.pendingToolTotal = snapshot.PendingToolBatchTotal
-}
-
-func (a App) renderMarkdown(content string) string {
-	if a.styles.MarkdownRenderer == nil {
-		return content
-	}
-	out, err := a.styles.MarkdownRenderer.Render(content)
-	if err != nil {
-		return content
-	}
-	return strings.TrimSpace(out)
-}
-
-type toolDisplayGroup struct {
-	verb  string
-	kind  string
-	items []string
-}
-
-func toolGroups(calls []*ToolCall) []toolDisplayGroup {
-	groups := make([]toolDisplayGroup, 0, len(calls))
-	for _, call := range calls {
-		verb, kind, items := toolDisplay(call)
-		if len(groups) > 0 && groups[len(groups)-1].verb == verb && groups[len(groups)-1].kind == kind {
-			groups[len(groups)-1].items = append(groups[len(groups)-1].items, items...)
-			continue
-		}
-		groups = append(groups, toolDisplayGroup{verb: verb, kind: kind, items: items})
-	}
-	return groups
-}
-
-func toolDisplay(call *ToolCall) (string, string, []string) {
-	args := map[string]any{}
-	_ = json.Unmarshal([]byte(call.Input), &args)
-	value := func(key string) string {
-		text, _ := args[key].(string)
-		return text
-	}
-	item := func(value, fallback string) []string {
-		if value == "" {
-			value = fallback
-		}
-		return []string{value}
-	}
-	switch call.Name {
-	case "read_file":
-		return "Read", "files", item(value("path"), call.Name)
-	case "write_file":
-		return "Edited", "files", item(value("path"), call.Name)
-	case "apply_patch":
-		return "Edited", "files", item(value("path"), call.Name)
-	case "go_test":
-		packages := stringSlice(args["packages"])
-		if len(packages) == 0 {
-			packages = []string{"./..."}
-		}
-		return "Ran", "commands", []string{"go test " + strings.Join(packages, " ")}
-	case "run_command", "bash":
-		return "Ran", "commands", item(value("command"), call.Name)
-	case "search":
-		return "Searched", "queries", item(value("query"), call.Name)
-	case "web_search":
-		return "Searched", "queries", item(value("query"), call.Name)
-	case "browser_fetch":
-		return "Fetched", "pages", item(value("url"), call.Name)
-	case "list_files":
-		return "Listed", "paths", item(value("path"), ".")
-	case "format":
-		files := stringSlice(args["files"])
-		if len(files) == 0 {
-			files = []string{call.Name}
-		}
-		return "Formatted", "files", files
-	case "git_status":
-		return "Ran", "commands", []string{"git status --short"}
-	case "git_diff":
-		return "Ran", "commands", []string{"git diff"}
-	default:
-		return "Called", "tools", []string{call.Name}
-	}
-}
-
-func stringSlice(value any) []string {
-	values, _ := value.([]any)
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		if text, ok := value.(string); ok {
-			result = append(result, text)
+		a.err = ""
+		if outcome.Status != "" {
+			a.status = outcome.Status
 		}
 	}
-	return result
-}
-
-func toolGroupSummary(group toolDisplayGroup) string {
-	if len(group.items) == 1 {
-		return group.verb + " " + group.items[0]
-	}
-	return fmt.Sprintf("%s %d %s", group.verb, len(group.items), group.kind)
-}
-
-func (a App) renderToolCalls(calls []*ToolCall, expanded bool) string {
-	var blocks []string
-	for _, group := range toolGroups(calls) {
-		block := a.styles.ToolLabel.Render("● " + toolGroupSummary(group))
-		if expanded {
-			for index, item := range group.items {
-				branch := "├"
-				if index == len(group.items)-1 {
-					branch = "└"
-				}
-				block += "\n" + a.styles.Footer.Render("  "+branch+" "+item)
-			}
+	if outcome.StatusBar != nil {
+		if outcome.StatusBar.ModelName != "" {
+			a.info.ModelName = outcome.StatusBar.ModelName
 		}
-		blocks = append(blocks, block)
+		a.info.PermissionMode = outcome.StatusBar.PermissionMode
+		a.info.AutoApprove = outcome.StatusBar.AutoApprove
 	}
-	return strings.Join(blocks, "\n")
-}
-
-func (a App) renderMessage(msg Message) string {
-	return a.renderMessageWithTools(msg, false)
-}
-
-func (a App) renderMessageWithTools(msg Message, expanded bool) string {
-	var b strings.Builder
-	width := a.width
-	if width <= 0 {
-		width = 80
+	if outcome.RefreshSnapshot {
+		a.refreshSnapshot()
 	}
-	wrap := func(content string, indent int) string {
-		return lipgloss.NewStyle().PaddingLeft(indent).Render(ansi.Wrap(strings.TrimSpace(content), max(1, width-indent), " "))
+	if outcome.Quit {
+		return a, tea.Quit
 	}
-	if msg.Role == "user" {
-		b.WriteString(a.styles.UserLabel.Render("❯ ") + msg.Content)
-		return wrap(b.String(), 1)
+	if outcome.ShowHelp {
+		a.showHelp = true
 	}
-	if msg.Content != "" {
-		if msg.Role == "assistant" {
-			b.WriteString(a.renderMarkdown(msg.Content))
-		}
+	if outcome.AttachPath != "" {
+		return a, a.attachments.Attach(outcome.AttachPath)
 	}
-	if len(msg.ToolCalls) > 0 {
-		if b.Len() > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(a.renderToolCalls(msg.ToolCalls, expanded))
+	if outcome.Prompt != "" {
+		return a.submitPrompt(outcome.Prompt)
 	}
-	for _, attachment := range msg.Attachments {
-		b.WriteString("\n" + a.styles.Status.Render("  attachment: "+attachment.Name+" ("+attachment.MIME+")"))
+	if outcome.Output != "" {
+		return a, a.printCommand(outcome.Output)
 	}
-	return wrap(b.String(), 0)
-}
-
-func (a App) renderCommittedMessage(msg Message, toolsExpanded, thinkingExpanded bool) string {
-	content := a.renderMessageWithTools(msg, toolsExpanded)
-	if msg.Role != RoleAssistant {
-		return content
-	}
-	thinking := a.styles.Thinking.Render("Thinking...")
-	if thinkingExpanded && strings.TrimSpace(msg.ReasoningContent) != "" {
-		wrapped := ansi.Wrap(strings.TrimSpace(msg.ReasoningContent), max(1, a.width-4), " ")
-		lines := strings.Split(wrapped, "\n")
-		for index, line := range lines {
-			prefix := "    "
-			if index == 0 {
-				prefix = "  └ "
-			}
-			thinking += "\n" + a.styles.Thinking.Render(prefix+line)
-		}
-	}
-	if strings.TrimSpace(content) == "" {
-		return thinking
-	}
-	return thinking + "\n" + content
-}
-
-func (a App) renderTranscript() string {
-	latestTool := -1
-	latestThinking := -1
-	for index, message := range a.messages {
-		if len(message.ToolCalls) > 0 {
-			latestTool = index
-		}
-		if message.Role == RoleAssistant && strings.TrimSpace(message.ReasoningContent) != "" {
-			latestThinking = index
-		}
-	}
-	blocks := []string{a.welcomeString()}
-	for index, message := range a.messages {
-		toolsExpanded := a.expandAllTools || a.expandLatestTools && index == latestTool
-		thinkingExpanded := a.expandAllThink || a.expandLatestThink && index == latestThinking
-		if content := a.renderCommittedMessage(message, toolsExpanded, thinkingExpanded); strings.TrimSpace(content) != "" {
-			blocks = append(blocks, content)
-		}
-	}
-	return strings.Join(blocks, "\n")
-}
-
-func (a App) streamingView() string {
-	if a.streamingMessage == nil {
-		if a.agentStatus.Busy {
-			return a.styles.Thinking.Render("Thinking...")
-		}
-		return ""
-	}
-	if a.streamingMessage.Content == "" && a.streamingMessage.ReasoningContent != "" {
-		return a.styles.Thinking.Render("Thinking...")
-	}
-	return a.renderMessage(*a.streamingMessage)
+	return a, command
 }
 
 func (a App) printCommand(content string) tea.Cmd {
@@ -563,22 +244,6 @@ func displayCWD(cwd string) string {
 		return strings.Replace(cwd, home, "~", 1)
 	}
 	return cwd
-}
-
-func (a *App) queueOutput(content string) {
-	if strings.TrimSpace(content) != "" {
-		a.commandOutput = content
-	}
-}
-
-func (a *App) takeOutput() string {
-	content := a.commandOutput
-	a.commandOutput = ""
-	return content
-}
-
-func divider(label string) string {
-	return "── " + label + " ──"
 }
 
 func compactStatus(value string, maxLines int) string {

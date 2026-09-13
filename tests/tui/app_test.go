@@ -43,7 +43,7 @@ func TestSubmitShowsBusyPresentationWhileModelCommandStarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := runtime.NewSession(engine)
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	for _, r := range "hello" {
@@ -78,7 +78,7 @@ func TestQuestionMarkCanBeTypedInPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := runtime.NewSession(engine)
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	for _, r := range "what?" {
@@ -129,7 +129,7 @@ func TestWorkflowCommandsShowDiffAndBranchStatus(t *testing.T) {
 
 func TestCustomSlashCommandExpandsArguments(t *testing.T) {
 	session := &notificationOnlyConversation{customCommands: map[string]string{"audit": "Audit $ARGUMENTS"}}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	model = typeText(model, "/audit auth")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -206,7 +206,7 @@ func TestEscapeClearsInputWithoutQuitting(t *testing.T) {
 
 func TestTabQueuesPromptWhileTurnRuns(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model = typeText(model, "first")
@@ -239,7 +239,7 @@ func TestTabQueuesPromptWhileTurnRuns(t *testing.T) {
 
 func TestQueuePreviewIsBounded(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "active")
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -261,7 +261,7 @@ func TestQueuePreviewIsBounded(t *testing.T) {
 
 func TestSmallWindowCollapsesQueueDetails(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 20, Height: 8})
 	model = typeText(model, "active")
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -280,14 +280,14 @@ func TestSmallWindowCollapsesQueueDetails(t *testing.T) {
 
 func TestNarrowWindowClampsEveryRenderedLine(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 30, Height: 12})
 	assertLinesFitWidth(t, model.View(), 30)
 }
 
 func TestInfoBarKeepsModeWhenWorkingDirectoryIsLong(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
 	view := model.View()
 	if !strings.Contains(view, "ask · test-model · tools on") {
@@ -298,7 +298,7 @@ func TestInfoBarKeepsModeWhenWorkingDirectoryIsLong(t *testing.T) {
 
 func TestOverlongErrorIsClampedNotWrapped(t *testing.T) {
 	session := &notificationOnlyConversation{permissionErr: errors.New(strings.Repeat("boom", 40))}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", PermissionMode: "ask"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model", PermissionMode: "ask"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
 	model = typeText(model, "/permissions mode root")
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -311,7 +311,7 @@ func TestOverlongErrorIsClampedNotWrapped(t *testing.T) {
 
 func TestNarrowWindowKeepsComposerVisible(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 30, Height: 10})
 	view := model.View()
 	if !strings.Contains(view, "Ask me anything") {
@@ -322,7 +322,7 @@ func TestNarrowWindowKeepsComposerVisible(t *testing.T) {
 
 func TestQueuedPreviewIsClampedToTerminalWidth(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 24, Height: 12})
 	model = typeText(model, "active")
 	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -340,7 +340,7 @@ func TestHelpOverlayIsClampedToTerminalWidth(t *testing.T) {
 
 func TestResizeRecomputesClampedBudget(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model", CWD: strings.Repeat("/segment", 30)})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 24, Height: 14})
 	assertLinesFitWidth(t, model.View(), 24)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
@@ -349,7 +349,7 @@ func TestResizeRecomputesClampedBudget(t *testing.T) {
 
 func TestWelcomeIsPartOfManagedTranscript(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", CWD: "/repo", InstructionPaths: []string{"/repo/AGENTS.md"}})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model", CWD: "/repo", InstructionPaths: []string{"/repo/AGENTS.md"}})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	if got := model.View(); !strings.Contains(got, "Super Agent") || !strings.Contains(got, "test-model · /repo · AGENTS.md") {
 		t.Fatalf("view = %q, want compact welcome block", got)
@@ -358,7 +358,7 @@ func TestWelcomeIsPartOfManagedTranscript(t *testing.T) {
 
 func TestStatusLineKeepsModelAndMode(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var narrow tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var narrow tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	narrow, _ = narrow.Update(tea.WindowSizeMsg{Width: 50, Height: 24})
 	narrowView := narrow.View()
 	if !strings.Contains(narrowView, "ask · test-model · tools on") {
@@ -369,7 +369,7 @@ func TestStatusLineKeepsModelAndMode(t *testing.T) {
 
 func TestEscCancelsTurnAndClearsQueuedFollowUps(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "active")
 	model, firstCmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -394,7 +394,7 @@ func TestEscCancelsTurnAndClearsQueuedFollowUps(t *testing.T) {
 
 func TestEnterSteersByCancelingCurrentTurnAndRunningPromptNext(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model = typeText(model, "first")
@@ -423,7 +423,7 @@ func TestEnterSteersByCancelingCurrentTurnAndRunningPromptNext(t *testing.T) {
 
 func TestCtrlJInsertsNewlineAndEnterSubmits(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model = typeText(model, "first line")
@@ -442,7 +442,7 @@ func TestCtrlJInsertsNewlineAndEnterSubmits(t *testing.T) {
 
 func TestHistoryNavigationRestoresUnsubmittedDraft(t *testing.T) {
 	session := &notificationOnlyConversation{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	model = typeText(model, "previous")
@@ -480,7 +480,7 @@ func assertLinesFitWidth(t *testing.T, view string, width int) {
 
 func newEventOnlyTUI(t *testing.T) tea.Model {
 	t.Helper()
-	var model tea.Model = tui.New(&notificationOnlyConversation{}, tui.StartupInfo{Provider: "test", ModelName: "test-model"})
+	var model tea.Model = tui.New(&notificationOnlyConversation{}, tui.StartupInfo{ModelName: "test-model"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	return model
 }
@@ -495,7 +495,7 @@ func TestApprovalUsesShortcutKeys(t *testing.T) {
 	}
 	session := runtime.NewSession(engine)
 
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "run bash" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -537,7 +537,7 @@ func TestToolRunClearsApprovalPresentation(t *testing.T) {
 	}
 	session := runtime.NewSession(engine)
 
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 	model = typeText(model, "run bash")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -591,7 +591,7 @@ func TestApprovalMenuUsesArrowsAndEnter(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := runtime.NewSession(engine)
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	model = typeText(model, "run bash")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -626,7 +626,7 @@ func TestEscCancelsPendingApproval(t *testing.T) {
 	}
 	session := runtime.NewSession(engine)
 
-	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
+	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "run bash" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -662,7 +662,7 @@ func TestEscCancelsPendingApproval(t *testing.T) {
 func TestTUIRendersSessionNotificationsWithoutSnapshotReads(t *testing.T) {
 	session := &notificationOnlyConversation{}
 	printed := &recordedOutput{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"}, printed.option())
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"}, printed.option())
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	for _, r := range "hello" {
@@ -787,7 +787,7 @@ func TestToolCallsAreSummarizedAndExpandOnDemand(t *testing.T) {
 
 func TestPageKeysDoNotReplaceTerminalScrollback(t *testing.T) {
 	session := &notificationOnlyConversation{extraMessages: 30}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"}, discardOutputOption)
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"}, discardOutputOption)
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 15})
 	model = typeText(model, "hello")
 	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -816,7 +816,6 @@ func TestInstructionsCommandDisplaysLoadedSources(t *testing.T) {
 	session := runtime.NewSession(engine)
 	printed := &recordedOutput{}
 	var model tea.Model = tui.New(app.NewTUIConversation(session), tui.StartupInfo{
-		Provider:         "test",
 		ModelName:        "test-model",
 		InstructionPaths: []string{"/repo/AGENTS.md", "/repo/pkg/CLAUDE.md"},
 	}, printed.option())
@@ -836,7 +835,7 @@ func TestInstructionsCommandDisplaysLoadedSources(t *testing.T) {
 
 func TestPermissionsModeCommandRejectsInvalidMode(t *testing.T) {
 	session := &notificationOnlyConversation{permissionErr: errors.New("invalid permission mode: root")}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model", PermissionMode: "ask"})
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model", PermissionMode: "ask"})
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "/permissions mode root" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -856,10 +855,38 @@ func TestPermissionsModeCommandRejectsInvalidMode(t *testing.T) {
 	}
 }
 
+func TestPermissionsModeKeepsDisplayedModel(t *testing.T) {
+	session := &notificationOnlyConversation{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model", PermissionMode: "ask"}, discardOutputOption)
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	model = typeText(model, "/permissions mode plan")
+	model, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if view := model.View(); !strings.Contains(view, "plan · test-model · tools on") {
+		t.Fatalf("view = %q, want the displayed model preserved across a permission change", view)
+	}
+}
+
+func TestAttachCommandRoutesThroughTheAttachmentsFeature(t *testing.T) {
+	session := &notificationOnlyConversation{}
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"}, discardOutputOption)
+	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	model = typeText(model, "/attach notes.md")
+	model, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("attach command did not start")
+	}
+
+	model, _ = model.Update(cmd())
+	if view := model.View(); !strings.Contains(view, "Attachments: notes.md") || !strings.Contains(view, "Attached notes.md") {
+		t.Fatalf("view = %q, want the attachment queued and listed", view)
+	}
+}
+
 func TestMCPCommandsListAndAddServer(t *testing.T) {
 	session := &notificationOnlyConversation{mcpServers: []tui.MCPServerSummary{{Name: "files", Tools: []string{"read_remote"}}}}
 	printed := &recordedOutput{}
-	var model tea.Model = tui.New(session, tui.StartupInfo{Provider: "test", ModelName: "test-model"}, printed.option())
+	var model tea.Model = tui.New(session, tui.StartupInfo{ModelName: "test-model"}, printed.option())
 	model, _ = model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	for _, r := range "/mcp list" {
 		model, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})

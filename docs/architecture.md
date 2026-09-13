@@ -105,14 +105,8 @@ alias facade.
 - `repository.go`: the persistence and workspace ports, including checkpoint creation,
   `LoadUndoPoint`, and `TruncateAfter`.
 
-`tui` follows the same separation:
-
-- `app.go`: Bubble Tea model construction and completed-output rendering.
-- `update.go`: Bubble Tea message routing and state updates.
-- `commands.go`: slash commands and turn submission.
-- `actions.go`: cancellation and clipboard actions.
-- `view.go`: live streaming, interactive controls, and informational views.
-- `styles.go`: visual theme.
+The TUI's feature ownership, message routing, focus, effects, views, and port rules are specified in
+[`tui.md`](tui.md#feature-architecture).
 
 `store` and `workspace` are the storage and filesystem adapters. `store/store.go` writes and replays
 durable session records — see `session.md` for the durability ordering it maintains. `app/mcp.go`

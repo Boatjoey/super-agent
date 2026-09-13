@@ -1,6 +1,13 @@
 package tui
 
-import "context"
+import (
+	"context"
+
+	"super-agent/tui/approval"
+	"super-agent/tui/attachments"
+	"super-agent/tui/commands"
+	"super-agent/tui/transcript"
+)
 
 type AgentStatus struct {
 	Label            string
@@ -8,22 +15,28 @@ type AgentStatus struct {
 	AwaitingApproval bool
 }
 
-type Role string
+type Role = transcript.Role
 
-const RoleAssistant Role = "assistant"
+const RoleAssistant = transcript.RoleAssistant
 
-type ToolCall struct{ ID, Name, Input string }
+type ToolCall = transcript.ToolCall
+type Message = transcript.Message
+type MessageAttachment = transcript.Attachment
 
-type Message struct {
-	Role             Role
-	Content          string
-	ReasoningContent string
-	ToolCallID       string
-	ToolName         string
-	ToolCalls        []*ToolCall
-	Interrupted      bool
-	Attachments      []AttachmentSummary
-}
+// Display DTOs stay aliased at the root so the composition boundary keeps
+// addressing one package while the owning feature holds the definition.
+type SessionSummary = commands.SessionSummary
+type MCPServerSummary = commands.MCPServerSummary
+type AgentSummary = commands.AgentSummary
+type AttachmentSummary = attachments.Item
+
+type ApprovalDecision = approval.Decision
+
+const (
+	ApproveOnce   = approval.ApproveOnce
+	ApproveAlways = approval.ApproveAlways
+	DenyApproval  = approval.Deny
+)
 
 type PermissionRequest struct {
 	ToolName     string
@@ -44,22 +57,6 @@ type ConversationView struct {
 	PendingToolBatchTotal int
 	StreamingMessage      *Message
 }
-
-type SessionSummary struct{ ID, Title, Provider, Model, CWD, ParentID string }
-type MCPServerSummary struct {
-	Name  string
-	Tools []string
-}
-type AgentSummary struct{ Name, Provider, Model, PermissionMode string }
-type AttachmentSummary struct{ Name, MIME string }
-
-type ApprovalDecision string
-
-const (
-	ApproveOnce   ApprovalDecision = "once"
-	ApproveAlways ApprovalDecision = "always"
-	DenyApproval  ApprovalDecision = "deny"
-)
 
 type ConversationNotification interface{ isConversationNotification() }
 type AgentStatusChanged struct{ Status AgentStatus }
@@ -90,42 +87,27 @@ type ConversationError struct{ Err error }
 
 func (ConversationError) isConversationNotification() {}
 
-// Conversation is the TUI input port. Its DTOs contain no runtime or storage types.
-type Conversation interface {
+type SnapshotPort interface {
 	Snapshot() ConversationView
+}
+
+type TurnPort interface {
 	RunTurn(context.Context, string, chan<- ConversationNotification, <-chan ApprovalDecision) error
 	Cancel() error
-	Reset() error
-	ListSessions() ([]SessionSummary, error)
-	Resume(string) error
-	RenameSession(string, string) error
-	DeleteSession(string) error
-	Compact(context.Context, string) error
-	Undo() error
-	SetPermissionMode(string) error
-	// PermissionMode and AutoApproveTools report the runtime policy so the
-	// TUI never derives behavior locally.
-	PermissionMode() string
-	AutoApproveTools() bool
-	ListMCPServers() []MCPServerSummary
-	AddMCPServer(context.Context, string, string, []string) error
-	RemoveMCPServer(string) error
-	RestartMCPServer(context.Context, string) error
-	ListAgents() []AgentSummary
-	CurrentAgent() AgentSummary
-	UseAgent(string) error
-	Fork(string) (string, error)
-	Memories() ([]string, error)
-	Remember(string) error
-	ForgetMemories() error
-	GitDiff(context.Context) (string, error)
-	GitStatus(context.Context) (string, error)
-	CustomCommands() []string
-	ExpandCustomCommand(string, string) (string, error)
-	Export(string) (string, error)
-	Attach(string) (AttachmentSummary, error)
-	PendingAttachments() []AttachmentSummary
-	Skills() []string
-	Plugins() []string
-	Diagnostics(context.Context, string) (string, error)
+}
+
+// Conversation remains the composition-boundary bundle accepted by New. App
+// keeps only the ports the turn lifecycle needs and routes every other
+// capability to the feature that owns it.
+type Conversation interface {
+	SnapshotPort
+	TurnPort
+	commands.SessionPort
+	commands.PermissionPort
+	commands.MCPPort
+	commands.AgentPort
+	commands.MemoryPort
+	commands.WorkspacePort
+	commands.ExtensionPort
+	attachments.Port
 }

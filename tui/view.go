@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -31,70 +30,6 @@ func (a App) helpView() string {
 	return helpStyle.Render(title + "\n\n" + strings.Join(items, "\n"))
 }
 
-func formatSessions(summaries []SessionSummary) string {
-	if len(summaries) == 0 {
-		return "No saved sessions"
-	}
-	lines := make([]string, 0, len(summaries))
-	for _, summary := range summaries {
-		parent := ""
-		if summary.ParentID != "" {
-			parent = "  child-of:" + summary.ParentID
-		}
-		lines = append(lines, fmt.Sprintf("%s  %s  %s/%s%s", summary.ID, summary.Title, summary.Provider, summary.Model, parent))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func formatMCPServers(servers []MCPServerSummary) string {
-	if len(servers) == 0 {
-		return "No MCP servers"
-	}
-	lines := make([]string, 0, len(servers))
-	for _, server := range servers {
-		tools := strings.Join(server.Tools, ", ")
-		if tools == "" {
-			tools = "no tools"
-		}
-		lines = append(lines, fmt.Sprintf("%s  %s", server.Name, tools))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func formatInstructions(paths []string) string {
-	if len(paths) == 0 {
-		return "No instruction files loaded"
-	}
-	var result strings.Builder
-	result.WriteString("Loaded instruction sources:\n")
-	for _, path := range paths {
-		result.WriteString("- ")
-		result.WriteString(path)
-		result.WriteByte('\n')
-	}
-	return strings.TrimSpace(result.String())
-}
-
-func formatPermissions(info StartupInfo) string {
-	mode := firstNonEmpty(info.PermissionMode, "ask")
-	return fmt.Sprintf("Permission mode: %s\nTools: %s\nApproval: %s\nCWD: %s", mode, onOff(!info.NoTools), onOff(info.AutoApprove), info.CWD)
-}
-
-func onOff(enabled bool) string {
-	if enabled {
-		return "on"
-	}
-	return "off"
-}
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 // clampLines truncates every line of block to at most width columns so the
 // terminal never hard-wraps it. Truncation is ANSI- and width-aware.
 func clampLines(width int, block string) string {
@@ -109,11 +44,8 @@ func (a App) View() string {
 		return fitDynamicArea(a.width, a.height, a.helpView())
 	}
 	parts := make([]string, 0, 3)
-	if transcript := a.renderTranscript(); transcript != "" {
-		parts = append(parts, transcript)
-	}
-	if stream := a.streamingView(); stream != "" {
-		parts = append(parts, stream)
+	if content := a.transcript.View(); content != "" {
+		parts = append(parts, content)
 	}
 	parts = append(parts, a.footerView())
 	return fitDynamicArea(a.width, a.height, strings.Join(parts, "\n\n"))

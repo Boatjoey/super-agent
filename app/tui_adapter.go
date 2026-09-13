@@ -323,9 +323,9 @@ func toTUIMessage(message runtime.Message) tui.Message {
 		converted := toTUIToolCall(*call)
 		calls = append(calls, &converted)
 	}
-	attachments := make([]tui.AttachmentSummary, 0, len(message.Attachments))
+	attachments := make([]tui.MessageAttachment, 0, len(message.Attachments))
 	for _, attachment := range message.Attachments {
-		attachments = append(attachments, tui.AttachmentSummary{Name: attachment.Name, MIME: attachment.MIME})
+		attachments = append(attachments, tui.MessageAttachment{Name: attachment.Name, MIME: attachment.MIME})
 	}
 	return tui.Message{Role: tui.Role(message.Role), Content: message.Content, ReasoningContent: message.ReasoningContent, ToolCallID: message.ToolCallID, ToolName: message.ToolName, ToolCalls: calls, Interrupted: message.Interrupted, Attachments: attachments}
 }

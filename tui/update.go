@@ -3,22 +3,39 @@ package tui
 import (
 	"context"
 	"errors"
-	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"super-agent/tui/approval"
+	"super-agent/tui/attachments"
+	"super-agent/tui/commands"
+	"super-agent/tui/composer"
+	"super-agent/tui/transcript"
 )
 
 func (a App) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
-	case spinner.TickMsg:
-		var command tea.Cmd
-		a.spinner, command = a.spinner.Update(message)
-		return a, command
 	case tea.WindowSizeMsg:
 		return a.resize(message)
 	case clipboardDoneMsg:
 		return a.finishCopy(message)
+	case attachments.Loaded, attachments.Attached:
+		var outcome *attachments.Outcome
+		a.attachments, outcome = a.attachments.Update(message)
+		if outcome == nil {
+			return a, nil
+		}
+		if outcome.Err != nil {
+			a.err = "Attach failed: " + outcome.Err.Error()
+			return a, nil
+		}
+		a.err = ""
+		a.status = "Attached " + outcome.Attached.Name + " (" + outcome.Attached.MIME + ")"
+		return a, nil
+	case commands.CompactDone, commands.MCPDone:
+		var outcome *commands.Outcome
+		a.commands, outcome = a.commands.Update(message)
+		return a.applyOutcome(outcome, nil)
 	case tea.KeyMsg:
 		return a.updateKey(message)
 	case conversationNotificationMsg:
@@ -31,30 +48,9 @@ func (a App) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return a.updateConversationNotification(message.notification)
 	case submitDoneMsg:
 		return a.finishSubmit(message.err)
-	case compactDoneMsg:
-		a.compacting = false
-		if message.err != nil {
-			a.err = "Compact failed: " + message.err.Error()
-		} else {
-			a.err = ""
-			a.status = "Compacted conversation"
-			a.refreshSnapshot()
-			return a, a.printCommand(divider("Compacted conversation"))
-		}
-		return a, nil
-	case mcpDoneMsg:
-		a.managingMCP = false
-		if message.err != nil {
-			a.err = "MCP failed: " + message.err.Error()
-		} else {
-			a.err = ""
-			a.status = message.status
-		}
-		return a, nil
 	default:
 		var command tea.Cmd
-		a.input, command = a.input.Update(message)
-		a.resizeInput()
+		a.composer, _, command = a.composer.Update(message)
 		return a, command
 	}
 }
@@ -62,7 +58,9 @@ func (a App) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 func (a App) resize(message tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	a.width, a.height = max(1, message.Width), max(1, message.Height)
 	a.ready = true
-	a.input.SetWidth(max(1, a.width-4))
+	a.composer.SetWidth(a.width)
+	a.composer.SetCompactPalette(a.height < 18)
+	a.transcript.SetWidth(a.width)
 	return a, nil
 }
 
@@ -73,69 +71,26 @@ func (a App) updateKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 	}
-	switch message.String() {
-	case "ctrl+o":
-		a.expandLatestTools = !a.expandLatestTools
-		a.expandAllTools = false
+	if a.approval.Active() && message.String() != "ctrl+c" && message.String() != "esc" {
+		var decision approval.Decision
+		var submitted bool
+		a.approval, decision, submitted = a.approval.Update(message)
+		if submitted {
+			a.transcript.ClearStreaming()
+			a.approvalsCh <- decision
+		}
 		return a, nil
-	case "alt+o":
-		a.expandAllTools = !a.expandAllTools
-		a.expandLatestTools = false
-		return a, nil
-	case "ctrl+t":
-		a.expandLatestThink = !a.expandLatestThink
-		a.expandAllThink = false
-		return a, nil
-	case "alt+t":
-		a.expandAllThink = !a.expandAllThink
-		a.expandLatestThink = false
-		return a, nil
-	}
-	if a.pendingTool != nil && message.String() != "ctrl+c" && message.String() != "esc" {
-		return a.handleApprovalKey(message)
 	}
 	switch message.String() {
 	case "ctrl+c":
-		if a.pendingTool != nil || a.cancel != nil {
+		if a.approval.Active() || a.cancel != nil {
 			a.cancelRun(true)
 			return a, nil
 		}
 		return a, tea.Quit
 	case "esc":
-		if a.pendingTool != nil || a.cancel != nil {
+		if a.approval.Active() || a.cancel != nil {
 			a.cancelRun(true)
-			return a, nil
-		}
-		if a.input.Value() != "" {
-			a.input.SetValue("")
-			a.resizeInput()
-			a.historyIdx = len(a.history)
-			a.historyDraft = ""
-			a.status = "Input cleared"
-		}
-		return a, nil
-	case "ctrl+u":
-		a.input.SetValue("")
-		a.resizeInput()
-		a.historyIdx = len(a.history)
-		a.historyDraft = ""
-		a.status = "Input cleared"
-		return a, nil
-	case "ctrl+j", "shift+enter", "alt+enter":
-		return a.insertNewline()
-	case "tab":
-		if a.cancel != nil && a.pendingTool == nil {
-			return a.queueInput()
-		}
-		if completed, ok := a.completeSelectedSlashCommand(); ok {
-			completed.status = ""
-			return completed, nil
-		}
-		if completed, ok := completeSlashCommand(a.input.Value()); ok {
-			a.input.SetValue(completed)
-			a.resizeInput()
-			a.input.CursorEnd()
-			a.status = ""
 			return a, nil
 		}
 	case "ctrl+l":
@@ -143,143 +98,159 @@ func (a App) updateKey(message tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.status = ""
 		return a, tea.ClearScreen
 	case "ctrl+y":
-		return a, a.copyLastCodeBlock()
 	case "?":
-		if a.input.Value() == "" {
+		if a.composer.Value() == "" {
 			a.showHelp = true
 			a.status = ""
 			return a, nil
 		}
-	case "up":
-		if matches := a.slashMatches(); len(matches) > 0 {
-			if a.slashSelection > 0 {
-				a.slashSelection--
-			}
-			return a, nil
-		}
-		if strings.Contains(a.input.Value(), "\n") {
-			break
-		}
-		if a.historyIdx > 0 {
-			a.status = ""
-			if a.historyIdx == len(a.history) {
-				a.historyDraft = a.input.Value()
-			}
-			a.historyIdx--
-			a.input.SetValue(a.history[a.historyIdx])
-			a.resizeInput()
-			a.input.CursorEnd()
-			return a, nil
-		}
-	case "down":
-		if matches := a.slashMatches(); len(matches) > 0 {
-			if a.slashSelection < len(matches)-1 {
-				a.slashSelection++
-			}
-			return a, nil
-		}
-		if strings.Contains(a.input.Value(), "\n") {
-			break
-		}
-		if a.historyIdx < len(a.history)-1 {
-			a.historyIdx++
-			a.input.SetValue(a.history[a.historyIdx])
-			a.resizeInput()
-			a.input.CursorEnd()
-			return a, nil
-		}
-		if a.historyIdx == len(a.history)-1 {
-			a.historyIdx = len(a.history)
-			a.input.SetValue(a.historyDraft)
-			a.resizeInput()
-			a.input.CursorEnd()
-			return a, nil
-		}
 	case "pgup", "pgdown":
 		return a, nil
-	case "enter":
-		a.status = ""
-		if a.pendingTool == nil && a.cancel == nil {
-			if completed, ok := a.completeSelectedSlashCommand(); ok {
-				return completed, nil
-			}
-			return a.submit()
+	}
+	var transcriptIntent *transcript.Intent
+	var consumed bool
+	a.transcript, transcriptIntent, consumed = a.transcript.Update(message)
+	if consumed {
+		if transcriptIntent == nil {
+			return a, nil
 		}
-		if a.pendingTool == nil {
-			return a.steerInput()
+		if transcriptIntent.Error != "" {
+			a.err, a.status = transcriptIntent.Error, ""
+			return a, nil
 		}
+		a.err = ""
+		return a, a.copyCommand(transcriptIntent.CopyText)
 	}
-	if a.pendingTool != nil {
-		a.status = ""
-		return a.handleApprovalKey(message)
-	}
+	a.composer.SetTurnRunning(a.cancel != nil)
+	var intent *composer.Intent
 	var command tea.Cmd
-	a.slashSelection = 0
-	a.input, command = a.input.Update(message)
-	a.resizeInput()
-	return a, command
-}
-
-func (a App) insertNewline() (tea.Model, tea.Cmd) {
-	var command tea.Cmd
-	a.input, command = a.input.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	a.resizeInput()
-	return a, command
-}
-
-func (a *App) resizeInput() {
-	height := strings.Count(a.input.Value(), "\n") + 1
-	if height > 5 {
-		height = 5
+	a.composer, intent, command = a.composer.Update(message)
+	if intent == nil {
+		return a, command
 	}
-	a.input.SetHeight(height)
+	switch intent.Kind {
+	case composer.Submit:
+		return a.submitText(intent.Text)
+	case composer.Queue:
+		return a.queueInput(intent.Text)
+	case composer.Steer:
+		return a.steerInput(intent.Text)
+	case composer.Clear:
+		a.status = "Input cleared"
+	}
+	return a, command
 }
 
 func (a App) updateConversationNotification(notification ConversationNotification) (tea.Model, tea.Cmd) {
 	switch notification := notification.(type) {
 	case AgentStatusChanged:
 		a.agentStatus = notification.Status
+		a.transcript.SetBusy(notification.Status.Busy)
 		if !a.needsInput() {
-			a.clearPendingTool()
+			a.approval.Clear()
 		}
 	case ToolApprovalRequested:
-		call := notification.ToolCall
-		a.pendingTool, a.pendingRequest = &call, notification.Request
-		a.pendingToolIndex, a.pendingToolTotal = notification.BatchIndex, notification.BatchTotal
-		a.approvalSelection, a.approvalSubmitted = 0, false
+		a.approval.Open(approval.Request{ToolName: notification.ToolCall.Name, Input: notification.ToolCall.Input, CommandClass: notification.Request.CommandClass, CWD: notification.Request.CWD, TouchedPaths: notification.Request.TouchedPaths, Reason: notification.Request.Reason, BatchIndex: notification.BatchIndex, BatchTotal: notification.BatchTotal})
 	case ToolApprovalCleared:
-		a.clearPendingTool()
+		a.approval.Clear()
 	case MessageAppended:
-		a.messages = append(a.messages, notification.Message)
+		a.transcript.Append(notification.Message)
 		if notification.Message.Role == RoleAssistant {
-			a.streamingMessage = nil
+			a.transcript.ClearStreaming()
 		}
 	case ConversationError:
 		if notification.Err != nil && !errors.Is(notification.Err, context.Canceled) {
 			a.err = notification.Err.Error()
 		}
 	case StreamChunkReceived:
-		a.streamingMessage = notification.Message
+		a.transcript.SetStreaming(notification.Message)
 	}
 	return a, waitForNotification(a.notificationsCh, a.turn)
 }
 
+// submitText routes submitted input to the feature that owns its meaning: the
+// command feature for slash commands, the turn lifecycle for everything else.
+func (a App) submitText(text string) (tea.Model, tea.Cmd) {
+	if a.commands.Compacting() || a.commands.ManagingMCP() {
+		a.status = "Background operation in progress…"
+		return a, nil
+	}
+	if !commands.IsCommand(text) {
+		return a.submitPrompt(text)
+	}
+	a.composer.ClearInput()
+	model, outcome, command := a.commands.Handle(commands.Input{Text: text, Attachments: pendingAttachments(a.attachments.Items())})
+	a.commands = model
+	return a.applyOutcome(outcome, command)
+}
+
+func (a App) queueInput(text string) (tea.Model, tea.Cmd) {
+	if a.commands.Compacting() {
+		a.status = "Compacting conversation…"
+		return a, nil
+	}
+	if commands.IsCommand(text) {
+		a.err = "Slash commands are unavailable while a turn is running"
+		return a, nil
+	}
+	a.composer.Enqueue(text)
+	a.composer.ClearInput()
+	a.status = "Message queued"
+	return a, nil
+}
+
+func (a App) steerInput(text string) (tea.Model, tea.Cmd) {
+	if commands.IsCommand(text) {
+		a.err = "Slash commands are unavailable while a turn is running"
+		return a, nil
+	}
+	a.composer.Prepend(text)
+	a.composer.ClearInput()
+	a.cancelRun(false)
+	a.status = "Steering current turn"
+	return a, nil
+}
+
+func pendingAttachments(items []attachments.Item) []commands.Attachment {
+	if len(items) == 0 {
+		return nil
+	}
+	result := make([]commands.Attachment, 0, len(items))
+	for _, item := range items {
+		result = append(result, commands.Attachment{Name: item.Name, MIME: item.MIME})
+	}
+	return result
+}
+
 func (a App) finishSubmit(err error) (tea.Model, tea.Cmd) {
 	a.cancel = nil
+	a.composer.SetTurnRunning(false)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		a.err = err.Error()
 	}
-	if len(a.queuedInputs) > 0 {
-		next := a.queuedInputs[0]
-		a.queuedInputs = a.queuedInputs[1:]
+	if next, ok := a.composer.NextQueued(); ok {
 		return a.submitPrompt(next)
 	}
 	return a, nil
 }
 
-func (a *App) clearPendingTool() {
-	a.pendingTool = nil
-	a.pendingRequest = PermissionRequest{}
-	a.pendingToolIndex, a.pendingToolTotal = 0, 0
-	a.approvalSelection, a.approvalSubmitted = 0, false
+func (a App) submitPrompt(text string) (tea.Model, tea.Cmd) {
+	a.err = ""
+	a.status = ""
+	a.transcript.ClearStreaming()
+	a.agentStatus = AgentStatus{Label: "Submitting", Busy: true}
+	a.transcript.SetBusy(true)
+	a.approval.Clear()
+	a.composer.ClearInput()
+	a.composer.SetTurnRunning(true)
+	a.attachments.Set(nil)
+	a.notificationsCh = make(chan ConversationNotification, 100)
+	a.approvalsCh = make(chan ApprovalDecision, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	a.cancel = cancel
+	a.turn++
+	run := func() tea.Msg {
+		return submitDoneMsg{err: a.turnPort.RunTurn(ctx, text, a.notificationsCh, a.approvalsCh)}
+	}
+	return a, tea.Batch(waitForNotification(a.notificationsCh, a.turn), run)
 }

@@ -22,7 +22,7 @@ specifications live in `docs/` — see the index at `docs/README.md`.
 - Use `SessionNotification` for runtime-session output and convert it to `tui.ConversationNotification` at the app boundary; reserve `machine.Event` for state-machine input.
 - Keep turn I/O wiring in `runtime/session/turn.go` and history use cases in `runtime/session/history.go`.
 - Keep storage and filesystem access behind `runtime/session.Repository` and `runtime/session.Workspace`.
-- Keep TUI message routing in `tui/update.go`, commands in `tui/commands.go`, and rendering outside the update loop.
+- Follow the feature-oriented TUI boundaries in `docs/tui.md`; keep views pure and ports feature-local.
 - Map runtime states to presentation-only `tui.AgentStatus` values in `app/tui_adapter.go`; TUI must not define runtime state enums.
 - Keep durable session storage in `store/` and filesystem checkpoint access in `workspace/`.
 - Load layered instructions with `app/instructions`: user-level spec, root-to-leaf `AGENTS.md`, fallback `CLAUDE.md`.

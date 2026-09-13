@@ -3,6 +3,8 @@ package architecture_test
 import (
 	"go/parser"
 	"go/token"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -12,7 +14,7 @@ import (
 
 func TestDependencyRule(t *testing.T) {
 	root := repositoryRoot(t)
-	assertImports(t, filepath.Join(root, "tui"), func(path string) bool {
+	assertImportsRecursive(t, filepath.Join(root, "tui"), func(path string) bool {
 		return !strings.HasPrefix(path, "super-agent/runtime")
 	}, "TUI must depend on its Conversation port, not runtime")
 
@@ -45,6 +47,31 @@ func TestDependencyRule(t *testing.T) {
 	}, "session must use repository and workspace ports")
 }
 
+func TestTUIFeaturesDoNotImportEachOther(t *testing.T) {
+	root := repositoryRoot(t)
+	features, err := filepath.Glob(filepath.Join(root, "tui", "*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, feature := range features {
+		info, err := os.Stat(feature)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !info.IsDir() {
+			continue
+		}
+		found++
+		assertImportsRecursive(t, feature, func(path string) bool {
+			return !strings.HasPrefix(path, "super-agent/tui/")
+		}, "TUI features must collaborate through typed messages, not feature imports")
+	}
+	if found == 0 {
+		t.Fatal("no TUI feature directories found")
+	}
+}
+
 func assertImports(t *testing.T, directory string, allowed func(string) bool, rule string) {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(directory, "*.go"))
@@ -52,18 +79,40 @@ func assertImports(t *testing.T, directory string, allowed func(string) bool, ru
 		t.Fatal(err)
 	}
 	for _, file := range files {
-		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.ImportsOnly)
+		assertFileImports(t, file, allowed, rule)
+	}
+}
+
+func assertImportsRecursive(t *testing.T, directory string, allowed func(string) bool, rule string) {
+	t.Helper()
+	err := filepath.WalkDir(directory, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".go" {
+			return nil
+		}
+		assertFileImports(t, path, allowed, rule)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertFileImports(t *testing.T, file string, allowed func(string) bool, rule string) {
+	t.Helper()
+	parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.ImportsOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, spec := range parsed.Imports {
+		path, err := strconv.Unquote(spec.Path.Value)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, spec := range parsed.Imports {
-			path, err := strconv.Unquote(spec.Path.Value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !allowed(path) {
-				t.Errorf("%s imports %q: %s", relative(rootForFile(file), file), path, rule)
-			}
+		if !allowed(path) {
+			t.Errorf("%s imports %q: %s", relative(rootForFile(file), file), path, rule)
 		}
 	}
 }

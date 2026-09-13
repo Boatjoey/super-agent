@@ -27,7 +27,7 @@ When you are tempted to restate something, link to it instead.
 | [machine.md](machine.md) | States, the canonical transition graph and table, runtime data, invariants, errors |
 | [runtime.md](runtime.md) | The runtime cycle, the engine loop, scheduled actions, run lifecycle, telemetry |
 | [session.md](session.md) | Context assembly, instructions, persistence, resume, compact, reset, undo |
-| [tui.md](tui.md) | Commands, keys, footer, approval menu, layout rules |
+| [tui.md](tui.md) | Feature architecture, commands, keys, approval UI, layout rules |
 | [tools.md](tools.md) | Registry, built-in tools, MCP, LSP, network guards, the sandbox |
 | [config.md](config.md) | `settings.json`, providers, permissions, sandbox parameters, flags |
 | [contributing.md](contributing.md) | The doc-first workflow, tests, git conventions, build |
