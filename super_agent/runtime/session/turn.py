@@ -1,0 +1,230 @@
+"""Running one turn: notifications out, approvals in.
+
+The session never schedules anything. Approval arrives through
+:class:`~super_agent.runtime.execution.ApprovalWaiter`, which the engine calls from
+inside a scheduled action, which is why there is no second loop here.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
+
+from super_agent.errors import Cancelled
+from super_agent.runtime.engine import Engine, EngineView
+from super_agent.runtime.execution import (
+    ERR_APPROVAL_DISMISSED,
+    ApprovalWaiter,
+    PermissionRequest,
+)
+from super_agent.runtime.machine import ApprovalDecision, StreamChunk, ToolCall, UserMessageSubmitted
+from super_agent.runtime.protocol.run_context import RunContext
+from super_agent.runtime.protocol.types import Attachment, Usage
+from super_agent.runtime.session.notifications import (
+    NOTIFICATIONS_CLOSED,
+    SessionError,
+    SessionNotification,
+    StreamChunkReceived,
+    UsageReported,
+)
+
+if TYPE_CHECKING:
+    from super_agent.runtime.session.repository import Repository, SessionID
+    from super_agent.runtime.session.snapshot_emitter import SnapshotEmitter
+
+
+class ApprovalsClosed:
+    """Pushed onto the approvals queue when the interface stops offering decisions.
+
+    An :class:`asyncio.Queue` cannot be closed, so the close is delivered as a
+    value; :func:`waitApproval` turns it into
+    :data:`~super_agent.runtime.execution.ERR_APPROVAL_DISMISSED`.
+    """
+
+
+#: The close marker for the approvals queue.
+APPROVALS_CLOSED = ApprovalsClosed()
+
+
+async def waitApproval(
+    ctx: RunContext, approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed]
+) -> ApprovalDecision:
+    """Wait for a decision or for the run to be cancelled, whichever is first.
+
+    A closed queue means the interface went away, which the engine treats as a
+    cancellation rather than a fault — the difference matters because a fault is
+    reported to the model as a tool error and a cancellation is not.
+    """
+    getter = asyncio.ensure_future(approvals.get())
+    cancelled = asyncio.ensure_future(ctx.done().wait())
+    try:
+        done, _pending = await asyncio.wait({getter, cancelled}, return_when=asyncio.FIRST_COMPLETED)
+        if getter in done:
+            decision = getter.result()
+            if isinstance(decision, ApprovalsClosed):
+                error = ctx.err()
+                if error is not None:
+                    raise error
+                raise ERR_APPROVAL_DISMISSED
+            return decision
+        raise Cancelled("run cancelled")
+    finally:
+        for waiter in (getter, cancelled):
+            if not waiter.done():
+                waiter.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await waiter
+
+
+class TurnMixin:
+    """``run_turn`` and its failure path."""
+
+    if TYPE_CHECKING:
+        engine: Engine
+        emitter: SnapshotEmitter
+        repository: Repository | None
+        _attachments: list[Attachment]
+
+        def _tryLock(self) -> bool: ...
+        def _unlock(self) -> None: ...
+        def metaID(self) -> SessionID: ...
+        def snapshot(self) -> EngineView: ...
+        async def emitSnapshot(self, notifications: asyncio.Queue[SessionNotification]) -> None: ...
+        def persistTurnBoundary(self) -> None: ...
+        def persistMessage(self, message: object) -> None: ...
+        def persistApproval(self, decision: ApprovalDecision, call: ToolCall) -> None: ...
+        def persistError(self, error: BaseException | None) -> None: ...
+
+    async def run_turn(
+        self,
+        ctx: RunContext,
+        query: str,
+        notifications: asyncio.Queue[SessionNotification],
+        approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed],
+        input_id: str = "",
+    ) -> None:
+        """Run one turn, publishing notifications and consuming approval decisions.
+
+        ``input_id`` names the queued input this turn was started from, if any.
+        Starting the turn is that input's acceptance point, so the machine needs the
+        id in the same transition that appends the message: a caller that submits
+        the text without it still gets its turn, just with no acceptance to report.
+        """
+        try:
+            if not self._tryLock():
+                raise RuntimeError("session is already running a turn")
+            try:
+                self.persistTurnBoundary()
+
+                async def observer() -> None:
+                    await self.emitSnapshot(notifications)  # type: ignore[attr-defined]
+
+                def on_usage(usage: Usage | None) -> None:
+                    # The provider's counts for one model call, forwarded as they
+                    # arrive. A response the adapter could not measure carries no
+                    # counts, so there is nothing to report. A full queue drops this
+                    # rather than blocking the model, the way a stream chunk is
+                    # dropped.
+                    if usage is None:
+                        return
+                    with contextlib.suppress(asyncio.QueueFull):
+                        notifications.put_nowait(UsageReported(usage=usage))
+
+                # Track live state transitions while actions drain: states such as
+                # RunningTool and AdvancingQueue pass between snapshot points, and
+                # the header should follow them as they happen.
+                self.engine.set_state_observer(observer)
+                self.engine.set_model_usage_observer(on_usage)
+                try:
+                    error = await self._run(ctx, query, notifications, approvals, input_id)
+                finally:
+                    self.engine.set_model_usage_observer(None)
+                    self.engine.set_state_observer(None)
+            finally:
+                self._unlock()
+        finally:
+            # The end-of-turn close, registered first and therefore run last: the
+            # observer is already cleared and the turn lock released by the time
+            # the consumer sees this.
+            #
+            # A bounded queue can be full here, and raising `QueueFull` from a
+            # `finally` would replace whatever the turn actually produced — the
+            # error the caller must see would be masked by a delivery detail. The
+            # delivery is therefore best effort; the authoritative end-of-turn
+            # signal is this call returning, which callers and the notification
+            # bridge both observe.
+            with contextlib.suppress(asyncio.QueueFull):
+                notifications.put_nowait(NOTIFICATIONS_CLOSED)
+
+        if error is not None:
+            raise error
+
+    async def _run(
+        self,
+        ctx: RunContext,
+        query: str,
+        notifications: asyncio.Queue[SessionNotification],
+        approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed],
+        input_id: str = "",
+    ) -> BaseException | None:
+        def onStreamChunk(chunk: StreamChunk) -> None:
+            # A full queue drops this chunk rather than blocking the model. The
+            # notification carries the whole accumulated message, so the consumer
+            # converges on the same text from the next one.
+            notification = StreamChunkReceived(chunk=chunk, message=self.snapshot().streaming_message)
+            with contextlib.suppress(asyncio.QueueFull):
+                notifications.put_nowait(notification)
+
+        waiter = self._approvalWaiter(approvals)
+
+        attachments = list(self._attachments)
+        self._attachments = []
+
+        try:
+            await self.engine.run_turn(
+                ctx,
+                UserMessageSubmitted(content=query, attachments=tuple(attachments), input_id=input_id),
+                onStreamChunk,
+                waiter,
+            )
+        except Exception as failure:
+            error = self.failTurn(notifications, failure)
+        else:
+            error = None
+        await self.emitter.emit(notifications, self.engine.snapshot(), self.persistMessage)
+        return error
+
+    def _approvalWaiter(self, approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed]) -> ApprovalWaiter:
+        """Bridge the queue to the engine's approval port.
+
+        The decision is persisted and the emitter re-armed *before* the engine
+        applies it, so an audit record exists even if the run is cancelled in the
+        next instant, and the next identical call prompts again.
+        """
+
+        async def wait(ctx: RunContext, call: ToolCall, _request: PermissionRequest) -> ApprovalDecision:
+            decision = await waitApproval(ctx, approvals)
+            self.persistApproval(decision, call)
+            self.emitter.markApprovalConsumed()
+            return decision
+
+        return _WaitApprovalFunc(wait)
+
+    def failTurn(self, notifications: asyncio.Queue[SessionNotification], failure: BaseException) -> BaseException:
+        notifications.put_nowait(SessionError(err=failure))
+        self.persistError(failure)
+        return failure
+
+
+class _WaitApprovalFunc:
+    """Adapts a plain async function to the ``ApprovalWaiter`` protocol."""
+
+    __slots__ = ("_wait",)
+
+    def __init__(self, wait: Callable[[RunContext, ToolCall, PermissionRequest], Awaitable[ApprovalDecision]]) -> None:
+        self._wait = wait
+
+    async def wait_approval(self, ctx: RunContext, call: ToolCall, request: PermissionRequest) -> ApprovalDecision:
+        return await self._wait(ctx, call, request)

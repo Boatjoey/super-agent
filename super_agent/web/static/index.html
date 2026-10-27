@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Super Agent</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark"></span>Super Agent</div>
+        <button id="new-chat" class="new-chat" type="button">＋ 新对话</button>
+        <div class="sidebar-label">最近会话</div>
+        <ul id="sessions" class="sessions"></ul>
+        <div class="sidebar-foot">
+          <div id="cwd" class="cwd" title="工作目录"></div>
+          <div id="model" class="model"></div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div id="status" class="status">
+            <span class="status-dot"></span><span id="status-label">空闲</span>
+          </div>
+          <div class="topbar-right">
+            <span id="usage" class="usage"></span>
+            <button id="memory" class="toggle" type="button" title="跨会话记忆">记忆</button>
+            <select id="permission" class="select" title="权限模式">
+              <option value="ask">询问</option>
+              <option value="accept-edits">接受编辑</option>
+              <option value="plan">计划</option>
+              <option value="bypass">全部允许</option>
+            </select>
+          </div>
+        </header>
+
+        <section id="transcript" class="transcript" aria-live="polite"></section>
+
+        <div id="approval" class="approval hidden" role="dialog" aria-modal="false"></div>
+
+        <footer class="composer">
+          <div class="composer-box">
+            <textarea id="input" rows="1" placeholder="给 Agent 一个任务…" spellcheck="false"></textarea>
+            <div class="composer-actions">
+              <span id="hint" class="hint">Enter 发送 · Shift+Enter 换行</span>
+              <div class="buttons">
+                <button id="queue" class="queue hidden" type="button">排队</button>
+                <button id="stop" class="stop hidden" type="button">停止</button>
+                <button id="send" class="send" type="button">发送</button>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </main>
+    </div>
+    <div id="toast" class="toast hidden" role="status"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>

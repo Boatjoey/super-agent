@@ -1,0 +1,752 @@
+#!/usr/bin/env python3
+"""End-to-end acceptance smoke for the installed console script.
+
+This drives the real `super-agent` process against a local HTTP server that
+speaks the OpenAI chat-completions streaming protocol. That combination matters:
+the process boundary is real (argparse-free flag parsing, exit codes, `.env`
+loading), the front end is real, and the only thing faked is the model provider —
+so nothing here touches the network.
+
+The terminal front end is driven inside a pseudo-terminal, so its checks need
+POSIX; the web and ACP checks use only pipes and sockets and run anywhere. Pick
+one with ``--front-end``, or let the default run every front end this platform
+can support.
+
+    uv run python scripts/smoke.py
+    uv run python scripts/smoke.py --front-end acp
+
+Exit code 0 means every step passed; anything else prints the failing step.
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import http.client
+import json
+import os
+import queue
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import ClassVar
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+#: The reply the fake provider streams back. Word-split so the transcript shows a
+#: streaming message rather than one chunk.
+REPLY = "smoke test reply"
+
+#: How long any single interactive step may take before it is a failure.
+STEP_TIMEOUT_SECONDS = 20.0
+
+
+class FakeProvider(BaseHTTPRequestHandler):
+    """A minimal OpenAI-compatible chat-completions endpoint that streams."""
+
+    protocol_version = "HTTP/1.1"
+
+    #: How long a request mentioning "slow" is held before any bytes are sent, so a
+    #: turn can be cancelled while it is genuinely in flight.
+    SLOW_SECONDS = 6.0
+
+    #: Every prompt the provider was asked about, for diagnostics on failure.
+    seen: ClassVar[list[str]] = []
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = json.loads(self.rfile.read(length) or b"{}")
+        prompts = json.dumps(body.get("messages", []))
+        type(self).seen.append(prompts)
+        if "slow" in prompts:
+            time.sleep(self.SLOW_SECONDS)
+        wants_stream = bool(body.get("stream"))
+        if not wants_stream:
+            self._send_json(
+                {
+                    "id": "chatcmpl-smoke",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": body.get("model", "smoke"),
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": REPLY},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 3, "completion_tokens": 3, "total_tokens": 6},
+                }
+            )
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+        for index, word in enumerate(REPLY.split(" ")):
+            piece = word if index == 0 else " " + word
+            self._send_event(
+                {
+                    "id": "chatcmpl-smoke",
+                    "object": "chat.completion.chunk",
+                    "created": 0,
+                    "model": body.get("model", "smoke"),
+                    "choices": [{"index": 0, "delta": {"content": piece}, "finish_reason": None}],
+                }
+            )
+        self._send_event(
+            {
+                "id": "chatcmpl-smoke",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": body.get("model", "smoke"),
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            }
+        )
+        self._send_event(
+            {
+                "id": "chatcmpl-smoke",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": body.get("model", "smoke"),
+                "choices": [],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 3, "total_tokens": 6},
+            }
+        )
+        self._write(b"data: [DONE]\n\n")
+        self._write(b"")
+
+    def _send_json(self, payload: dict[str, object]) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_event(self, payload: dict[str, object]) -> None:
+        self._write(f"data: {json.dumps(payload)}\n\n".encode())
+
+    def _write(self, payload: bytes) -> None:
+        self.wfile.write(f"{len(payload):X}\r\n".encode() + payload + b"\r\n")
+
+    def log_message(self, format: str, *args: object) -> None:
+        """Silence the default stderr access log."""
+
+
+def home_environment(home: Path) -> dict[str, str]:
+    """The variables that make ``~`` mean ``home`` on this platform.
+
+    ``HOME`` is the POSIX spelling and ``USERPROFILE`` the Windows one; both are
+    set so the process under test reads the settings this script wrote rather
+    than the developer's own.
+    """
+    return {"HOME": str(home), "USERPROFILE": str(home)}
+
+
+def free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def write_home(root: Path, port: int) -> Path:
+    """A HOME whose settings point at the fake provider and disable the sandbox."""
+    home = root / "home"
+    config = home / ".superagent"
+    config.mkdir(parents=True)
+    (config / "settings.json").write_text(
+        json.dumps(
+            {
+                "provider": "deepseek",
+                "providers": {
+                    "deepseek": {
+                        "base_url": f"http://127.0.0.1:{port}/v1",
+                        "api_key": "sk-smoke",
+                        "model": "smoke-model",
+                    }
+                },
+                # The default is `strict`, which is Linux-only. Off is the
+                # documented opt-out and is what the manual acceptance procedure
+                # uses too.
+                "sandbox": {"mode": "off"},
+                "permissions": {"mode": "ask"},
+                "telemetry": {"log_path": ""},
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return home
+
+
+class Terminal:
+    """A `super-agent` process attached to a pseudo-terminal."""
+
+    def __init__(self, home: Path, workspace: Path, columns: int = 100, rows: int = 30) -> None:
+        # Imported here, not at module scope: a pseudo-terminal only exists on
+        # POSIX, and the web and ACP checks must run on a machine without one.
+        import pty
+
+        self.master, slave = pty.openpty()
+        set_window_size(slave, rows, columns)
+        environment = {
+            **os.environ,
+            **home_environment(home),
+            "TERM": "xterm-256color",
+            "COLUMNS": str(columns),
+            "LINES": str(rows),
+            "PYTHONUNBUFFERED": "1",
+        }
+        environment.pop("YOLO", None)
+        environment.pop("NO_TOOLS", None)
+        self.process = subprocess.Popen(
+            [sys.executable, "-m", "super_agent"],
+            stdin=slave,
+            stdout=slave,
+            stderr=slave,
+            cwd=workspace,
+            env=environment,
+            start_new_session=True,
+        )
+        os.close(slave)
+        self.output = bytearray()
+        self._reader = threading.Thread(target=self._drain, daemon=True)
+        self._reader.start()
+
+    def _drain(self) -> None:
+        while True:
+            try:
+                chunk = os.read(self.master, 65536)
+            except OSError:
+                return
+            if not chunk:
+                return
+            self.output.extend(chunk)
+
+    def text(self) -> str:
+        return bytes(self.output).decode("utf-8", errors="replace")
+
+    def send(self, payload: str | bytes) -> None:
+        data = payload.encode() if isinstance(payload, str) else payload
+        os.write(self.master, data)
+
+    def resize(self, columns: int, rows: int) -> None:
+        set_window_size(self.master, rows, columns)
+        os.kill(self.process.pid, signal.SIGWINCH)
+
+    def wait_for(self, needle: str, timeout: float = STEP_TIMEOUT_SECONDS) -> str:
+        """Wait until ``needle`` appears, returning everything read so far."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if needle in self.text():
+                return self.text()
+            if self.process.poll() is not None:
+                break
+            time.sleep(0.05)
+        raise AssertionError(f"timed out waiting for {needle!r}\n--- output ---\n{self.text()}")
+
+    def wait_until_idle(self, mark: int, timeout: float = STEP_TIMEOUT_SECONDS) -> None:
+        """Wait until the empty interactive prompt returns."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.output[mark:] and self.text().endswith("❯ "):
+                return
+            time.sleep(0.05)
+        raise AssertionError("timed out waiting for the interactive prompt\n" + self.text()[-2000:])
+
+    def close(self) -> None:
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+        with contextlib.suppress(OSError):
+            os.close(self.master)
+
+
+def set_window_size(fd: int, rows: int, columns: int) -> None:
+    import fcntl
+    import struct
+    import termios
+
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
+
+
+def visible_lines(text: str) -> list[str]:
+    """The rendered lines, with ANSI escapes removed."""
+    import re
+
+    stripped = re.sub(r"\x1b\][^\x07]*\x07", "", text)
+    stripped = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", stripped)
+    return [line.rstrip() for line in stripped.splitlines()]
+
+
+def cell_length(line: str) -> int:
+    """Display width, via the same measurement the TUI uses."""
+    from rich.cells import cell_len
+
+    return cell_len(line)
+
+
+def run_cli_checks(binary: list[str], workspace: Path, home: Path) -> None:
+    """The non-interactive acceptance steps: usage, exit codes, error text."""
+    environment = {**os.environ, **home_environment(home), "COLUMNS": "100", "LINES": "30"}
+    environment.pop("YOLO", None)
+    environment.pop("NO_TOOLS", None)
+
+    usage = subprocess.run([*binary, "-h"], cwd=workspace, env=environment, capture_output=True, text=True)
+    assert usage.returncode == 0, f"-h exit code {usage.returncode}, want 0"
+    assert "approval-mode" in usage.stderr, f"-h usage missing flags: {usage.stderr!r}"
+    assert "(default true)" not in usage.stderr, f"usage claims a false flag defaults true: {usage.stderr!r}"
+
+    unknown = subprocess.run([*binary, "--nope"], cwd=workspace, env=environment, capture_output=True, text=True)
+    assert unknown.returncode == 2, f"unknown flag exit code {unknown.returncode}, want 2"
+    assert "flag provided but not defined: -nope" in unknown.stderr, unknown.stderr
+
+    bad_mode = subprocess.run(
+        [*binary, "--approval-mode", "bogus"], cwd=workspace, env=environment, capture_output=True, text=True
+    )
+    assert bad_mode.returncode == 1, f"bad mode exit code {bad_mode.returncode}, want 1"
+    assert "invalid permission mode: bogus" in bad_mode.stderr, bad_mode.stderr
+
+    conflicting = subprocess.run(
+        [*binary, "--yolo", "--approval-mode", "plan"],
+        cwd=workspace,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert conflicting.returncode == 1, f"conflicting flags exit code {conflicting.returncode}, want 1"
+    assert "mutually exclusive" in conflicting.stderr, conflicting.stderr
+
+    no_key = tempfile.mkdtemp()
+    try:
+        missing = subprocess.run(
+            binary, cwd=workspace, env={**environment, **home_environment(Path(no_key))}, capture_output=True, text=True
+        )
+        assert missing.returncode == 1, f"missing credential exit code {missing.returncode}, want 1"
+        assert "has no api_key" in missing.stderr, missing.stderr
+    finally:
+        shutil.rmtree(no_key, ignore_errors=True)
+
+
+def run_interactive_checks(home: Path, workspace: Path, *, columns: int = 100, rows: int = 30) -> None:
+    """The interactive steps: prompt, reply, resize, cancel, quit."""
+    terminal = Terminal(home, workspace, columns=columns, rows=rows)
+    try:
+        terminal.wait_for("Super Agent")
+
+        terminal.send("/")
+        terminal.wait_for("/compact")
+        terminal.send("\x15")
+
+        mark = len(terminal.output)
+        terminal.send("请介绍这个项目\r")
+        terminal.wait_for(REPLY)
+        terminal.wait_until_idle(mark)
+        assert any(
+            any(message.get("content") == "请介绍这个项目" for message in json.loads(prompt))
+            for prompt in FakeProvider.seen
+        ), FakeProvider.seen
+
+        # A resize mid-session must not produce a line wider than the terminal.
+        #
+        # Only the output written *after* the resize is examined. The stream
+        # contains every earlier frame, and those were legitimately rendered at the
+        # old width; scanning the whole history would fail on correct output. The
+        # TUI's own tests assert the invariant on a full render, which is the
+        # stronger check — this one is here to prove a live SIGWINCH is handled at
+        # all, and that what it draws next fits.
+        mark = len(terminal.output)
+        terminal.resize(60, 20)
+        terminal.send("resize check\r")
+        deadline = time.monotonic() + STEP_TIMEOUT_SECONDS
+        while time.monotonic() < deadline and terminal.text().count(REPLY) < 2:
+            time.sleep(0.05)
+        redrawn = bytes(terminal.output[mark:]).decode("utf-8", errors="replace")
+        over = [line for line in visible_lines(redrawn) if cell_length(line) > 60]
+        assert not over, "resize produced an over-wide line:\n" + "\n".join(over)
+        assert REPLY in redrawn, "the resized terminal produced no reply"
+        terminal.wait_until_idle(mark)
+
+        # Ctrl+C while a turn is running cancels the turn; it only quits when
+        # nothing is in flight, which is why the slow prompt comes first.
+        terminal.send("slow please\r")
+        time.sleep(2.0)
+        terminal.send("\x03")
+        time.sleep(1.0)
+        assert terminal.process.poll() is None, (
+            f"Ctrl+C exited the process instead of cancelling (returncode {terminal.process.returncode})"
+            f"\n--- prompts seen ---\n{FakeProvider.seen!r}"
+            "\n--- last output ---\n" + terminal.text()[-2000:]
+        )
+
+        # The loop must still be usable after a cancel.
+        terminal.send("hello again\r")
+        terminal.wait_for(REPLY, timeout=STEP_TIMEOUT_SECONDS)
+        assert terminal.process.poll() is None, "the process died after cancel and resume"
+
+        # Let the turn finish before submitting a command: while a turn is still
+        # running, Enter steers it instead of submitting, so a command would be
+        # sent to the model as a follow-up prompt rather than run as one.
+        terminal.wait_until_idle(0)
+
+        # The conversation-management commands must run against a live session and
+        # leave it usable. Their transcript surgery is asserted precisely by the
+        # session tests; what this adds is that the command path itself works end
+        # to end through the real interface.
+        for command in ("/clear", "/compact", "/undo"):
+            mark = len(terminal.output)
+            terminal.send(command + "\r")
+            terminal.wait_until_idle(mark)
+            assert terminal.process.poll() is None, f"{command} terminated the process"
+            assert terminal.output[mark:], f"{command} produced no output at all"
+
+        terminal.send("/quit\r")
+        deadline = time.monotonic() + STEP_TIMEOUT_SECONDS
+        while time.monotonic() < deadline and terminal.process.poll() is None:
+            time.sleep(0.05)
+        assert terminal.process.poll() is not None, (
+            "process did not exit after /quit\n--- last output ---\n" + terminal.text()[-2000:]
+        )
+    finally:
+        terminal.close()
+
+
+def spawn_front_end(
+    arguments: list[str],
+    home: Path,
+    workspace: Path,
+    *,
+    stdin: int | None = subprocess.DEVNULL,
+) -> subprocess.Popen[bytes]:
+    """Start the console script on one front end, with HOME pointing at the fake provider."""
+    environment = {**os.environ, **home_environment(home), "PYTHONUNBUFFERED": "1"}
+    environment.pop("YOLO", None)
+    environment.pop("NO_TOOLS", None)
+    return subprocess.Popen(
+        [sys.executable, "-m", "super_agent", *arguments],
+        stdin=stdin,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=workspace,
+        env=environment,
+    )
+
+
+def stop(process: subprocess.Popen[bytes]) -> None:
+    """Terminate a front end, and report what it wrote if it had already died."""
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def failed_output(process: subprocess.Popen[bytes]) -> str:
+    """Whatever a dead front end wrote, so a startup failure names its cause."""
+    if process.stderr is None:
+        return ""
+    with contextlib.suppress(Exception):
+        return process.stderr.read().decode("utf-8", errors="replace")[-2000:]
+    return ""
+
+
+def wait_until_listening(port: int, process: subprocess.Popen[bytes]) -> None:
+    """Wait for the web interface to accept a connection, or fail with its output."""
+    deadline = time.monotonic() + STEP_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise AssertionError(f"the web interface exited with {process.returncode}\n{failed_output(process)}")
+        with contextlib.closing(socket.socket()) as probe:
+            probe.settimeout(0.5)
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                return
+        time.sleep(0.1)
+    raise AssertionError(f"the web interface never listened on {port}\n{failed_output(process)}")
+
+
+def http_request(port: int, method: str, path: str, payload: dict[str, object] | None = None) -> tuple[int, bytes]:
+    """One HTTP exchange against the web interface."""
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=STEP_TIMEOUT_SECONDS)
+    try:
+        body = None if payload is None else json.dumps(payload).encode()
+        headers = {} if body is None else {"Content-Type": "application/json"}
+        connection.request(method, path, body=body, headers=headers)
+        response = connection.getresponse()
+        return response.status, response.read()
+    finally:
+        connection.close()
+
+
+def http_json(port: int, method: str, path: str, payload: dict[str, object] | None = None) -> tuple[int, dict]:
+    status, raw = http_request(port, method, path, payload)
+    return status, (json.loads(raw) if raw.strip() else {})
+
+
+class EventStream:
+    """The web interface's server-sent event stream, read one event at a time."""
+
+    def __init__(self, port: int) -> None:
+        self.connection = http.client.HTTPConnection("127.0.0.1", port, timeout=STEP_TIMEOUT_SECONDS)
+        self.connection.request("GET", "/api/events")
+        self.response = self.connection.getresponse()
+        content_type = self.response.getheader("content-type") or ""
+        assert self.response.status == 200, f"event stream status {self.response.status}"
+        assert content_type.startswith("text/event-stream"), f"event stream content type {content_type!r}"
+
+    def next_event(self) -> dict:
+        """The next event, or a timeout: the stream sends nothing while idle."""
+        lines: list[str] = []
+        while True:
+            line = self.response.readline()
+            if not line:
+                raise AssertionError("the event stream closed unexpectedly\n" + "\n".join(lines))
+            text = line.decode("utf-8").rstrip("\r\n")
+            if text == "":
+                if not lines:
+                    continue
+                for candidate in lines:
+                    if candidate.startswith("data: "):
+                        return json.loads(candidate[len("data: ") :])
+                raise AssertionError("an event carried no data line: " + repr(lines))
+            lines.append(text)
+
+    def until(self, kind: str) -> list[dict]:
+        """Every event up to and including the first of ``kind``."""
+        events: list[dict] = []
+        while True:
+            event = self.next_event()
+            events.append(event)
+            if event.get("kind") == kind:
+                return events
+
+    def close(self) -> None:
+        with contextlib.suppress(Exception):
+            self.response.close()
+        with contextlib.suppress(Exception):
+            self.connection.close()
+
+
+def run_web_checks(home: Path, workspace: Path) -> None:
+    """The web interface: page, snapshot, a streamed turn, the single-turn slot, cancel."""
+    port = free_port()
+    process = spawn_front_end(["--web", "--port", str(port)], home, workspace)
+    stream: EventStream | None = None
+    try:
+        wait_until_listening(port, process)
+
+        status, page = http_request(port, "GET", "/")
+        assert status == 200, f"index status {status}"
+        assert b"<html" in page.lower(), "the index is not an HTML page"
+
+        status, snapshot = http_json(port, "GET", "/api/snapshot")
+        assert status == 200, f"snapshot status {status}"
+        assert snapshot["snapshot"]["agent_status"]["busy"] is False, snapshot
+
+        stream = EventStream(port)
+        assert stream.next_event().get("kind") == "Snapshot", "an event stream must open with a snapshot"
+
+        status, accepted = http_json(port, "POST", "/api/turns", {"text": "hello smoke"})
+        assert (status, accepted) == (202, {"accepted": True}), f"turn status {status} {accepted}"
+
+        events = stream.until("TurnFinished")
+        kinds = [event.get("kind") for event in events]
+        assert "StreamChunkReceived" in kinds, f"the reply was not streamed: {kinds}"
+        assert events[-1].get("error") in (None, ""), f"the turn failed: {events[-1]}"
+        replies = [
+            event["message"]["content"]
+            for event in events
+            if event.get("kind") == "MessageAppended" and event["message"]["role"] == "assistant"
+        ]
+        assert replies and REPLY in replies[-1], f"no completed reply in {kinds}"
+
+        status, _ = http_json(port, "POST", "/api/turns", {"text": "slow please"})
+        assert status == 202, f"the slow turn was not accepted: {status}"
+        status, _ = http_json(port, "POST", "/api/turns", {"text": "second"})
+        assert status == 409, f"a second concurrent turn got {status}, want 409"
+
+        # Input queued behind the running turn: the answer says it is waiting, and
+        # the cancel below discards it rather than letting it start a turn the user
+        # no longer meant to run.
+        status, queued = http_json(port, "POST", "/api/queue", {"text": "queued smoke"})
+        assert (status, queued.get("status")) == (200, "queued"), f"queue status {status} {queued}"
+
+        status, _ = http_json(port, "POST", "/api/cancel")
+        assert status == 200, f"cancel status {status}"
+        stream.until("TurnFinished")
+
+        status, late = http_json(port, "POST", "/api/queue", {"text": "nothing to wait behind"})
+        assert (status, late.get("status")) == (200, "rejected"), f"queue without a turn got {status} {late}"
+
+        status, snapshot = http_json(port, "GET", "/api/snapshot")
+        assert status == 200, "the interface stopped answering after a cancelled turn"
+        assert snapshot["snapshot"]["agent_status"]["busy"] is False, snapshot
+
+        # The memory switch: the browser is told where the lines live, and can
+        # turn the memory off. The lines themselves stay where they are.
+        status, memory = http_json(port, "GET", "/api/memory")
+        assert status == 200, f"memory status {status}"
+        assert memory.get("backend"), f"the memory did not say where it lives: {memory}"
+        status, switched = http_json(port, "POST", "/api/memory", {"enabled": False})
+        assert (status, switched.get("enabled")) == (200, False), f"memory switch got {status} {switched}"
+    finally:
+        if stream is not None:
+            stream.close()
+        stop(process)
+
+
+class JsonRpcPipes:
+    """A client on the other end of an ACP conversation, over the process pipes."""
+
+    def __init__(self, process: subprocess.Popen[bytes]) -> None:
+        self.process = process
+        self.messages: queue.Queue[dict] = queue.Queue()
+        self._next_id = 1
+        threading.Thread(target=self._drain, daemon=True).start()
+
+    def _drain(self) -> None:
+        assert self.process.stdout is not None
+        for line in self.process.stdout:
+            text = line.decode("utf-8", errors="replace").strip()
+            if not text:
+                continue
+            # Anything that is not JSON-RPC is a protocol violation: stdout belongs
+            # to the client, so it must be reported rather than skipped.
+            self.messages.put(json.loads(text))
+
+    def request(self, method: str, params: dict[str, object]) -> int:
+        request_id = self._next_id
+        self._next_id += 1
+        self._write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
+        return request_id
+
+    def respond(self, request_id: object, result: dict[str, object]) -> None:
+        self._write({"jsonrpc": "2.0", "id": request_id, "result": result})
+
+    def _write(self, message: dict[str, object]) -> None:
+        assert self.process.stdin is not None
+        self.process.stdin.write((json.dumps(message) + "\n").encode())
+        self.process.stdin.flush()
+
+    def next_message(self, timeout: float = STEP_TIMEOUT_SECONDS) -> dict:
+        try:
+            return self.messages.get(timeout=timeout)
+        except queue.Empty:
+            raise AssertionError("timed out waiting for the ACP agent\n" + failed_output(self.process)) from None
+
+    def answer_until(self, request_id: int) -> tuple[dict, list[dict]]:
+        """Every notification sent before the response to ``request_id``."""
+        notifications: list[dict] = []
+        while True:
+            message = self.next_message()
+            if message.get("method") == "session/request_permission":
+                # Nothing in this smoke asks for a tool, so a permission request
+                # would be a surprise; refuse it rather than hang.
+                self.respond(message.get("id"), {"outcome": {"outcome": "cancelled"}})
+                continue
+            if message.get("id") == request_id and "method" not in message:
+                return message, notifications
+            notifications.append(message)
+
+
+def run_acp_checks(home: Path, workspace: Path) -> None:
+    """The ACP front end: initialize, session/new, a streamed session/prompt."""
+    process = spawn_front_end(["--acp"], home, workspace, stdin=subprocess.PIPE)
+    client = JsonRpcPipes(process)
+    try:
+        request_id = client.request("initialize", {"protocolVersion": 1, "clientCapabilities": {}})
+        response, _ = client.answer_until(request_id)
+        result = response.get("result") or {}
+        assert result.get("protocolVersion") == 1, response
+        assert "agentCapabilities" in result, response
+
+        request_id = client.request("session/new", {"cwd": str(workspace), "mcpServers": []})
+        response, _ = client.answer_until(request_id)
+        result = response.get("result") or {}
+        assert result.get("sessionId"), response
+        assert (result.get("modes") or {}).get("availableModes"), response
+
+        request_id = client.request("session/prompt", {"prompt": [{"type": "text", "text": "hello smoke"}]})
+        response, notifications = client.answer_until(request_id)
+        updates = [
+            message["params"]["update"] for message in notifications if message.get("method") == "session/update"
+        ]
+        chunks = [update for update in updates if update.get("sessionUpdate") == "agent_message_chunk"]
+        streamed = "".join(update["content"]["text"] for update in chunks)
+        assert streamed == REPLY, f"streamed {streamed!r}, want {REPLY!r} in {updates}"
+        assert (response.get("result") or {}).get("stopReason") == "end_turn", response
+
+        assert process.stdin is not None
+        process.stdin.close()
+        status = process.wait(timeout=STEP_TIMEOUT_SECONDS)
+        assert status == 0, f"the ACP front end exited with {status}\n{failed_output(process)}"
+    finally:
+        stop(process)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--columns", type=int, default=100)
+    parser.add_argument("--rows", type=int, default=30)
+    parser.add_argument(
+        "--front-end",
+        choices=("all", "terminal", "web", "acp"),
+        default="all",
+        help="which front end to drive (default: every front end this platform supports)",
+    )
+    arguments = parser.parse_args()
+
+    port = free_port()
+    server = ThreadingHTTPServer(("127.0.0.1", port), FakeProvider)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    root = Path(tempfile.mkdtemp(prefix="super-agent-smoke-"))
+    workspace = root / "workspace"
+    workspace.mkdir()
+    try:
+        home = write_home(root, port)
+        binary = [sys.executable, "-m", "super_agent"]
+        wants = {arguments.front_end} if arguments.front_end != "all" else {"terminal", "web", "acp"}
+        if "terminal" in wants:
+            if os.name == "nt":
+                if arguments.front_end == "terminal":
+                    raise AssertionError(
+                        "the terminal front end needs a pseudo-terminal, which this platform has none of"
+                    )
+                print("skip terminal: no pseudo-terminal on this platform")
+            else:
+                run_cli_checks(binary, workspace, home)
+                print("ok   flags, exit codes, and error text")
+                run_interactive_checks(home, workspace, columns=arguments.columns, rows=arguments.rows)
+                print("ok   terminal: prompt, streaming reply, resize, mid-turn cancel, /clear, /compact, /undo, /quit")
+        if "web" in wants:
+            run_web_checks(home, workspace)
+            print("ok   web: page, snapshot, streamed turn, single-turn slot, cancel")
+        if "acp" in wants:
+            run_acp_checks(home, workspace)
+            print("ok   acp: initialize, session/new, streamed session/prompt, clean exit")
+    finally:
+        server.shutdown()
+        shutil.rmtree(root, ignore_errors=True)
+    print("smoke passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
