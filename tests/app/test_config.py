@@ -13,7 +13,6 @@ provider map and could therefore send the template placeholder as a bearer token
 from __future__ import annotations
 
 import os
-import stat
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
@@ -26,6 +25,7 @@ from super_agent.app.config import Lookup
 from super_agent.llm import ProviderConfig
 from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import Message, Model, ModelResponse, StreamChunk, ToolSpec
+from tests.conftest import assert_mode
 
 #: The placeholder a fresh settings.json carries, so the test says why it matters.
 PLACEHOLDER: Final[str] = "sk-..."
@@ -294,7 +294,7 @@ def test_load_settings_file_creates_template_when_missing(tmp_path: Path) -> Non
     # a trailing newline, and a file nobody else may read.
     assert content.endswith("\n")
     assert '\n  "provider"' in content
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert_mode(path, 0o600)
 
 
 def test_load_settings_file_does_not_overwrite_existing_settings(tmp_path: Path) -> None:

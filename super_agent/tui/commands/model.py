@@ -101,6 +101,8 @@ class Model:
                 return self, await self._handleFork(input.text.removeprefix(command).strip()), None
             case "/memory":
                 return self, await self._handleMemory(parts[1:]), None
+            case "/config":
+                return self, await self._handleConfig(parts[1:]), None
             case "/remember":
                 return self, await self._handleRemember(input.text.removeprefix(command).strip()), None
             case "/forget":
@@ -398,6 +400,30 @@ class Model:
         except Exception as err:
             return Outcome(err=f"Forget failed: {err}")
         return Outcome(status="Memory cleared")
+
+    async def _handleConfig(self, arguments: list[str]) -> Outcome:
+        """Show provider configuration, or set a provider's key and model.
+
+        The key is a credential, so the listing redacts it to a presence flag
+        rather than printing it; setting persists to ``settings.json`` and rebuilds
+        the active model, so the next turn uses the new key without a restart.
+        """
+        if not arguments or (len(arguments) == 1 and arguments[0] == "list"):
+            providers = self.ports.providers.list_providers()
+            rows = [
+                f"{item.name}: model={item.model or '—'} key={'set' if item.has_key else 'missing'}"
+                for item in providers
+            ]
+            return Outcome(status="Providers", output="\n".join(rows) or "no providers configured")
+        if len(arguments) >= 3 and arguments[0] == "provider":
+            name, api_key = arguments[1], arguments[2]
+            model = arguments[3] if len(arguments) >= 4 else ""
+            try:
+                await self.ports.providers.configure_provider(name, api_key, model)
+            except Exception as err:
+                return Outcome(err=f"Config failed: {err}")
+            return Outcome(status=f"Configured {name}", refresh_snapshot=True)
+        return Outcome(err="Usage: /config [list] | /config provider <name> <api_key> [model]")
 
     async def _handleGitDiff(self) -> Outcome:
         try:

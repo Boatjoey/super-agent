@@ -20,7 +20,6 @@ import datetime as dt
 import os
 import re
 import shutil
-import stat
 import sys
 import threading
 import time
@@ -55,6 +54,7 @@ from super_agent.runtime.session import (
     new_session,
 )
 from super_agent.store.memory import StoreMemory
+from tests.conftest import assert_mode
 from tests.fakes.execution import FakeToolRunner, StaticReplyExecutor
 from tests.fakes.model import BlockingModel
 
@@ -758,16 +758,16 @@ def test_metadata_writes_are_atomic_with_expected_modes_and_layout(tmp_path: Pat
     raw = meta_path.read_bytes()
     assert raw.endswith(b"\n")
     assert b'\n  "id":' in raw
-    assert stat.S_IMODE(meta_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(session_dir.stat().st_mode) == 0o700
-    assert stat.S_IMODE(root.stat().st_mode) == 0o700
+    assert_mode(meta_path, 0o600)
+    assert_mode(session_dir, 0o700)
+    assert_mode(root, 0o700)
     # No temp file survives the atomic replace.
     assert sorted(path.name for path in session_dir.iterdir()) == ["events.jsonl", "meta.json"]
 
     st.save_memory(["remember this"])
     memory_path = root / "_memory.json"
     assert memory_path.read_bytes() == b'[\n  "remember this"\n]\n'
-    assert stat.S_IMODE(memory_path.stat().st_mode) == 0o600
+    assert_mode(memory_path, 0o600)
 
 
 # --- golden store replay -----------------------------------------------------

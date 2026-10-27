@@ -84,6 +84,7 @@ from super_agent.tui.conversation import (
     MessageAppended as MessageAppended,
     MessageAttachment as MessageAttachment,
     PermissionRequest as PermissionRequest,
+    ProviderView as ProviderView,
     QueuedInputAccepted as QueuedInputAccepted,
     QueuedInputWithdrawn as QueuedInputWithdrawn,
     QueuedReceipt as QueuedReceipt,
@@ -178,6 +179,7 @@ __all__ = [
     "Option",
     "OutputPrinter",
     "PermissionRequest",
+    "ProviderView",
     "QueuedInputAccepted",
     "QueuedInputWithdrawn",
     "QueuedReceipt",
@@ -241,6 +243,7 @@ def new(session: Conversation, info: StartupInfo, *options: Option) -> App:
             memory=session,
             workspace=session,
             extensions=session,
+            providers=session,
         ),
     )
     app = App(

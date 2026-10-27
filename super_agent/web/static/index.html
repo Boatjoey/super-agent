@@ -33,6 +33,7 @@
               <option value="plan">计划</option>
               <option value="bypass">全部允许</option>
             </select>
+            <button id="settings" class="toggle" type="button" title="模型与凭据配置">配置</button>
           </div>
         </header>
 
@@ -56,6 +57,33 @@
       </main>
     </div>
     <div id="toast" class="toast hidden" role="status"></div>
+    <div id="settings-modal" class="settings-modal hidden" role="dialog" aria-modal="true">
+      <div class="settings-panel">
+        <div class="settings-head">
+          <span>模型与凭据配置</span>
+          <button id="settings-close" class="settings-close" type="button" aria-label="关闭">×</button>
+        </div>
+        <div id="sandbox-warning" class="settings-warning hidden"></div>
+        <div class="settings-body">
+          <label class="settings-field">
+            <span>服务商</span>
+            <select id="settings-provider"></select>
+          </label>
+          <label class="settings-field">
+            <span>API Key</span>
+            <input id="settings-key" type="password" autocomplete="off" placeholder="sk-…" />
+          </label>
+          <label class="settings-field">
+            <span>模型（可留空）</span>
+            <input id="settings-model" type="text" autocomplete="off" placeholder="deepseek-reasoner" />
+          </label>
+        </div>
+        <div class="settings-actions">
+          <button id="settings-cancel" class="btn" type="button">取消</button>
+          <button id="settings-save" class="btn primary" type="button">保存</button>
+        </div>
+      </div>
+    </div>
     <script src="/app.js"></script>
   </body>
 </html>

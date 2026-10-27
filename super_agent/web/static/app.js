@@ -14,6 +14,7 @@ const state = {
   running: false,
   config: null,
   sessions: [],
+  providers: [],
   error: "",
   note: "",
 };
@@ -36,6 +37,15 @@ const els = {
   model: document.getElementById("model"),
   cwd: document.getElementById("cwd"),
   toast: document.getElementById("toast"),
+  settings: document.getElementById("settings"),
+  settingsModal: document.getElementById("settings-modal"),
+  settingsClose: document.getElementById("settings-close"),
+  settingsCancel: document.getElementById("settings-cancel"),
+  settingsSave: document.getElementById("settings-save"),
+  settingsProvider: document.getElementById("settings-provider"),
+  settingsKey: document.getElementById("settings-key"),
+  settingsModel: document.getElementById("settings-model"),
+  sandboxWarning: document.getElementById("sandbox-warning"),
 };
 
 const STATUS_LABELS = {
@@ -588,8 +598,25 @@ async function loadConfig() {
     }
     els.model.textContent = `${config.provider || ""} ${config.model || ""}`.trim();
     renderMemory(config.memory_enabled, config.memory_backend);
+    // A missing credential is the one thing worth surfacing unprompted: the
+    // interface can open, but the first turn will fail until a key is entered.
+    if (config.credential_missing) {
+      els.settings.classList.add("attention");
+    } else {
+      els.settings.classList.remove("attention");
+    }
+    renderSandboxWarning(config.sandbox_downgraded);
   } catch {
     // The status line is decoration; a failed read must not block the interface.
+  }
+}
+
+function renderSandboxWarning(downgraded) {
+  if (downgraded) {
+    els.sandboxWarning.textContent = "当前平台不支持严格沙箱，命令将以你的完整权限运行（无隔离）。";
+    els.sandboxWarning.classList.remove("hidden");
+  } else {
+    els.sandboxWarning.classList.add("hidden");
   }
 }
 
@@ -616,6 +643,74 @@ async function toggleMemory() {
   } catch (error) {
     toast(error.message);
     loadConfig();
+  }
+}
+
+// --- provider configuration ------------------------------------------------
+
+async function loadProviders() {
+  try {
+    const payload = await api("/api/providers");
+    state.providers = payload.providers || [];
+  } catch {
+    state.providers = [];
+  }
+}
+
+function openSettings() {
+  els.settingsKey.value = "";
+  els.settingsModel.value = "";
+  els.settingsProvider.replaceChildren();
+  const current = (state.config && state.config.provider) || "";
+  for (const provider of state.providers) {
+    const option = document.createElement("option");
+    option.value = provider.name;
+    option.textContent = `${provider.name}${provider.has_key ? "" : "（未配置）"}`;
+    if (provider.name === current) {
+      option.selected = true;
+    }
+    els.settingsProvider.append(option);
+  }
+  const selected = state.providers.find((provider) => provider.name === (els.settingsProvider.value || current));
+  if (selected) {
+    els.settingsModel.value = selected.model || "";
+  }
+  renderSandboxWarning(state.config && state.config.sandbox_downgraded);
+  els.settingsModal.classList.remove("hidden");
+}
+
+function closeSettings() {
+  els.settingsModal.classList.add("hidden");
+}
+
+async function saveSettings() {
+  const provider = els.settingsProvider.value;
+  const api_key = els.settingsKey.value.trim();
+  const model = els.settingsModel.value.trim();
+  if (!provider) {
+    toast("请选择一个服务商");
+    return;
+  }
+  if (!api_key) {
+    toast("API Key 不能为空");
+    return;
+  }
+  els.settingsSave.disabled = true;
+  try {
+    const config = await api(`/api/providers/${encodeURIComponent(provider)}`, {
+      method: "POST",
+      body: JSON.stringify({ api_key, model }),
+    });
+    state.config = config;
+    els.model.textContent = `${config.provider || ""} ${config.model || ""}`.trim();
+    closeSettings();
+    toast("配置已保存");
+    loadConfig();
+    loadProviders();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    els.settingsSave.disabled = false;
   }
 }
 
@@ -719,6 +814,16 @@ els.permission.addEventListener("change", async () => {
 
 els.memory.addEventListener("click", toggleMemory);
 
+els.settings.addEventListener("click", openSettings);
+els.settingsClose.addEventListener("click", closeSettings);
+els.settingsCancel.addEventListener("click", closeSettings);
+els.settingsSave.addEventListener("click", saveSettings);
+els.settingsModal.addEventListener("click", (event) => {
+  if (event.target === els.settingsModal) {
+    closeSettings();
+  }
+});
+
 els.newChat.addEventListener("click", async () => {
   try {
     await api("/api/reset", { method: "POST", body: "{}" });
@@ -739,6 +844,7 @@ document.addEventListener("keydown", (event) => {
 
 connect();
 loadConfig();
+loadProviders();
 loadSnapshot();
 loadSessions();
 setInterval(loadSessions, 30000);

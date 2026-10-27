@@ -135,6 +135,17 @@ class Router:
             case ("POST", ["permission-mode"]):
                 await self._conversation.set_permission_mode(str(request.json.get("mode", "")))
                 return json_response(self._config())
+            case ("GET", ["providers"]):
+                return json_response(
+                    {"providers": [self._provider(item) for item in self._conversation.list_providers()]}
+                )
+            case ("POST", ["providers", provider_name]):
+                api_key = str(request.json.get("api_key", ""))
+                model = str(request.json.get("model", ""))
+                if not api_key.strip():
+                    raise ValueError("api_key is required")
+                await self._conversation.configure_provider(provider_name, api_key, model)
+                return json_response(self._config())
             case ("GET", ["memory"]):
                 return json_response(await self._memory())
             case ("POST", ["memory"]):
@@ -176,6 +187,10 @@ class Router:
         terminal that shows the same session.
         """
         return wire.config_to_json(self._conversation.config_view())
+
+    @staticmethod
+    def _provider(item: frontend.ProviderView) -> dict[str, Any]:
+        return {"name": item.name, "model": item.model, "base_url": item.base_url, "has_key": item.has_key}
 
     async def _memory(self) -> dict[str, Any]:
         """The cross-session memory's state and its lines.

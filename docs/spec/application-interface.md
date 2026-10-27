@@ -41,6 +41,8 @@
 | `POST /api/cancel` | — | 请求取消当前轮次 |
 | `POST /api/approvals` | `{"decision": "once", "request_id": "approval-…"}`（也接受 `always`、`deny`） | 提交审批；`request_id` 不是当前待决请求时返回 409，未知决定返回 400 |
 | `POST /api/permission-mode` | `{"mode"}` | 切换权限模式并返回新的配置视图 |
+| `GET /api/providers` | — | 已配置服务商列表，凭据以 `has_key` 标记、绝不回显密钥 |
+| `POST /api/providers/{name}` | `{"api_key": "…", "model": "…"}` | 设置服务商凭据与模型，写回 `settings.json` 并返回新配置视图；`api_key` 为空返回 400 |
 | `GET /api/memory` | — | 跨会话记忆的状态与内容：`enabled`、`backend`、`items` |
 | `POST /api/memory` | `{"enabled": true}` | 切换记忆开关并返回新的状态；`enabled` 不是布尔值时返回 400 |
 | `GET /api/sessions` | — | 已保存会话列表 |
@@ -79,6 +81,7 @@
 | 提交审批 | `TurnPort.approve(decision, request_id)` | 立即返回 `ApprovalReceipt`：`accepted` 或 `rejected`（附原因）。`request_id` 必须是 `snapshot().pending_approval_id` 或 `ToolApprovalRequested.request_id` 给出的那一个；应用在交接前就把它标记为已消费，因此重复提交第二次必被拒绝 |
 | 会话管理 | `SessionPort` | 重置、列表、恢复、重命名、删除、压缩、撤销、分支和导出 |
 | 权限与 Agent 配置 | `PermissionPort`、`AgentPort` | 读取、选择当前策略及配置，结果由应用负责生效 |
+| 服务商配置 | `ProviderPort` | 列出服务商（凭据以 `has_key` 标记、绝不回显密钥）、设置某服务商的凭据与模型；写回 `settings.json` 并重建当前模型。ACP 无入口，凭据由宿主经环境变量注入 |
 | 附件与工作区查询 | `AttachmentsPort`、`WorkspacePort` | 附件验证、待提交附件及只读仓库、诊断查询 |
 | 记忆与扩展管理 | `MemoryPort`、`ExtensionPort`、`MCPPort` | 记忆读写与开关见[跨会话记忆](#跨会话记忆)；扩展与 MCP 按各自契约处理 |
 
@@ -116,6 +119,7 @@
 | `reasoning_effort`、`reasoning_efforts` | 当前推理强度与可选值；`reasoning_effort` 为空表示“未提供”，界面应隐藏该项，不能自拟一个默认值展示 |
 | `agents` | 可切换的 Agent 列表 |
 | `memory_enabled`、`memory_backend` | 跨会话记忆是否在用，以及记忆放在哪个后端（`store`、`file`）；后端名为空表示本应用没有记忆 |
+| `credential_missing`、`sandbox_downgraded` | 启动状态：当前服务商是否仍无凭据、严格沙箱是否已降级为 `off`；为真时界面应提示（引导填写凭据 / 告知命令将以完整权限运行），不能静默 |
 | `capabilities` | 本应用实际具备的能力名，取自 `CAPABILITIES`；未列出的能力对应控件不得展示，因为调用必然失败 |
 
 能力名目前为 `turn`、`steer`、`queue`、`approve`、`cancel`、`resume`、`rename`、`delete`、`compact`、`undo`、`fork`、`export`，另有 `agents` 与 `mcp` 仅在对应控制器存在时出现，`memory` 在应用持有记忆端口或记忆控制器时出现。界面据此决定是否渲染按钮，而不是按前端自己的版本假设。

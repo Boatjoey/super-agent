@@ -7,15 +7,10 @@ from stdin. It owns no alternate screen, retained viewport, pane, or overlay.
 from __future__ import annotations
 
 import asyncio
-import codecs
 import contextlib
-import os
-import select
 import shutil
 import signal
 import sys
-import termios
-import tty
 from collections.abc import Awaitable, Callable, Sequence
 from typing import cast
 
@@ -24,6 +19,7 @@ from rich.text import Text
 
 from super_agent.tui import runtime
 from super_agent.tui.app import App, Msg
+from super_agent.tui.terminal_io import KeyReader, new_key_reader
 from super_agent.tui.transcript import ROLE_ASSISTANT, ROLE_USER
 from super_agent.tui.update import update
 
@@ -45,41 +41,6 @@ def _read_line(prompt: str) -> str:
     return line.decode("utf-8", errors="replace").rstrip("\r\n")
 
 
-def _read_key(fd: int) -> str:
-    if not select.select([fd], [], [], 0.1)[0]:
-        return ""
-    first = os.read(fd, 1)
-    if not first:
-        return "ctrl+d"
-    if first == b"\x1b":
-        sequence = bytearray(first)
-        while len(sequence) < 3 and select.select([fd], [], [], 0.03)[0]:
-            sequence.extend(os.read(fd, 1))
-        return {
-            b"\x1b[A": "up",
-            b"\x1b[B": "down",
-            b"\x1b[C": "right",
-            b"\x1b[D": "left",
-        }.get(bytes(sequence), "esc")
-    controls = {
-        b"\r": "enter",
-        b"\n": "enter",
-        b"\t": "tab",
-        b"\x7f": "backspace",
-        b"\x08": "backspace",
-        b"\x03": "ctrl+c",
-        b"\x04": "ctrl+d",
-        b"\x15": "ctrl+u",
-    }
-    if first in controls:
-        return controls[first]
-    decoder = codecs.getincrementaldecoder("utf-8")("replace")
-    character = decoder.decode(first)
-    while not character:
-        character = decoder.decode(os.read(fd, 1))
-    return character
-
-
 class TerminalApplication:
     """Run the UI as ordinary stdin, stdout, and terminal scrollback."""
 
@@ -89,10 +50,12 @@ class TerminalApplication:
         *,
         reader: InputReader = _read_input,
         console: Console | None = None,
+        key_reader: KeyReader | None = None,
     ) -> None:
         self.model = model
         self._reader = reader
         self._console = console or Console(highlight=False)
+        self._key_reader = key_reader if key_reader is not None else new_key_reader()
         self._messages: asyncio.Queue[Msg] = asyncio.Queue()
         self._tasks: set[asyncio.Task[None]] = set()
         self._listener: asyncio.Task[None] | None = None
@@ -109,7 +72,7 @@ class TerminalApplication:
         """Run without switching screens or taking over terminal scrolling."""
         loop = asyncio.get_running_loop()
         previous_sigint = signal.getsignal(signal.SIGINT)
-        loop.add_signal_handler(signal.SIGINT, self._messages.put_nowait, runtime.KeyMsg(key="ctrl+c"))
+        self._install_sigint(loop)
         width, height = shutil.get_terminal_size((80, 24))
         self._console.print(self.model.transcript.welcome)
         await self._dispatch(runtime.WindowSizeMsg(width=width, height=height))
@@ -129,8 +92,28 @@ class TerminalApplication:
                     await self._dispatch(await self._messages.get())
         finally:
             await self._close()
+            self._restore_sigint(loop, previous_sigint)
+
+    def _install_sigint(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Route SIGINT to the message queue, in the way this loop supports.
+
+        POSIX selectors let a handler be installed on the loop; Windows'
+        ProactorEventLoop does not, so the plain ``signal.signal`` hook is used
+        there instead. Both feed the same ``ctrl+c`` key message.
+        """
+        if sys.platform == "win32":
+            signal.signal(
+                signal.SIGINT, lambda _signum, _frame: self._messages.put_nowait(runtime.KeyMsg(key="ctrl+c"))
+            )
+        else:
+            loop.add_signal_handler(signal.SIGINT, self._messages.put_nowait, runtime.KeyMsg(key="ctrl+c"))
+
+    def _restore_sigint(self, loop: asyncio.AbstractEventLoop, previous: object) -> None:
+        if sys.platform == "win32":
+            signal.signal(signal.SIGINT, previous)
+        else:
             loop.remove_signal_handler(signal.SIGINT)
-            signal.signal(signal.SIGINT, previous_sigint)
+            signal.signal(signal.SIGINT, previous)
 
     async def _read_prompt(self) -> None:
         if self._live_input:
@@ -148,14 +131,10 @@ class TerminalApplication:
         await self._dispatch(runtime.KeyMsg(key="enter"))
 
     async def _read_live_prompt(self) -> None:
-        fd = sys.stdin.fileno()
-        original = termios.tcgetattr(fd)
+        key_reader = self._key_reader
+        key_reader.enter()
         lines = 0
         try:
-            tty.setcbreak(fd)
-            settings = termios.tcgetattr(fd)
-            settings[3] &= ~termios.ECHO
-            termios.tcsetattr(fd, termios.TCSADRAIN, settings)
             self._draw_prompt(lines)
             lines = self._prompt_lines()
             while self._running and self.model.cancellation is None:
@@ -167,7 +146,7 @@ class TerminalApplication:
                         self._draw_prompt(0)
                         lines = self._prompt_lines()
                     continue
-                key = await asyncio.to_thread(_read_key, fd)
+                key = await asyncio.to_thread(key_reader.read_key)
                 if not key:
                     continue
                 if key == "ctrl+d" and not self.model.composer.draft():
@@ -191,7 +170,7 @@ class TerminalApplication:
         finally:
             if lines:
                 self._clear_prompt(lines)
-            termios.tcsetattr(fd, termios.TCSADRAIN, original)
+            key_reader.exit()
             sys.stdout.write("\n")
             sys.stdout.flush()
 

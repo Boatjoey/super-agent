@@ -24,6 +24,8 @@ from super_agent.frontend.ports import (
     AttachmentSummary as Attachment,
     MCPServerSummary as MCPServerSummary,
     PermissionPort as PermissionPort,
+    ProviderPort as ProviderPort,
+    ProviderView as ProviderView,
     SessionPort as SessionPort,
     SessionSummary as SessionSummary,
 )
@@ -38,6 +40,8 @@ __all__ = [
     "MemoryPort",
     "PermissionPort",
     "Ports",
+    "ProviderPort",
+    "ProviderView",
     "SessionPort",
     "SessionSummary",
     "WorkspacePort",
@@ -55,6 +59,7 @@ class Ports:
     memory: MemoryPort
     workspace: WorkspacePort
     extensions: ExtensionPort
+    providers: ProviderPort
 
 
 class MCPPort(Protocol):

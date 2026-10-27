@@ -370,3 +370,44 @@ async def test_the_memory_switch_refuses_a_value_that_is_not_a_switch() -> None:
     assert (await call(router, "POST", "/api/memory", {}))[0] == 400
     assert (await call(router, "POST", "/api/memory", {"enabled": "maybe"}))[0] == 400
     assert conversation.memory_switches == []
+
+
+@pytest.mark.asyncio
+async def test_providers_are_listed_with_the_credential_redacted() -> None:
+    """The list says which providers exist and whether each has a key, never the key."""
+    conversation = FakeConversation()
+    conversation.providers = [
+        frontend.ProviderView(name="deepseek", model="deepseek-reasoner", has_key=False),
+        frontend.ProviderView(name="openai", model="gpt-4o", has_key=True),
+    ]
+    router, _hub, _runner = build(conversation)
+
+    status, payload = await call(router, "GET", "/api/providers")
+
+    assert status == 200
+    assert [item["name"] for item in payload["providers"]] == ["deepseek", "openai"]
+    assert payload["providers"][0]["has_key"] is False
+    assert payload["providers"][1]["has_key"] is True
+
+
+@pytest.mark.asyncio
+async def test_configuring_a_provider_needs_a_key() -> None:
+    """An empty key is a client error: configuring nothing is not configuring."""
+    conversation = FakeConversation()
+    router, _hub, _runner = build(conversation)
+
+    assert (await call(router, "POST", "/api/providers/deepseek", {"model": "m"}))[0] == 400
+    assert conversation.configured == []
+
+
+@pytest.mark.asyncio
+async def test_configuring_a_provider_persists_and_reports() -> None:
+    """Setting a key forwards to the application and answers with the new config."""
+    conversation = FakeConversation()
+    router, _hub, _runner = build(conversation)
+
+    status, payload = await call(router, "POST", "/api/providers/deepseek", {"api_key": "sk-new", "model": "m2"})
+
+    assert status == 200
+    assert conversation.configured == [("deepseek", "sk-new", "m2")]
+    assert payload["provider"] == conversation.config_view().provider

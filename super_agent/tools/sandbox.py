@@ -50,6 +50,10 @@ class SandboxConfig:
     memory_bytes: int = 0
     max_processes: int = 0
     max_open_files: int = 0
+    #: Whether the strict sandbox was knowingly downgraded to ``off`` because
+    #: this platform cannot provide it. Set by configuration resolution; when
+    #: false, an unsupported platform still refuses a strict sandbox.
+    downgraded: bool = False
 
 
 def default_sandbox_config(workspace: str) -> SandboxConfig:
@@ -107,6 +111,13 @@ def new_command_runner(config: SandboxConfig, workspace_context: WorkspaceContex
     if not valid_sandbox_mode(config.mode):
         raise RuntimeError("invalid sandbox mode: " + str(config.mode))
     if config.mode == SANDBOX_MODE_OFF:
+        return command_runner(workspace=workspace_context)
+    # The strict sandbox needs Linux's ``bubblewrap``. On any other platform the
+    # runner falls back to unsandboxed execution only when the downgrade was
+    # decided at configuration resolution (``downgraded``); without that flag the
+    # refusal stands, so an explicit strict request still fails closed rather than
+    # silently running commands with full authority.
+    if sys.platform != "linux" and config.downgraded:
         return command_runner(workspace=workspace_context)
     if config.workspace == "":
         raise RuntimeError("strict sandbox requires a workspace")

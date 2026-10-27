@@ -23,6 +23,7 @@ import contextlib
 import dataclasses
 import json
 import os
+import sys
 import tempfile
 from collections.abc import Callable, Mapping
 from typing import Any, Final, cast
@@ -41,7 +42,12 @@ from super_agent.runtime import (
 from super_agent.runtime.execution import ZERO_PERMISSION_MODE
 from super_agent.tools.lsp import ServerConfig as LSPServerConfig
 from super_agent.tools.mcp import ServerConfig as MCPServerConfig
-from super_agent.tools.sandbox import SandboxConfig, SandboxMode, valid_sandbox_mode
+from super_agent.tools.sandbox import (
+    SANDBOX_MODE_STRICT,
+    SandboxConfig,
+    SandboxMode,
+    valid_sandbox_mode,
+)
 from super_agent.workspace import Context, new_default_context
 
 __all__ = [
@@ -273,6 +279,14 @@ class Config:
     project: project.Project = dataclasses.field(default_factory=project.Project)
     workspace: Context | None = None
     config_root: str = ""
+    #: True when the selected provider resolved to an empty credential. The
+    #: application still starts, so a front end can offer to configure the key;
+    #: the first turn then fails with the provider's own authentication error.
+    credential_missing: bool = False
+    #: True when the strict sandbox was downgraded to ``off`` because this
+    #: platform cannot provide it. The operator must be told, since commands now
+    #: run with full authority.
+    sandbox_downgraded: bool = False
 
 
 def default_settings() -> Settings:
@@ -336,6 +350,15 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
     sandboxMode = SandboxMode(settings.sandbox.mode)
     if not valid_sandbox_mode(sandboxMode):
         raise ValueError("invalid sandbox mode: " + settings.sandbox.mode)
+    # The strict sandbox needs Linux's ``bubblewrap``. On every other platform the
+    # *configured* mode is kept — ``Config.sandbox.mode`` stays ``strict``, since
+    # that is what the settings say — but the downgrade is flagged so the command
+    # runner can fall back to unsandboxed execution and the operator is told that
+    # commands run with full authority. Choosing ``strict`` explicitly on an
+    # unsupported platform is still an error, not a silent downgrade.
+    sandboxDowngraded = False
+    if sys.platform != "linux" and sandboxMode == SANDBOX_MODE_STRICT:
+        sandboxDowngraded = True
     status_line = resolve_status_line(settings.tui.status_line)
     rules = PermissionRules(
         allow_tools=settings.permissions.allow_tools,
@@ -381,6 +404,7 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
         for name, server in sorted(settings.lsp_servers.items())
     ]
     providerConfig = resolveProviderConfig(settings, provider, lookup)
+    credentialMissing = providerConfig.api_key == ""
     return Config(
         provider=provider,
         no_tools=flags.no_tools or envTrue(lookup, "NO_TOOLS"),
@@ -394,6 +418,7 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
             memory_bytes=settings.sandbox.memory_mb << 20,
             max_processes=settings.sandbox.max_processes,
             max_open_files=settings.sandbox.max_open_files,
+            downgraded=sandboxDowngraded,
         ),
         mcp_servers=mcpServers,
         lsp_servers=lspServers,
@@ -413,6 +438,8 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
         project=selectedProject,
         workspace=workspaceContext,
         config_root=selectedProject.root,
+        credential_missing=credentialMissing,
+        sandbox_downgraded=sandboxDowngraded,
     )
 
 
@@ -444,7 +471,14 @@ def decodeExtensions(content: str) -> ExtensionSettings:
 
 
 def resolveProviderConfig(settings: Settings, provider: str, lookup: Lookup) -> ProviderConfig:
-    """Resolve the credential for ``provider``, or raise naming what is missing."""
+    """Resolve the credential for ``provider``.
+
+    A provider that is not named at all is still a startup failure: that is a
+    configuration structure error, not a credential the user has not entered yet.
+    A named provider with no usable key is *not* a failure — the application
+    starts with an empty credential so each front end can offer to configure it,
+    and the authentication error surfaces on the first turn instead.
+    """
     config = settings.providers.get(provider)
     if config is None:
         raise ValueError("provider " + provider + " is not configured: add it to the providers map in settings.json")
@@ -455,7 +489,6 @@ def resolveProviderConfig(settings: Settings, provider: str, lookup: Lookup) -> 
         value = lookup(envKey)
         if value:
             return dataclasses.replace(config, api_key=value)
-        raise ValueError("provider " + provider + " has no api_key: set it in settings.json or export " + envKey)
     return config
 
 

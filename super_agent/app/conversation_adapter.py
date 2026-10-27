@@ -54,15 +54,26 @@ __all__ = [
 class ConversationAdapter:
     """The conversation port the three front ends talk to."""
 
-    __slots__ = ("_approvalSink", "_pendingApproval", "agents", "mcp", "memory", "session")
+    __slots__ = (
+        "_approvalSink",
+        "_pendingApproval",
+        "_sandboxDowngraded",
+        "agents",
+        "mcp",
+        "memory",
+        "session",
+    )
 
-    def __init__(self, session: runtime.Session, *controllers: object) -> None:
+    def __init__(self, session: runtime.Session, *controllers: object, sandbox_downgraded: bool = False) -> None:
         self.session = session
         self.mcp: MCPController | None = None
         self.agents: AgentController | None = None
         #: The memory switch, when the application wired one. Without it the
         #: session's own port is still the truth about what is remembered.
         self.memory: MemoryController | None = None
+        #: Whether the strict sandbox was downgraded to ``off`` on this platform,
+        #: reported to the interface so the operator sees commands run unsandboxed.
+        self._sandboxDowngraded = sandbox_downgraded
         #: Where a decision goes while a turn runs, and which request it answers.
         #: Both are per turn: the sink exists only between the turn's start and its
         #: end, so an answer offered outside a turn is refused rather than buffered
@@ -115,6 +126,40 @@ class ConversationAdapter:
         if self.agents is None:
             raise ValueError("agent profiles are unavailable")
         await self.agents.use(name)
+
+    # --- provider configuration ---------------------------------------------
+
+    def list_providers(self) -> list[frontend.ProviderView]:
+        """Every configured provider, credential redacted to a presence flag."""
+        if self.agents is None:
+            return []
+        return [
+            frontend.ProviderView(
+                name=name,
+                model=config.model,
+                base_url=config.base_url,
+                has_key=_has_credential(name, config.api_key),
+            )
+            for name, config in sorted(self.agents.providers.items())
+        ]
+
+    def provider(self, name: str) -> frontend.ProviderView:
+        """One provider's configuration, credential redacted."""
+        if self.agents is None:
+            return frontend.ProviderView()
+        config = self.agents.provider_config(name)
+        return frontend.ProviderView(
+            name=name,
+            model=config.model,
+            base_url=config.base_url,
+            has_key=_has_credential(name, config.api_key),
+        )
+
+    async def configure_provider(self, name: str, api_key: str, model: str = "") -> None:
+        """Set a provider's key (and model), persisting and rebuilding the model."""
+        if self.agents is None:
+            raise ValueError("provider configuration is unavailable")
+        await self.agents.configure_provider(name, api_key, model)
 
     # --- conversation --------------------------------------------------------
 
@@ -212,6 +257,14 @@ class ConversationAdapter:
             capabilities.append("mcp")
         if self.memory is not None or self.session.memory.enabled:
             capabilities.append("memory")
+        # The credential is missing when the active provider resolved to an empty
+        # key. It is read from the controller's resolved table, not the raw
+        # settings, so a key supplied through the environment does not read as
+        # missing.
+        credential_missing = False
+        if self.agents is not None:
+            active_provider = self.agents.active_profile().provider
+            credential_missing = self.agents.provider_config(active_provider).api_key == ""
         return frontend.ConfigView(
             session_id=str(meta.id),
             session_title=meta.title,
@@ -225,6 +278,8 @@ class ConversationAdapter:
             agents=tuple(self.list_agents()),
             memory_enabled=self.memory_enabled(),
             memory_backend=self.memory_backend(),
+            credential_missing=credential_missing,
+            sandbox_downgraded=self._sandboxDowngraded,
             capabilities=tuple(capabilities),
         )
 
@@ -580,9 +635,11 @@ class ConversationAdapter:
         return notification
 
 
-def new_conversation_adapter(session: runtime.Session, *controllers: object) -> ConversationAdapter:
+def new_conversation_adapter(
+    session: runtime.Session, *controllers: object, sandbox_downgraded: bool = False
+) -> ConversationAdapter:
     """The session, plus whichever controllers apply."""
-    return ConversationAdapter(session, *controllers)
+    return ConversationAdapter(session, *controllers, sandbox_downgraded=sandbox_downgraded)
 
 
 async def _watchCancellation(cancellation: frontend.Cancellation, ctx: RunContext) -> None:
@@ -607,6 +664,20 @@ def _join(error: BaseException | None, other: BaseException | None) -> BaseExcep
     if other is None:
         return error
     return JoinedError(error, other)
+
+
+def _has_credential(provider: str, api_key: str) -> bool:
+    """Whether ``api_key`` is a real credential rather than empty or a placeholder.
+
+    The settings template writes ``sk-...`` / ``sk-ant-...`` as a stand-in; those
+    are "unset", not secrets, so a presence flag built from them must not read as
+    "a key is present".
+    """
+    if api_key == "":
+        return False
+    if provider == "claude":
+        return api_key != "sk-ant-..."
+    return api_key != "sk-..."
 
 
 # --- the mapping table -------------------------------------------------------

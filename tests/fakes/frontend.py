@@ -53,6 +53,8 @@ class FakeConversation:
         self.remembered: list[str] = []
         self.memory_switches: list[bool] = []
         self.memory_on = True
+        self.providers: list[frontend.ProviderView] = []
+        self.configured: list[tuple[str, str, str]] = []
         self.last_turn: (
             tuple[
                 frontend.Channel[frontend.ConversationNotification],
@@ -159,6 +161,20 @@ class FakeConversation:
 
     async def use_agent(self, name: str) -> None:
         self.used_agents.append(name)
+
+    # --- provider configuration ----------------------------------------------
+
+    def list_providers(self) -> list[frontend.ProviderView]:
+        return list(self.providers)
+
+    def provider(self, name: str) -> frontend.ProviderView:
+        for item in self.providers:
+            if item.name == name:
+                return item
+        return frontend.ProviderView()
+
+    async def configure_provider(self, name: str, api_key: str, model: str = "") -> None:
+        self.configured.append((name, api_key, model))
 
     # --- cross-session memory ------------------------------------------------
 

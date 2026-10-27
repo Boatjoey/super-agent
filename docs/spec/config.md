@@ -27,9 +27,13 @@
 
 `provider` 选择默认服务商。适配器位于 `llm/`；兼容 OpenAI 的服务商将系统提示词作为聊天 `system` 消息发送，Claude 则通过 Anthropic 的 `system` 字段发送。
 
-选中服务商的凭据在配置加载时解析。模板占位符（`sk-...`、`sk-ant-...`）视为未设置；配置条目未设置凭据时，从 `<PROVIDER>_API_KEY`（例如 `DEEPSEEK_API_KEY`）获取。服务商未出现在 `providers` 中，或最终仍没有凭据时，配置加载失败，并指出缺失内容，不会等到第一轮才出现认证错误。
+选中服务商的凭据在配置加载时解析。模板占位符（`sk-...`、`sk-ant-...`）视为未设置；配置条目未设置凭据时，从 `<PROVIDER>_API_KEY`（例如 `DEEPSEEK_API_KEY`）获取。服务商未出现在 `providers` 中仍属配置结构错误，配置加载失败；**已列出的服务商最终没有凭据时不再阻断启动**——应用以空凭据启动，使各前端能提供配置入口，认证错误推迟到第一轮才出现。运行时的凭据与模型修改见[运行时配置](#运行时配置)。
 
 **构建模型必须使用解析后的配置。** `new_session_with_extensions` 从解析后的条目构造适配器，不使用原始 `providers` 映射，因此仍含模板占位符的配置文件不会把 `sk-...` 作为 bearer token 发送。自定义 Agent 配置若指定其他服务商，则按原样使用该服务商条目；若覆盖 `model`，则在选中条目的基础上叠加该覆盖值。
+
+## 运行时配置
+
+服务商凭据与模型可在运行中修改，由终端 `/config`、Web 的 `GET/POST /api/providers` 提供；ACP 因协议没有表达“配置凭据”的消息而不设入口，凭据由宿主经环境变量注入。修改写入 `settings.json`（重启后仍生效）并立即重建当前模型，使新凭据在下一轮生效。凭据缺失与沙箱降级作为启动状态暴露在 `ConfigView` 的 `credential_missing` 与 `sandbox_downgraded`，前端据此提示而非静默。
 
 ## Agent 配置
 
@@ -90,6 +94,8 @@
 ```
 
 默认模式为 `strict`；`off` 显式关闭隔离。平台支持及依赖缺失时的执行行为见[工具沙箱](tools.md#沙箱)。
+
+`strict` 依赖 Linux 的 `bubblewrap`。在非 Linux 平台，未显式设置的默认 `strict` 自动降级为 `off` 并记录 `sandbox_downgraded`，使应用仍能启动、让操作者看到“命令将以完整权限运行”的提示；显式选择 `strict` 仍按不支持处理（见[工具沙箱](tools.md#沙箱)）。
 
 ## 服务器
 

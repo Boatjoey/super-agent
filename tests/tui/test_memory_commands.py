@@ -25,6 +25,7 @@ def command_model(conversation: FakeConversation) -> Model:
             memory=conversation,
             workspace=conversation,
             extensions=conversation,
+            providers=conversation,
         ),
     )
 

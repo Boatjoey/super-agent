@@ -83,7 +83,9 @@ async def run(cfg: app.Config, flags: app.Flags, *, port: int = DEFAULT_PORT) ->
     except Exception as error:
         print(error, file=sys.stderr)
         return 1
-    conversation = app.new_conversation_adapter(session, mcpController, agentController, memoryController)
+    conversation = app.new_conversation_adapter(
+        session, mcpController, agentController, memoryController, sandbox_downgraded=cfg.sandbox_downgraded
+    )
     workspace = cfg.workspace
     cwd = cfg.project.root if workspace is None else workspace.get_cwd()
     try:
@@ -92,6 +94,10 @@ async def run(cfg: app.Config, flags: app.Flags, *, port: int = DEFAULT_PORT) ->
             # traffic may reach stdout while this runs.
             await acp.serve_streams(conversation, session_id=str(session.metaID()), cwd=cwd)
         elif flags.web:
+            await web.serve(conversation, host=flags.host or DEFAULT_HOST, port=port)
+        elif sys.platform == "win32":
+            # Windows ships without the terminal, so the web interface is the
+            # default there; other platforms keep the terminal as the default.
             await web.serve(conversation, host=flags.host or DEFAULT_HOST, port=port)
         else:
             await _run_terminal(cfg, session, conversation, agentController, cwd)

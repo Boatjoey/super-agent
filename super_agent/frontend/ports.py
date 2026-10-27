@@ -28,6 +28,8 @@ __all__ = [
     "ConfigView",
     "Conversation",
     "PermissionPort",
+    "ProviderPort",
+    "ProviderView",
     "SessionPort",
     "SessionSummary",
     "SnapshotPort",
@@ -110,6 +112,14 @@ class ConfigView:
     #: empty name means the application has no memory at all.
     memory_enabled: bool = False
     memory_backend: str = ""
+    #: Whether the selected provider has no usable credential yet. True means the
+    #: application started without a key, so an interface should offer to enter
+    #: one; the first turn fails with the provider's own authentication error.
+    credential_missing: bool = False
+    #: Whether the strict sandbox was downgraded to ``off`` on this platform.
+    #: True means commands run with the operator's full authority, which the
+    #: interface should make visible.
+    sandbox_downgraded: bool = False
     #: The operations this application performs, so a front end can offer exactly
     #: those. A name absent here is unavailable, not hidden: a browser must not
     #: show a button whose call would fail.
@@ -269,7 +279,46 @@ class MemoryPort(Protocol):
     async def set_memory_enabled(self, enabled: bool) -> None: ...
 
 
-class Conversation(SnapshotPort, ConfigPort, TurnPort, SessionPort, PermissionPort, AgentPort, MemoryPort, Protocol):
+@dataclasses.dataclass(frozen=True, slots=True)
+class ProviderView:
+    """What a provider is configured as, credential redacted.
+
+    ``api_key`` is never the stored secret: it is either empty (unset) or a
+    placeholder meaning "a key is present", so an interface can show state
+    without ever displaying the credential itself.
+    """
+
+    name: str = ""
+    model: str = ""
+    base_url: str = ""
+    has_key: bool = False
+
+
+class ProviderPort(Protocol):
+    """Reads provider configuration and sets the credential and model.
+
+    Setting a key persists it to ``settings.json`` and rebuilds the active model,
+    so the next turn uses it without a restart.
+    """
+
+    def list_providers(self) -> list[ProviderView]: ...
+
+    def provider(self, name: str) -> ProviderView: ...
+
+    async def configure_provider(self, name: str, api_key: str, model: str = "") -> None: ...
+
+
+class Conversation(
+    SnapshotPort,
+    ConfigPort,
+    TurnPort,
+    SessionPort,
+    PermissionPort,
+    AgentPort,
+    MemoryPort,
+    ProviderPort,
+    Protocol,
+):
     """The bundle a transport-only front end needs.
 
     A terminal keeps a wider bundle (its own commands, MCP management, memory);

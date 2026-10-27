@@ -20,7 +20,12 @@ import dataclasses
 from collections.abc import Callable, Sequence
 
 from super_agent import llm
-from super_agent.app.config import Config, firstNonEmpty
+from super_agent.app.config import (
+    Config,
+    firstNonEmpty,
+    load_settings_file,
+    save_settings_file,
+)
 from super_agent.app.instructions import Bundle, load as loadInstructions
 from super_agent.app.system_prompt import SYSTEM_PROMPT
 from super_agent.app.workflows import WorkflowController
@@ -119,9 +124,14 @@ class routedModel:
 
 
 class AgentController:
-    """Lists, switches, and describes the configured agent profiles."""
+    """Lists, switches, and describes the configured agent profiles.
 
-    __slots__ = ("base", "current", "model", "profiles", "providers", "session", "tools", "workflows")
+    It also owns provider configuration: setting a provider's key or model writes
+    ``settings.json`` and rebuilds the active model at once, so a key entered in
+    the interface takes effect without a restart.
+    """
+
+    __slots__ = ("base", "current", "model", "profiles", "providers", "session", "settings_path", "tools", "workflows")
 
     def __init__(
         self,
@@ -134,6 +144,7 @@ class AgentController:
         tools: filteredToolRunner | None,
         base: str,
         current: str,
+        settings_path: str = "",
     ) -> None:
         self.session = session
         self.model = model
@@ -143,6 +154,7 @@ class AgentController:
         self.tools = tools
         self.base = base
         self.current = current
+        self.settings_path = settings_path
 
     # --- workflow delegation -------------------------------------------------
 
@@ -209,6 +221,51 @@ class AgentController:
         if self.tools is not None:
             self.tools.setAllowed(profile.tools)
         self.current = name
+
+    # --- provider configuration ---------------------------------------------
+
+    def provider_config(self, provider: str) -> llm.ProviderConfig:
+        """The resolved configuration for ``provider``, credential included."""
+        return self.providers.get(provider, llm.ProviderConfig())
+
+    async def configure_provider(self, provider: str, api_key: str, model: str = "") -> None:
+        """Set a provider's credential (and optionally model), persisting both.
+
+        The write goes to ``settings.json`` first so a restart keeps the key, then
+        the in-memory provider table is updated and the active model rebuilt when
+        the configured provider is the one in use. The model is rebuilt rather
+        than the session being restarted, so a key entered in the interface takes
+        effect on the very next turn.
+        """
+        if provider not in self.providers:
+            raise ValueError("unknown provider: " + provider)
+        if self.settings_path == "":
+            raise ValueError("provider configuration is not writable: no settings path")
+        # Persist first: a key that does not survive the restart is a trap.
+        settings = load_settings_file(self.settings_path)
+        updated = settings.providers.get(provider)
+        if updated is None:
+            raise ValueError("provider is not in settings: " + provider)
+        updated = dataclasses.replace(updated, api_key=api_key)
+        if model != "":
+            updated = dataclasses.replace(updated, model=model)
+        settings = dataclasses.replace(settings, providers={**settings.providers, provider: updated})
+        save_settings_file(self.settings_path, settings)
+        # Rebuild the in-memory table and the active model. Profiles whose
+        # provider is the one just configured follow the new model name, so the
+        # status bar and the next switch do not show a stale value.
+        self.providers[provider] = updated
+        if model != "":
+            self.profiles = {
+                name: (dataclasses.replace(profile, model=model) if profile.provider == provider else profile)
+                for name, profile in self.profiles.items()
+            }
+        profile = self.active_profile()
+        if profile.provider == provider:
+            config = self.providers[provider]
+            if profile.model != "":
+                config = dataclasses.replace(config, model=profile.model)
+            self.model.set(llm.new_model(provider, config))
 
 
 def buildAgentProfiles(cfg: Config, providers: dict[str, llm.ProviderConfig]) -> dict[str, AgentProfile]:

@@ -9,16 +9,36 @@ the next test.
 from __future__ import annotations
 
 import os
+import stat
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 
+def assert_mode(path: Path, mode: int) -> None:
+    """Assert ``path`` has POSIX permission ``mode``, where the platform can say so.
+
+    Windows has no POSIX owner/group/other permission bits: ``chmod`` there only
+    flips the read-only attribute, and ``stat`` always reports ``0o666``-ish bits.
+    The assertion is therefore a no-op on Windows, where the permission contract
+    is expressed through the user profile's access control instead.
+    """
+    if sys.platform == "win32":
+        return
+    assert stat.S_IMODE(path.stat().st_mode) == mode
+
+
 @pytest.fixture(autouse=True)
 def _deterministic_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Pin HOME and the working directory, and clear the environment knobs."""
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    home = str(tmp_path / "home")
+    monkeypatch.setenv("HOME", home)
+    # ``expanduser("~")`` reads ``USERPROFILE`` on Windows and ignores ``HOME``,
+    # so the two must move together or the settings path resolves to the real
+    # user directory and every config test reads the developer's own file.
+    monkeypatch.setenv("USERPROFILE", home)
     monkeypatch.delenv("YOLO", raising=False)
     monkeypatch.delenv("NO_TOOLS", raising=False)
     for name in tuple(os.environ):

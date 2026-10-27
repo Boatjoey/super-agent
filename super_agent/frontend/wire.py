@@ -169,6 +169,8 @@ def config_to_json(config: ConfigView) -> dict[str, Any]:
         "agents": [agent_to_json(agent) for agent in config.agents],
         "memory_enabled": config.memory_enabled,
         "memory_backend": config.memory_backend,
+        "credential_missing": config.credential_missing,
+        "sandbox_downgraded": config.sandbox_downgraded,
         "capabilities": list(config.capabilities),
     }
 

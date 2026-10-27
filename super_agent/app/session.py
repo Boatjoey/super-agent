@@ -232,6 +232,7 @@ async def new_session_with_extensions(
             tools=toolFilter,
             base=cwd,
             current=profile.name,
+            settings_path=settings_path(),
         )
         memories = MemoryController(memory, session, settings_path())
         return session, controller, agents, memories

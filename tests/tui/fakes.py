@@ -25,6 +25,7 @@ from super_agent.tui import (
     MessageAppended,
     Option,
     PermissionRequest,
+    ProviderView,
     QueuedReceipt,
     SessionSummary,
     StartupInfo,
@@ -57,6 +58,8 @@ class FakeConversation:
         self.memory_items: list[str] = []
         self.memory_on = True
         self.memory_switches: list[bool] = []
+        self.providers: list[ProviderView] = []
+        self.configured: list[tuple[str, str, str]] = []
 
     def snapshot(self) -> ConversationView:
         return ConversationView(agent_status=AgentStatus(label="Idle"))
@@ -160,6 +163,18 @@ class FakeConversation:
 
     async def use_agent(self, name: str) -> None:
         return None
+
+    def list_providers(self) -> list[ProviderView]:
+        return list(self.providers)
+
+    def provider(self, name: str) -> ProviderView:
+        for item in self.providers:
+            if item.name == name:
+                return item
+        return ProviderView()
+
+    async def configure_provider(self, name: str, api_key: str, model: str = "") -> None:
+        self.configured.append((name, api_key, model))
 
     async def memories(self) -> list[str]:
         return list(self.memory_items)
