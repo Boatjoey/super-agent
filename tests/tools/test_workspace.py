@@ -158,7 +158,7 @@ def test_resolve_writable_rejects_a_read_only_root(tmp_path: Path) -> None:
     shared = str(read_only / "shared.txt")
 
     _, display = resolve_readable(workspace, shared)
-    assert display == os.path.join("..", "readonly", "shared.txt")
+    assert display == "../readonly/shared.txt"
     with pytest.raises(RuntimeError, match="outside writable workspace roots"):
         resolve_writable(workspace, shared)
 

@@ -159,9 +159,11 @@ async def test_lsp_client_reconnects_when_the_working_directory_changes(tmp_path
     manager = await connect(live_context(), workspace, [server_config()])
     try:
         tool = manager.tools()[0]
-        assert os.path.realpath(first) in await tool.run(live_context(), call_for("lsp_diagnostics"))
+        first_report = json.loads(await tool.run(live_context(), call_for("lsp_diagnostics")))
+        assert [item["source"] for item in first_report] == [os.path.realpath(first)]
         workspace.cwd = os.path.realpath(second)
-        assert os.path.realpath(second) in await tool.run(live_context(), call_for("lsp_diagnostics"))
+        second_report = json.loads(await tool.run(live_context(), call_for("lsp_diagnostics")))
+        assert [item["source"] for item in second_report] == [os.path.realpath(second)]
     finally:
         await manager.close()
 

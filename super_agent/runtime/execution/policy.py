@@ -240,7 +240,7 @@ class DefaultPolicy:
                 or ".config/gcloud/" in clean
             ):
                 return True
-            if os.path.isabs(path) and request.cwd != "":
+            if isAbsolutePath(path) and request.cwd != "":
                 rel = _rel(request.cwd, path)
                 if rel is None or rel == ".." or rel.startswith(".." + os.sep):
                     return True
@@ -295,6 +295,16 @@ def isRiskyTool(name: str, specs: tuple[ToolSpec, ...]) -> bool:
         if spec.name == name:
             return spec.risky
     return True
+
+
+def isAbsolutePath(path: str) -> bool:
+    """Whether ``path`` is rooted, including Windows paths that name no drive.
+
+    ``os.path.isabs("/etc/passwd")`` is false on Windows although the path
+    resolves to ``C:\\etc\\passwd``, outside the workspace, so the rooted form
+    has to count as absolute there as well.
+    """
+    return os.path.isabs(path) or (os.name == "nt" and path[:1] in ("/", "\\"))
 
 
 def _cleanSlash(path: str) -> str:

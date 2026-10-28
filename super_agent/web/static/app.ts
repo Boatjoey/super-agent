@@ -1865,6 +1865,11 @@ async function saveSettings(): Promise<void> {
 
 // --- tools and session operations -------------------------------------------
 
+function toolsFocusables(): HTMLElement[] {
+  const nodes = els.toolsModal.querySelectorAll<HTMLElement>("button, input, select, textarea");
+  return Array.from(nodes).filter((node) => !node.hasAttribute("disabled"));
+}
+
 function openTools(): void {
   els.toolsModal.classList.remove("hidden");
   els.toolsOutput.textContent = "";
@@ -1873,6 +1878,7 @@ function openTools(): void {
 
 function closeTools(): void {
   els.toolsModal.classList.add("hidden");
+  els.tools.focus();
 }
 
 function toolsShow(value: unknown): void {
@@ -2028,6 +2034,24 @@ function wireTools(): void {
   els.toolsModal.addEventListener("click", (event) => {
     if (event.target === els.toolsModal) {
       closeTools();
+    }
+  });
+  els.toolsModal.addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") {
+      return;
+    }
+    const focusables = toolsFocusables();
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (!first || !last) {
+      return;
+    }
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
     }
   });
   const actions: Record<string, () => void> = {
@@ -2391,14 +2415,18 @@ els.sidebar.addEventListener("keydown", (event) => {
   }
 });
 
-// Escape closes the topmost layer first: settings dialog, then the mobile
-// drawer, and only then — armed, not immediate — the running turn.
+// Escape closes the topmost layer first: settings dialog, the tool panel, then
+// the mobile drawer, and only then — armed, not immediate — the running turn.
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") {
     return;
   }
   if (!els.settingsModal.classList.contains("hidden")) {
     closeSettings();
+    return;
+  }
+  if (!els.toolsModal.classList.contains("hidden")) {
+    closeTools();
     return;
   }
   if (drawerOpen()) {

@@ -68,6 +68,16 @@ async def test_read_file_supports_a_line_range(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_read_file_treats_crlf_as_a_line_ending(tmp_path: Path) -> None:
+    (tmp_path / "crlf.txt").write_bytes(b"one\r\ntwo\r\nthree\r\n")
+    registry = default_registry(workspace_for(tmp_path))
+
+    got = await must_succeed(registry, "read_file", {"path": "crlf.txt", "start_line": 2, "end_line": 3})
+
+    assert got == "2: two\n3: three"
+
+
+@pytest.mark.asyncio
 async def test_read_file_rejects_a_path_outside_the_workspace(tmp_path: Path) -> None:
     worktree = tmp_path / "worktree"
     worktree.mkdir()

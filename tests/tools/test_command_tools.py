@@ -19,6 +19,7 @@ from super_agent.runtime.protocol.run_context import live_context
 from super_agent.runtime.protocol.types import ToolCall
 from super_agent.tools import Registry, default_registry
 from super_agent.tools.workspace import WorkspaceContext
+from tests.tools.shell import native_pwd_command, reports_directory
 from tests.tools.test_workspace import workspace_for
 
 needs_git = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
@@ -78,10 +79,10 @@ async def test_run_command_defaults_to_the_injected_workspace_cwd(tmp_path: Path
     workspace: WorkspaceContext = workspace_for(injected)
     registry = default_registry(workspace)
 
-    got = await run(registry, "run_command", {"command": "pwd"})
+    got = await run(registry, "run_command", {"command": native_pwd_command()})
 
-    assert got.strip() == os.path.realpath(injected)
-    assert got.strip() == workspace.get_cwd()
+    assert reports_directory(got, os.path.realpath(injected))
+    assert reports_directory(got, workspace.get_cwd())
 
 
 @needs_git

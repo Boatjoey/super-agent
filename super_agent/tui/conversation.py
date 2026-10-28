@@ -70,14 +70,10 @@ from super_agent.frontend import (
     TurnPort as TurnPort,
     UsageReported as UsageReported,
 )
-from super_agent.tui.attachments import Item as MessageAttachment, Port as AttachmentsPort
+from super_agent.tui.attachments import Item as MessageAttachment
 from super_agent.tui.commands import (
     AgentSummary,
-    ExtensionPort,
-    MCPPort,
     MCPServerSummary,
-    MemoryPort,
-    WorkspacePort,
 )
 
 __all__ = [

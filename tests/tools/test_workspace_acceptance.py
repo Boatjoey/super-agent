@@ -19,6 +19,7 @@ import pytest
 from super_agent.runtime.protocol.run_context import live_context
 from super_agent.runtime.protocol.types import ToolCall
 from super_agent.tools import Registry, default_registry
+from tests.tools.shell import native_pwd_command, reports_directory
 from tests.tools.test_workspace import ACCESS_READ, ACCESS_READ_WRITE, Root, new_context, workspace_for
 
 needs_git = pytest.mark.skipif(shutil.which("git") is None, reason="git is required")
@@ -105,8 +106,8 @@ async def test_command_tools_use_the_workspace_cwd_not_the_process_cwd(tmp_path:
     registry = default_registry(workspace)
 
     for name in ("run_command", "bash"):
-        result = await must_tool_succeed(registry, name, {"command": "pwd"})
-        assert result.strip() == workspace.get_cwd()
+        result = await must_tool_succeed(registry, name, {"command": native_pwd_command()})
+        assert reports_directory(result, workspace.get_cwd())
 
     await must_tool_succeed(registry, "run_command", {"command": "touch written.txt"})
     assert (project / "written.txt").exists()

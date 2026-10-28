@@ -16,7 +16,7 @@ from collections.abc import Callable, Coroutine
 from rich.style import Style
 from rich.text import Text
 
-from super_agent.frontend.ports import AttachmentSummary as Item, AttachmentsPort as Port
+from super_agent.frontend.ports import AttachmentsPort as Port, AttachmentSummary as Item
 
 __all__ = ["AttachCommand", "Attached", "Item", "Loaded", "Model", "Outcome", "Port", "Styles", "new"]
 

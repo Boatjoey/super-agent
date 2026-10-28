@@ -185,9 +185,7 @@ class Router:
                 await self._runner.start_turn(prompt)
                 return json_response({"accepted": True}, status=202)
             case ("GET", ["mcp"]):
-                return json_response(
-                    {"servers": [self._mcp(item) for item in self._conversation.list_mcp_servers()]}
-                )
+                return json_response({"servers": [self._mcp(item) for item in self._conversation.list_mcp_servers()]})
             case ("POST", ["mcp"]):
                 name = str(request.json.get("name", "")).strip()
                 command = str(request.json.get("command", "")).strip()

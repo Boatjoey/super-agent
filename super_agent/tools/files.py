@@ -265,7 +265,7 @@ class WriteFileTool:
 
 def numbered_lines(content: str, start: int, end: int) -> str:
     """Render ``content`` as ``N: line`` for the requested inclusive range."""
-    content = content.removesuffix("\n")
+    content = content.replace("\r\n", "\n").removesuffix("\n")
     lines = content.split("\n")
     if start <= 0:
         start = 1

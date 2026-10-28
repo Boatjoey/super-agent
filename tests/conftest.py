@@ -39,6 +39,10 @@ def _deterministic_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     # so the two must move together or the settings path resolves to the real
     # user directory and every config test reads the developer's own file.
     monkeypatch.setenv("USERPROFILE", home)
+    # An existing home keeps login shells quiet: Git Bash prints an MSYS2
+    # first-start banner while ``$HOME`` does not exist, and that banner lands
+    # in command output the tests compare.
+    Path(home).mkdir(parents=True, exist_ok=True)
     monkeypatch.delenv("YOLO", raising=False)
     monkeypatch.delenv("NO_TOOLS", raising=False)
     for name in tuple(os.environ):

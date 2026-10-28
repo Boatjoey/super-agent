@@ -542,9 +542,7 @@ async def test_workflows_start_a_turn_with_the_shared_prompt() -> None:
 
 @pytest.mark.asyncio
 async def test_instructions_are_read_from_the_active_session() -> None:
-    conversation = FakeConversation(
-        config=frontend.ConfigView(instruction_sources=("AGENTS.md", "CLAUDE.md"))
-    )
+    conversation = FakeConversation(config=frontend.ConfigView(instruction_sources=("AGENTS.md", "CLAUDE.md")))
     router, _hub, _runner = build(conversation)
 
     status, payload = await call(router, "GET", "/api/instructions")
