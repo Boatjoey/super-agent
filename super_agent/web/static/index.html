@@ -115,6 +115,10 @@
               <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-settings" /></svg>
               <span>配置</span>
             </button>
+            <button id="tools" class="toggle" type="button" title="工具与会话">
+              <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-folder" /></svg>
+              <span>工具</span>
+            </button>
           </div>
         </header>
 
@@ -185,6 +189,48 @@
         <div class="settings-actions">
           <button id="settings-cancel" class="btn" type="button">取消</button>
           <button id="settings-save" class="btn primary" type="button">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tools-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="tools-title">
+      <div class="settings-panel tools-panel">
+        <div class="settings-head">
+          <span id="tools-title">工具与会话</span>
+          <button id="tools-close" class="settings-close" type="button" aria-label="关闭">
+            <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-close" /></svg>
+          </button>
+        </div>
+        <div class="settings-body">
+          <div class="tools-grid">
+            <button id="tools-mcp-list" class="btn" type="button">MCP 列表</button>
+            <button id="tools-mcp-add" class="btn" type="button">添加 MCP</button>
+            <button id="tools-mcp-remove" class="btn" type="button">删除 MCP</button>
+            <button id="tools-mcp-restart" class="btn" type="button">重启 MCP</button>
+            <button id="tools-attach-list" class="btn" type="button">附件列表</button>
+            <button id="tools-attach" class="btn" type="button">添加附件</button>
+            <button id="tools-diff" class="btn" type="button">查看 Diff</button>
+            <button id="tools-status" class="btn" type="button">仓库状态</button>
+            <button id="tools-diagnostics" class="btn" type="button">诊断</button>
+            <button id="tools-compact" class="btn" type="button">压缩会话</button>
+            <button id="tools-fork" class="btn" type="button">分支会话</button>
+            <button id="tools-export" class="btn" type="button">导出会话</button>
+            <button id="tools-rename" class="btn" type="button">重命名会话</button>
+            <button id="tools-delete" class="btn" type="button">删除会话</button>
+            <button id="tools-undo" class="btn" type="button">撤销变更</button>
+            <button id="tools-memory-list" class="btn" type="button">记忆列表</button>
+            <button id="tools-remember" class="btn" type="button">记住</button>
+            <button id="tools-forget" class="btn" type="button">清空记忆</button>
+            <button id="tools-extensions" class="btn" type="button">扩展列表</button>
+            <button id="tools-expand" class="btn" type="button">展开命令</button>
+            <button id="tools-agent" class="btn" type="button">切换 Agent</button>
+            <button id="tools-review" class="btn" type="button">Review 变更</button>
+            <button id="tools-fix-ci" class="btn" type="button">修复 CI</button>
+            <button id="tools-commit-message" class="btn" type="button">提交信息建议</button>
+            <button id="tools-instructions" class="btn" type="button">上下文文件</button>
+            <button id="tools-help" class="btn" type="button">帮助</button>
+          </div>
+          <pre id="tools-output" class="tools-output" aria-live="polite"></pre>
         </div>
       </div>
     </div>

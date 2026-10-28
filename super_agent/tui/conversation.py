@@ -133,20 +133,10 @@ __all__ = [
 ]
 
 
-class Conversation(
-    ConversationPort,
-    MCPPort,
-    MemoryPort,
-    ProviderPort,
-    WorkspacePort,
-    ExtensionPort,
-    AttachmentsPort,
-    Protocol,
-):
-    """The composition-boundary bundle :func:`super_agent.tui.new` accepts.
+class Conversation(ConversationPort, Protocol):
+    """The terminal bundle :func:`super_agent.tui.new` accepts.
 
-    ``App`` keeps the snapshot and turn ports and routes every other capability
-    to the feature that owns it. ``Protocol`` is listed explicitly: a class that
-    only inherits protocols is matched nominally without it, so a structurally
-    correct adapter would not satisfy the bundle.
+    Both front ends now receive the same full contract; this name remains for the
+    terminal's historical spelling. ``Protocol`` is listed explicitly so the
+    bundle stays nominal rather than structural.
     """

@@ -44,6 +44,36 @@ REQUIRED_IDS = {
     "error-region",
     "usage",
     "settings",
+    "tools",
+    "tools-modal",
+    "tools-close",
+    "tools-output",
+    "tools-mcp-list",
+    "tools-mcp-add",
+    "tools-mcp-remove",
+    "tools-mcp-restart",
+    "tools-attach-list",
+    "tools-attach",
+    "tools-diff",
+    "tools-status",
+    "tools-diagnostics",
+    "tools-compact",
+    "tools-fork",
+    "tools-export",
+    "tools-rename",
+    "tools-delete",
+    "tools-undo",
+    "tools-memory-list",
+    "tools-remember",
+    "tools-forget",
+    "tools-extensions",
+    "tools-expand",
+    "tools-agent",
+    "tools-review",
+    "tools-fix-ci",
+    "tools-commit-message",
+    "tools-instructions",
+    "tools-help",
     "transcript",
     "conversation",
     "approval",
@@ -126,6 +156,13 @@ def test_the_page_is_a_module_app_with_an_accessible_conversation(page: Page) ->
     assert dialog.get("role") == "dialog"
     assert dialog.get("aria-modal") == "true"
     assert dialog.get("aria-labelledby") == "settings-title"
+
+
+def test_the_tools_dialog_is_a_modal_dialog(page: Page) -> None:
+    dialog = next(values for _tag, values in page.tags if values.get("id") == "tools-modal")
+    assert dialog.get("role") == "dialog"
+    assert dialog.get("aria-modal") == "true"
+    assert dialog.get("aria-labelledby") == "tools-title"
 
 
 def test_icon_only_controls_have_names_and_no_inline_handlers(page: Page) -> None:

@@ -1,8 +1,8 @@
 # 前端与 Agent 的应用接口
 
-本规范定义三个前端与 Agent 应用服务之间的契约。架构边界见[软件架构](../design/software-architecture.md#前端与-agent-应用服务的边界)，体验要求见 [UI](../design/ui.md) 和 [UX](../design/ux.md)。
+本规范定义两个前端与 Agent 应用服务之间的契约。架构边界见[软件架构](../design/software-architecture.md#前端与-agent-应用服务的边界)，体验要求见 [UI](../design/ui.md) 和 [UX](../design/ux.md)。
 
-接口本身是进程内的异步端口；承载它的前端有三个——终端（进程内直连）、本机 Web 界面（HTTP 与服务器推送事件）、ACP 服务（标准输入输出的 JSON-RPC），见[三个前端与承载方式](#三个前端与承载方式)。本文件区分兼容接口与目标扩展；实现缺口及验收状态见 [Gap](../gap.md#已知待完成工作)和 [Flow](../flow.md#开发节点邻接表)。
+接口本身是进程内的异步端口；承载它的前端有两个——终端（进程内直连）和本机 Web 界面（HTTP 与服务器推送事件），见[两个前端与承载方式](#两个前端与承载方式)。本文件区分兼容接口与目标扩展；实现缺口及验收状态见 [Gap](../gap.md#已知待完成工作)和 [Flow](../flow.md#开发节点邻接表)。
 
 ## 职责与交互方向
 
@@ -13,20 +13,20 @@
 
 接口由四类交互组成：命令调用与受理回执、只读快照、单轮通知流，以及审批和取消输入。异步调用返回前可能持续产生通知；通知流不是另一个 Agent 调度循环。
 
-## 三个前端与承载方式
+## 两个前端与承载方式
 
-端口、展示值与通知集合由前端契约包[`super_agent/frontend`](../../super_agent/frontend/__init__.py)定义，运行时到展示值的唯一转换在[`app/conversation_adapter.py`](../../super_agent/app/conversation_adapter.py)。三个前端都只依赖契约，不互相依赖：
+端口、展示值与通知集合由前端契约包[`super_agent/frontend`](../../super_agent/frontend/__init__.py)定义，运行时到展示值的唯一转换在[`app/conversation_adapter.py`](../../super_agent/app/conversation_adapter.py)。两个前端都只依赖契约，不互相依赖：
 
 | 前端 | 包 | 承载 | 启动方式 | 说明 |
 |---|---|---|---|---|
-| 终端 | [`super_agent/tui`](../../super_agent/tui/__init__.py) | 进程内直连 | `super-agent` | 交互式命令行，额外提供命令面板、附件、MCP 管理等终端专属能力 |
-| Web | [`super_agent/web`](../../super_agent/web/__init__.py) | 本机 HTTP，事件流用服务器推送事件 | `super-agent --web` | 会话侧栏、流式回复、工具卡片、审批、引导、排队与取消 |
-| ACP | [`super_agent/acp`](../../super_agent/acp/__init__.py) | 标准输入输出的 JSON-RPC（Agent Client Protocol） | `super-agent --acp` | 编辑器作为客户端；一个 ACP session 对应一个会话 |
+| 终端 | [`super_agent/tui`](../../super_agent/tui/__init__.py) | 进程内直连 | `super-agent`（Linux/macOS 无标志） | 交互式命令行；命令面板、附件、MCP 管理等操作与 Web 相同，只有呈现方式不同；Windows 不提供该前端 |
+| Web | [`super_agent/web`](../../super_agent/web/__init__.py) | 本机 HTTP，事件流用服务器推送事件 | `super-agent --web` | 会话侧栏、流式回复、工具卡片、审批、引导、排队、取消，以及命令面板、附件、MCP 管理等与终端相同的操作 |
 
-承载方式不改变语义，但在协议缺位处必须以明确取舍处理，不能自行发明字段：
+无标志启动的默认前端随平台而定：Windows 打开本机 Web 界面，Linux/macOS 打开终端。平台范围见[产品定义](../design/product.md#前端与平台)。
+
+承载方式不改变语义：
 
 - Web 每次交互是一条 HTTP 请求，通知转为同名事件；`GET /api/events` 在订阅时先发送一份完整快照，重连后的界面据此重建，不依赖补发增量。接口清单见[Web 接口](#web-接口)。
-- ACP 的 `session/prompt` 是一次轮次，`session/cancel` 是唯一的运行中干预手段，没有“在当前步骤后插入”的等价消息；失败以 JSON-RPC 错误返回，`stopReason` 只表示轮次如何结束。映射见[ACP 映射](#acp-映射)。
 - Web 默认只监听 `127.0.0.1`：界面能触发工具执行，把它暴露到网络等于把执行权交给网络。当前不提供认证，也不支持多用户。
 
 ## Web 接口
@@ -35,6 +35,7 @@
 |---|---|---|
 | `GET /api/snapshot` | — | 当前视图、配置视图与是否有轮次在运行；视图含 `pending_approval_id` |
 | `GET /api/config` | — | 当前配置视图；与快照中的配置同源 |
+| `GET /api/instructions` | — | 载入上下文的指令文件路径 |
 | `GET /api/health` | — | 本机服务、单轮运行状态与事件订阅者数量 |
 | `GET /api/events` | — | 事件流：先发 `Snapshot`，随后是通知同名事件与 `TurnStarted`/`TurnFinished` |
 | `POST /api/turns` | `{"text"}` | 受理开始轮次；已有轮次在跑时返回 409 |
@@ -52,23 +53,30 @@
 | `POST /api/sessions/{id}/rename` | `{"title"}` | 重命名 |
 | `DELETE /api/sessions/{id}` | — | 删除 |
 | `POST /api/reset`、`POST /api/undo` | — | 重置或撤销，并推送新快照 |
+| `POST /api/workflows/{name}` | — | 以共享工作流提示开始一轮；名称 `review`、`fix-ci`、`commit-message` |
 
-## ACP 映射
+### 工具与会话接口
 
-| ACP 消息 | 方向 | 本项目含义 |
+下列接口与终端的命令面板、附件、MCP 管理等操作对应，使用同一组应用端口；Web 的“工具”面板提供这些入口，验收进度见 [G13](../gap.md#已知待完成工作)。
+
+| 方法与路径 | 请求 | 结果 |
 |---|---|---|
-| `initialize` | 客户端 → Agent | 报告协议版本与能力：`loadSession` 支持，图片与音频提示不支持 |
-| `session/new` | 客户端 → Agent | 返回会话标识与可用模式（权限模式） |
-| `session/load` | 客户端 → Agent | 恢复已保存会话，并按 `session/update` 重放历史消息 |
-| `session/prompt` | 客户端 → Agent | 执行一次轮次，返回 `stopReason`；失败返回 JSON-RPC 错误 |
-| `session/cancel` | 客户端 → Agent（通知） | 取消当前轮次，`stopReason` 为 `cancelled` |
-| `session/set_mode` | 客户端 → Agent | 切换权限模式 |
-| `session/update` | Agent → 客户端（通知） | `agent_message_chunk`、`agent_thought_chunk`、`tool_call`、`tool_call_update`、`user_message_chunk`（重放） |
-| `session/request_permission` | Agent → 客户端（请求） | 工具审批；三个选项对应 `once`、`always` 与拒绝，未选择或无法回答一律视为拒绝 |
-
-`agent_message_chunk` 只发送新增文本：通知携带的是累积消息，增量在适配器内计算，避免重复。token 用量没有对应字段，因此不发送。
-
-排队输入在 ACP 没有对应消息：协议只提供 `session/prompt`（一次轮次）与 `session/cancel`，没有“在当前轮次之后插入”的等价消息，因此该前端只能表达中途引导之外的取消，不能表达排队。这里不为补齐功能而发明协议字段——编一个客户端不认识的扩展，等于让编辑器在别的实现上失效。
+| `GET /api/mcp` | — | `{"servers": [{"name", "tools": [...]}]}` |
+| `POST /api/mcp` | `{"name", "command", "args"}` | 添加并启动服务器 |
+| `DELETE /api/mcp/{name}` | — | 删除服务器 |
+| `POST /api/mcp/{name}/restart` | — | 重启服务器 |
+| `GET /api/attachments` | — | `{"items": [{"name", "mime"}]}` |
+| `POST /api/attachments` | `{"path"}` | 暂存工作区文件到下一轮 |
+| `GET /api/workspace/diff`、`GET /api/workspace/status` | — | 只读仓库查询 |
+| `GET /api/workspace/diagnostics?path=…` | — | 语言服务诊断 |
+| `GET /api/extensions` | — | `{"commands": [...], "skills": [...], "plugins": [...]}` |
+| `POST /api/extensions/expand` | `{"name", "arguments"}` | 展开自定义命令为提示词 |
+| `POST /api/memory/items` | `{"text"}` | 增加一行记忆 |
+| `DELETE /api/memory/items` | — | 清空全部记忆行 |
+| `GET /api/agents`、`POST /api/agents/{name}` | — | 列出、切换 Agent |
+| `POST /api/sessions/{id}/compact` | `{"summary"}` | 压缩上下文 |
+| `POST /api/sessions/{id}/fork` | `{"title"}` | 分支会话 |
+| `POST /api/sessions/{id}/export` | `{"format"}` | 导出会话，返回写入路径 |
 
 ## 已有操作与代码映射
 
@@ -83,11 +91,11 @@
 | 提交审批 | `TurnPort.approve(decision, request_id)` | 立即返回 `ApprovalReceipt`：`accepted` 或 `rejected`（附原因）。`request_id` 必须是 `snapshot().pending_approval_id` 或 `ToolApprovalRequested.request_id` 给出的那一个；应用在交接前就把它标记为已消费，因此重复提交第二次必被拒绝 |
 | 会话管理 | `SessionPort` | 重置、列表、恢复、重命名、删除、压缩、撤销、分支和导出 |
 | 权限与 Agent 配置 | `PermissionPort`、`AgentPort` | 读取、选择当前策略及配置，结果由应用负责生效 |
-| 服务商配置 | `ProviderPort` | 列出服务商（凭据以 `has_key` 标记、绝不回显密钥）、设置某服务商的凭据与模型；写回 `settings.json` 并重建当前模型。ACP 无入口，凭据由宿主经环境变量注入 |
+| 服务商配置 | `ProviderPort` | 列出服务商（凭据以 `has_key` 标记、绝不回显密钥）、设置某服务商的凭据与模型；写回 `settings.json` 并重建当前模型 |
 | 附件与工作区查询 | `AttachmentsPort`、`WorkspacePort` | 附件验证、待提交附件及只读仓库、诊断查询 |
 | 记忆与扩展管理 | `MemoryPort`、`ExtensionPort`、`MCPPort` | 记忆读写与开关见[跨会话记忆](#跨会话记忆)；扩展与 MCP 按各自契约处理 |
 
-端口集合声明于[前端契约](../../super_agent/frontend/ports.py)、[终端专属端口](../../super_agent/tui/commands/ports.py)及各功能端口；[`tui.conversation`](../../super_agent/tui/conversation.py) 按终端既有名称重新导出契约。应用适配器为 [ConversationAdapter](../../super_agent/app/conversation_adapter.py)，`TerminalConversation` 是其历史名称。
+端口集合声明于[前端契约](../../super_agent/frontend/ports.py)及各功能端口；`tui` 只按终端既有名称重新导出契约，不再拥有独立的应用端口。应用适配器为 [ConversationAdapter](../../super_agent/app/conversation_adapter.py)，`TerminalConversation` 是其历史名称。
 
 该集合按用例拆分，前端功能只使用自己需要的窄端口。不能因存在统一组合入口，就让每个界面模块直接调用整个运行时。
 
@@ -116,6 +124,7 @@
 |---|---|
 | `session_id`、`session_title` | 当前会话身份与标题 |
 | `workspace`、`roots` | 工作目录与允许的根目录 |
+| `instruction_sources` | 载入上下文的指令文件路径 |
 | `agent`、`provider`、`model` | 当前 Agent 名称、服务商与模型标识，都是展示值，不含 SDK 对象 |
 | `permission_mode`、`auto_approve` | 当前权限模式与是否自动批准 |
 | `reasoning_effort`、`reasoning_efforts` | 当前推理强度与可选值；`reasoning_effort` 为空表示“未提供”，界面应隐藏该项，不能自拟一个默认值展示 |
@@ -165,7 +174,7 @@
 |---|---|---|---|
 | 开始轮次 | 当前会话、输入标识、正文及已验证附件 | 是否接受开始请求，以及所属轮次 | `TurnPort.run_turn` 可用；内部已按轮次编号并接受排队输入的标识，但调用方仍不传开始轮次的标识，也没有开始轮次的回执 |
 | 中途引导 | 当前会话、当前轮次、输入标识及正文 | 是否受理等待，并在实际接纳时报告所属步骤 | `TurnPort.steer` 已实现受理与接纳回执；附件仍随下一轮提交 |
-| 排队输入 | 当前会话、输入标识及正文 | 是否进入后续输入队列，并在实际接纳时报告所属新轮次 | `TurnPort.queue` 已实现受理回执与接纳/撤销通知，后续轮次由应用在 `run_turn` 内续接；终端与 Web 已提供入口（Web 在轮次运行中显示“排队”，与“引导”并列），ACP 协议没有等价消息 |
+| 排队输入 | 当前会话、输入标识及正文 | 是否进入后续输入队列，并在实际接纳时报告所属新轮次 | `TurnPort.queue` 已实现受理回执与接纳/撤销通知，后续轮次由应用在 `run_turn` 内续接；终端与 Web 均已提供入口（Web 在轮次运行中显示“排队”，与“引导”并列） |
 
 中途引导的接口扩展与 Step 生命周期同步：会话不调度动作，Machine 负责输入归属守卫，接口只搬运标识与结果。排队输入同理，接纳点是下一个轮次的开始：应用在一次 `run_turn` 调用里把排队的输入续接为后续轮次，前端只消费同一条通知通道，不自行排序。
 
@@ -196,7 +205,7 @@
 
 输入受理失败、会话操作失败与执行中失败统一用 `Failure` 表达：`message` 是可展示文本，`code` 区分 `failed` 与 `cancelled`，`operation` 说明是哪个操作失败的，`request_id` 在失败可归因到某个待决请求时填写。前端不需要解析内部异常类型就能判断该请求是否已经受理——受理问题由各回执（`SteeringReceipt`、`QueuedReceipt`、`ApprovalReceipt`）回答，失败值只回答“执行有没有成功”。
 
-未完成的部分：排队输入还没有 ACP 入口，因为协议没有等价消息（见 [ACP 映射](#acp-映射)）；审批标识是进程内的，不随会话持久化，因此不承担跨进程恢复语义。其余工作见 [G08](../gap.md#已知待完成工作)。
+未完成的部分：审批标识是进程内的，不随会话持久化，因此不承担跨进程恢复语义。其余工作见 [G08](../gap.md#已知待完成工作)。
 
 ## 跨会话记忆
 
@@ -213,13 +222,13 @@
 
 开关关闭时记忆不参与上下文，但已存的行保留；重新打开即可恢复——因此“关闭”不是“删除”，两者在接口上是不同的操作。
 
-ACP 没有记忆入口：协议没有表达“跨会话记住”的消息，也不该为此发明扩展字段。记忆由终端与 Web 表达。
+记忆由终端与 Web 共同表达，两端使用同一组操作。
 
 ## 验收条件
 
-1. 前端可以仅通过应用接口完成读取视图、提交任务、审批、取消和会话操作，不直接操作领域状态或基础设施。三个前端共用同一端口与展示值，任一新前端不得引入第二份运行时转换。
+1. 前端可以仅通过应用接口完成读取视图、提交任务、审批、取消和会话操作，不直接操作领域状态或基础设施。两个前端共用同一端口与展示值，任一新前端不得引入第二份运行时转换。
 2. 通道关闭及调用结果分别处理，缓冲通知完整消费；终端输出去重按[终端规范](terminal.md#流式输出与历史)验收。
 3. 界面重建读取快照，不重新提交任务或重放外部操作。
 4. 目标输入交互能验证中途引导与排队归属，回执与实际接纳时机一致。中途引导与排队输入均已有自动用例覆盖受理、接纳、拒绝与撤销；真实终端按键与并发竞态验收仍待完成。
-5. 审批关联能拒绝迟到、重复与跨轮次的应答，失败与取消后监听和等待正确结束。自动用例覆盖标识铸造、快照带出、错标识拒绝、重复提交只生效一次、无轮次时拒绝，以及三种前端的对应路径；真实浏览器与 ACP 客户端的端到端验收仍待完成。
+5. 审批关联能拒绝迟到、重复与跨轮次的应答，失败与取消后监听和等待正确结束。自动用例覆盖标识铸造、快照带出、错标识拒绝、重复提交只生效一次、无轮次时拒绝，以及两个前端的对应路径；真实浏览器与真实终端的端到端验收仍待完成。
 6. 记忆由一个端口保管，开关可见且可切换：关闭时上下文里没有记忆行且写入被拒绝，打开时记忆行回到上下文，关闭再打开后已存的行仍在。自动用例覆盖端口、开关、两个后端、设置写回、终端命令与 Web 路由；真实浏览器里的手动验收仍待完成。

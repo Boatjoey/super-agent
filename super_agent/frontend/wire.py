@@ -1,12 +1,10 @@
-"""The contract's JSON projection, shared by the transports.
+"""The contract's JSON projection for the web transport.
 
-A browser and an editor protocol both need these values as plain JSON-able
-mappings. Doing the projection once here, instead of once per transport, is what
-keeps a server-sent event and an ACP ``session/update`` describing the same
-conversation state in the same words.
+The browser needs these values as plain JSON-able mappings. Doing the projection
+once here keeps the HTTP transport from growing a second encoding of the same
+conversation state.
 
-Nothing here knows about HTTP, JSON-RPC, or the runtime: it is a pure function of
-a DTO.
+Nothing here knows about HTTP or the runtime: it is a pure function of a DTO.
 """
 
 from __future__ import annotations
@@ -159,6 +157,7 @@ def config_to_json(config: ConfigView) -> dict[str, Any]:
         "session_title": config.session_title,
         "workspace": config.workspace,
         "roots": list(config.roots),
+        "instruction_sources": list(config.instruction_sources),
         "agent": config.agent,
         "provider": config.provider,
         "model": config.model,

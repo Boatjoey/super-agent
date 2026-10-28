@@ -1,8 +1,8 @@
 """The historical name of the front-end adapter.
 
 The adapter itself lives in :mod:`super_agent.app.conversation_adapter`, because it
-is no longer the terminal's: the web interface and the ACP server drive the same
-object, and the terminal is only one of three front ends that read it. This module
+is no longer the terminal's: the web interface drives the same object, and the
+terminal is one of two front ends that read it. This module
 keeps the old spellings — ``TerminalConversation``, ``new_terminal_conversation``,
 ``to_tui_*`` — working for callers and tests written before the split.
 

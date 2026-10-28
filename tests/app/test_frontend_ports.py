@@ -1,11 +1,8 @@
-"""The transports against the real adapter.
+"""The web transport against the real adapter.
 
-The web and ACP tests use a fake port, which proves the transport; these two
-prove the other half — that :class:`ConversationAdapter` actually satisfies the
-contract those transports call, with a real engine underneath.
-
-One turn, two carriers: the same assistant text arrives as a server-sent event for
-a browser and as ``agent_message_chunk`` for an editor.
+The web route tests use a fake port, which proves the transport; this one proves
+the other half — that :class:`ConversationAdapter` actually satisfies the
+contract that transport calls, with a real engine underneath.
 """
 
 from __future__ import annotations
@@ -18,7 +15,6 @@ from typing import Any
 import pytest
 
 from super_agent import frontend, runtime, workspace
-from super_agent.acp import AcpAgent, Connection
 from super_agent.app import new_conversation_adapter
 from super_agent.app.conversation_adapter import to_frontend_message
 from super_agent.web import EventHub, Request, Router, TurnRunner
@@ -32,21 +28,6 @@ async def build_conversation() -> tuple[frontend.Conversation, str]:
     await engine.ready()
     session = runtime.new_session(engine)
     return new_conversation_adapter(session), str(session.metaID())
-
-
-class RecordingClient:
-    """Answers permission requests by refusing, and records everything."""
-
-    def __init__(self) -> None:
-        self.messages: list[dict[str, Any]] = []
-
-    async def send(self, message: dict[str, Any]) -> None:
-        self.messages.append(message)
-        if message.get("method") == "session/request_permission":
-            return
-
-    def updates(self) -> list[dict[str, Any]]:
-        return [message["params"]["update"] for message in self.messages if message.get("method") == "session/update"]
 
 
 @pytest.mark.asyncio
@@ -77,32 +58,10 @@ async def test_the_web_transport_drives_the_real_adapter_for_one_turn() -> None:
 
 
 @pytest.mark.asyncio
-async def test_the_acp_transport_drives_the_real_adapter_for_one_prompt() -> None:
-    conversation, session_id = await build_conversation()
-    client = RecordingClient()
-    agent = AcpAgent(conversation, Connection(client.send), session_id=session_id)
-
-    await agent.handle(
-        {"jsonrpc": "2.0", "id": 1, "method": "session/prompt", "params": {"prompt": [{"type": "text", "text": "hi"}]}}
-    )
-    for _ in range(200):
-        if any(message.get("id") == 1 and "method" not in message for message in client.messages):
-            break
-        await asyncio.sleep(0.01)
-
-    response = next(message for message in client.messages if message.get("id") == 1)
-    assert response["result"] == {"stopReason": "end_turn"}
-    text = "".join(
-        update["content"]["text"] for update in client.updates() if update["sessionUpdate"] == "agent_message_chunk"
-    )
-    assert text == "hello from the engine"
-
-
-@pytest.mark.asyncio
 async def test_the_adapter_runs_a_queued_input_as_the_next_turn() -> None:
     """One submission, two turns: sequencing is the application's, not the caller's.
 
-    A browser or an editor submits once; when an input is queued while that
+    A browser submits once; when an input is queued while that
     submission runs, the adapter starts the next turn itself and reports the
     acceptance on the same stream. A transport therefore never has to know that a
     queue exists.
@@ -289,7 +248,12 @@ async def test_the_configuration_view_reads_the_workspace_it_belongs_to(tmp_path
         engine,
         None,
         workspace.new(workspace.contextFromSpec(spec)),
-        runtime.Metadata(id=runtime.SessionID("session-with-workspace"), title="ws", cwd=root),
+        runtime.Metadata(
+            id=runtime.SessionID("session-with-workspace"),
+            title="ws",
+            cwd=root,
+            instruction_sources=("AGENTS.md",),
+        ),
     )
 
     config = new_conversation_adapter(session).config_view()
@@ -297,6 +261,7 @@ async def test_the_configuration_view_reads_the_workspace_it_belongs_to(tmp_path
     assert Path(config.workspace) == tmp_path.resolve()
     assert tuple(Path(item) for item in config.roots) == (tmp_path.resolve(),)
     assert config.session_title == "ws"
+    assert config.instruction_sources == ("AGENTS.md",)
 
 
 def test_a_message_with_an_attachment_reaches_the_transcript() -> None:

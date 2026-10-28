@@ -10,10 +10,11 @@ once the one before it has succeeded:
 4. build the session, MCP servers, tools, and controllers;
 5. run the chosen front end, and close the session on the way out.
 
-The front end is one of three: the terminal (the default), the local web
-interface (``-web``), or an editor over the Agent Client Protocol (``-acp``). All
-three drive the same conversation adapter, so the only thing this file decides is
-which transport carries it.
+The front end is one of two: the terminal, or the local web interface (``-web``).
+Naming no flag picks the platform default: the web interface on Windows, which
+ships without the terminal, and the terminal elsewhere. Both drive the same
+conversation adapter, so the only thing this file decides is which transport
+carries it.
 
 Status 1 means "the app refused to start" or "the interface failed"; the app
 itself never produces any other status.
@@ -30,7 +31,7 @@ from typing import TYPE_CHECKING, Final
 
 from dotenv import load_dotenv
 
-from super_agent import acp, app, cli, llm, web
+from super_agent import app, cli, llm, web
 
 if TYPE_CHECKING:
     from super_agent import frontend, runtime
@@ -45,8 +46,6 @@ def main() -> None:
     """Parse the flags, then run the selected front end."""
     try:
         flags = cli.parse(sys.argv[1:])
-        if flags.web and flags.acp:
-            raise cli.FlagError("-web and -acp each start a front end; choose one")
         port = _port(flags.port)
     except cli.FlagError as error:
         if error.message:
@@ -89,15 +88,8 @@ async def run(cfg: app.Config, flags: app.Flags, *, port: int = DEFAULT_PORT) ->
     workspace = cfg.workspace
     cwd = cfg.project.root if workspace is None else workspace.get_cwd()
     try:
-        if flags.acp:
-            # The editor owns the process's pipes, so nothing but protocol
-            # traffic may reach stdout while this runs.
-            await acp.serve_streams(conversation, session_id=str(session.metaID()), cwd=cwd)
-        elif flags.web:
-            await web.serve(conversation, host=flags.host or DEFAULT_HOST, port=port)
-        elif sys.platform == "win32":
-            # Windows ships without the terminal, so the web interface is the
-            # default there; other platforms keep the terminal as the default.
+        selected = select_front_end(flags, sys.platform)
+        if selected == "web":
             await web.serve(conversation, host=flags.host or DEFAULT_HOST, port=port)
         else:
             await _run_terminal(cfg, session, conversation, agentController, cwd)
@@ -115,6 +107,17 @@ async def run(cfg: app.Config, flags: app.Flags, *, port: int = DEFAULT_PORT) ->
     return 0
 
 
+def select_front_end(flags: app.Flags, platform: str) -> str:
+    """The front end to run: an explicit flag wins, otherwise the platform decides.
+
+    Windows ships without the terminal, so naming no flag opens the web interface
+    there; POSIX platforms keep the terminal as the default.
+    """
+    if flags.web:
+        return "web"
+    return "web" if platform == "win32" else "terminal"
+
+
 async def _run_terminal(
     cfg: app.Config,
     session: runtime.Session,
@@ -125,8 +128,8 @@ async def _run_terminal(
     """Run the interactive CLI.
 
     Imported here rather than at module scope: the terminal needs POSIX and Rich,
-    while the web and ACP front ends need neither, and a headless deployment must
-    not fail on an import it never uses.
+    while the web front end needs neither, and a headless deployment must not fail
+    on an import it never uses.
     """
     from super_agent import tui
 

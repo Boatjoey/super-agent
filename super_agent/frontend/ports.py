@@ -25,8 +25,13 @@ __all__ = [
     "AgentPort",
     "AgentSummary",
     "AttachmentSummary",
+    "AttachmentsPort",
+    "ConfigPort",
     "ConfigView",
     "Conversation",
+    "ExtensionPort",
+    "MCPPort",
+    "MemoryPort",
     "PermissionPort",
     "ProviderPort",
     "ProviderView",
@@ -34,6 +39,7 @@ __all__ = [
     "SessionSummary",
     "SnapshotPort",
     "TurnPort",
+    "WorkspacePort",
 ]
 
 
@@ -98,6 +104,8 @@ class ConfigView:
     #: The directory tools run in, and the roots the workspace allows.
     workspace: str = ""
     roots: tuple[str, ...] = ()
+    #: Instruction files loaded into the context, in load order.
+    instruction_sources: tuple[str, ...] = ()
     agent: str = ""
     provider: str = ""
     model: str = ""
@@ -308,6 +316,48 @@ class ProviderPort(Protocol):
     async def configure_provider(self, name: str, api_key: str, model: str = "") -> None: ...
 
 
+class MCPPort(Protocol):
+    """Manages MCP server lifecycle."""
+
+    def list_mcp_servers(self) -> list[MCPServerSummary]: ...
+
+    async def add_mcp_server(self, name: str, command: str, args: list[str]) -> None: ...
+
+    async def remove_mcp_server(self, name: str) -> None: ...
+
+    async def restart_mcp_server(self, name: str) -> None: ...
+
+
+class WorkspacePort(Protocol):
+    """Runs read-only repository and language-server queries."""
+
+    async def git_diff(self) -> str: ...
+
+    async def git_status(self) -> str: ...
+
+    async def diagnostics(self, path: str) -> str: ...
+
+
+class ExtensionPort(Protocol):
+    """Exposes discovered commands, skills, and plugins."""
+
+    def custom_commands(self) -> list[str]: ...
+
+    async def expand_custom_command(self, name: str, arguments: str) -> str: ...
+
+    def skills(self) -> list[str]: ...
+
+    def plugins(self) -> list[str]: ...
+
+
+class AttachmentsPort(Protocol):
+    """Stages workspace files for the next turn."""
+
+    async def attach(self, path: str) -> AttachmentSummary: ...
+
+    async def pending_attachments(self) -> tuple[AttachmentSummary, ...]: ...
+
+
 class Conversation(
     SnapshotPort,
     ConfigPort,
@@ -317,11 +367,15 @@ class Conversation(
     AgentPort,
     MemoryPort,
     ProviderPort,
+    MCPPort,
+    WorkspacePort,
+    ExtensionPort,
+    AttachmentsPort,
     Protocol,
 ):
-    """The bundle a transport-only front end needs.
+    """The bundle a front end needs.
 
-    A terminal keeps a wider bundle (its own commands, MCP management, memory);
-    a browser or an editor protocol needs exactly this, and getting the narrow
-    bundle is what keeps them from reaching into capabilities they do not show.
+    Both front ends use this contract: the terminal renders it in process, the
+    Web transport carries it over HTTP and server-sent events. A capability in
+    this bundle is available to both; there is no second, narrower bundle.
     """

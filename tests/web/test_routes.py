@@ -411,3 +411,142 @@ async def test_configuring_a_provider_persists_and_reports() -> None:
     assert status == 200
     assert conversation.configured == [("deepseek", "sk-new", "m2")]
     assert payload["provider"] == conversation.config_view().provider
+
+
+async def call_query(router: Router, method: str, path: str, query: dict[str, list[str]]) -> tuple[int, Any]:
+    response = await router.handle(Request(method=method, path=path, query=query))
+    payload: Any = json.loads(response.body.decode("utf-8")) if response.body else None
+    return response.status, payload
+
+
+@pytest.mark.asyncio
+async def test_mcp_servers_are_listed_added_removed_and_restarted() -> None:
+    conversation = FakeConversation()
+    conversation.mcp_servers = [frontend.MCPServerSummary(name="fs", tools=("read_file",))]
+    router, _hub, _runner = build(conversation)
+
+    status, payload = await call(router, "GET", "/api/mcp")
+    assert (status, payload) == (200, {"servers": [{"name": "fs", "tools": ["read_file"]}]})
+
+    status, _ = await call(router, "POST", "/api/mcp", {"name": "git", "command": "git-mcp", "args": ["--stdio"]})
+    assert status == 200
+    assert conversation.added_mcp == [("git", "git-mcp", ["--stdio"])]
+
+    assert (await call(router, "DELETE", "/api/mcp/git"))[0] == 200
+    assert conversation.removed_mcp == ["git"]
+
+    assert (await call(router, "POST", "/api/mcp/git/restart"))[0] == 200
+    assert conversation.restarted_mcp == ["git"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_management_refuses_a_missing_name_or_command() -> None:
+    conversation = FakeConversation()
+    router, _hub, _runner = build(conversation)
+
+    assert (await call(router, "POST", "/api/mcp", {"command": "mcp"}))[0] == 400
+    assert (await call(router, "POST", "/api/mcp", {"name": "x"}))[0] == 400
+    assert conversation.added_mcp == []
+
+
+@pytest.mark.asyncio
+async def test_attachments_are_staged_and_listed() -> None:
+    conversation = FakeConversation()
+    router, _hub, _runner = build(conversation)
+
+    assert (await call(router, "GET", "/api/attachments"))[1] == {"items": []}
+    status, payload = await call(router, "POST", "/api/attachments", {"path": "notes.txt"})
+    assert status == 200
+    assert payload["name"] == "notes.txt"
+    assert (await call(router, "GET", "/api/attachments"))[1]["items"][0]["name"] == "notes.txt"
+
+
+@pytest.mark.asyncio
+async def test_workspace_queries_and_diagnostics() -> None:
+    conversation = FakeConversation()
+    router, _hub, _runner = build(conversation)
+
+    assert (await call(router, "GET", "/api/workspace/diff"))[1] == {"diff": "diff"}
+    assert (await call(router, "GET", "/api/workspace/status"))[1] == {"status": "status"}
+    status, payload = await call_query(router, "GET", "/api/workspace/diagnostics", {"path": ["x.py"]})
+    assert (status, payload) == (200, {"diagnostics": "diagnostics:x.py"})
+    assert (await call(router, "GET", "/api/workspace/diagnostics"))[0] == 400
+
+
+@pytest.mark.asyncio
+async def test_extensions_are_listed_and_custom_commands_expand() -> None:
+    conversation = FakeConversation()
+    router, _hub, _runner = build(conversation)
+
+    assert (await call(router, "GET", "/api/extensions"))[1] == {
+        "commands": ["/review"],
+        "skills": ["skill"],
+        "plugins": ["plugin"],
+    }
+    status, payload = await call(router, "POST", "/api/extensions/expand", {"name": "/review", "arguments": "a"})
+    assert (status, payload) == (200, {"text": "/review a"})
+    assert conversation.expanded_commands == [("/review", "a")]
+
+
+@pytest.mark.asyncio
+async def test_memory_items_can_be_added_and_cleared() -> None:
+    conversation = FakeConversation()
+    router, _hub, _runner = build(conversation)
+
+    status, payload = await call(router, "POST", "/api/memory/items", {"text": "remember this"})
+    assert (status, payload["items"]) == (200, ["remember this"])
+    assert conversation.remembered == ["remember this"]
+
+    assert (await call(router, "DELETE", "/api/memory/items"))[0] == 200
+    assert conversation.memory_items == []
+
+
+@pytest.mark.asyncio
+async def test_agents_are_listed_and_switched() -> None:
+    conversation = FakeConversation()
+    conversation.agents = [frontend.AgentSummary(name="build", provider="deepseek", model="m")]
+    router, _hub, _runner = build(conversation)
+
+    status, payload = await call(router, "GET", "/api/agents")
+    assert status == 200
+    assert payload["current"]["name"] == "build"
+    assert [item["name"] for item in payload["agents"]] == ["build"]
+
+    assert (await call(router, "POST", "/api/agents/plan"))[0] == 200
+    assert conversation.used_agents == ["plan"]
+
+
+@pytest.mark.asyncio
+async def test_session_scoped_commands_only_apply_to_the_active_session() -> None:
+    conversation = FakeConversation(config=frontend.ConfigView(session_id="s1"))
+    router, _hub, _runner = build(conversation)
+
+    assert (await call(router, "POST", "/api/sessions/s2/compact", {"summary": "s"}))[0] == 400
+    assert (await call(router, "POST", "/api/sessions/s1/compact", {"summary": "s"}))[0] == 200
+    assert (await call(router, "POST", "/api/sessions/s1/fork", {"title": "branch"}))[1] == {"id": "fork-1"}
+    assert (await call(router, "POST", "/api/sessions/s1/export", {"format": "markdown"}))[1] == {"path": ""}
+
+
+@pytest.mark.asyncio
+async def test_workflows_start_a_turn_with_the_shared_prompt() -> None:
+    conversation = FakeConversation()
+    router, _hub, runner = build(conversation)
+
+    status, payload = await call(router, "POST", "/api/workflows/review")
+    await runner.wait()
+
+    assert (status, payload) == (202, {"accepted": True})
+    assert conversation.queries == [frontend.WORKFLOW_PROMPTS["review"]]
+    assert (await call(router, "POST", "/api/workflows/unknown"))[0] == 400
+
+
+@pytest.mark.asyncio
+async def test_instructions_are_read_from_the_active_session() -> None:
+    conversation = FakeConversation(
+        config=frontend.ConfigView(instruction_sources=("AGENTS.md", "CLAUDE.md"))
+    )
+    router, _hub, _runner = build(conversation)
+
+    status, payload = await call(router, "GET", "/api/instructions")
+
+    assert (status, payload) == (200, {"sources": ["AGENTS.md", "CLAUDE.md"]})

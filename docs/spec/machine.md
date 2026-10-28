@@ -200,7 +200,7 @@ class ActionPlan:
 | `CallModel` | 请求模型，并通过流式分片返回输出 |
 | `RunTool` | 执行一个工具调用 |
 | `CheckToolQueue` | 对批次中的下一个调用分类 |
-| `AwaitApproval` | 等待 Session 提供的审批端口 |
+| `AwaitApproval` | 等待 Session 提供的审批决定 |
 
 模型调用、工具执行和人工审批都经过同一条“动作 → 结果 → 事件”路径，因此审批不需要第二个循环，也不需要让 `runtime/session` 拥有调度权。
 

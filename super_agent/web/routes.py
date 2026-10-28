@@ -32,6 +32,7 @@ class Request:
     method: str
     path: str
     body: bytes = b""
+    query: dict[str, list[str]] = dataclasses.field(default_factory=dict[str, list[str]])
 
     @property
     def json(self) -> dict[str, Any]:
@@ -113,6 +114,8 @@ class Router:
                 )
             case ("GET", ["config"]):
                 return json_response(self._config())
+            case ("GET", ["instructions"]):
+                return json_response({"sources": list(self._conversation.config_view().instruction_sources)})
             case ("POST", ["turns"]):
                 text = self._text(request)
                 await self._runner.start_turn(text)
@@ -175,6 +178,97 @@ class Router:
                 await self._conversation.undo()
                 self._hub.publish(self._runner.snapshot_event())
                 return json_response({"ok": True})
+            case ("POST", ["workflows", name]):
+                prompt = frontend.WORKFLOW_PROMPTS.get(name)
+                if prompt is None:
+                    raise ValueError(f"unknown workflow: {name}")
+                await self._runner.start_turn(prompt)
+                return json_response({"accepted": True}, status=202)
+            case ("GET", ["mcp"]):
+                return json_response(
+                    {"servers": [self._mcp(item) for item in self._conversation.list_mcp_servers()]}
+                )
+            case ("POST", ["mcp"]):
+                name = str(request.json.get("name", "")).strip()
+                command = str(request.json.get("command", "")).strip()
+                args = request.json.get("args")
+                if not name or not command:
+                    raise ValueError("name and command are required")
+                if args is None:
+                    args = []
+                if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
+                    raise ValueError("args must be a list of strings")
+                await self._conversation.add_mcp_server(name, command, list(args))
+                return json_response({"ok": True})
+            case ("DELETE", ["mcp", name]):
+                await self._conversation.remove_mcp_server(name)
+                return json_response({"ok": True})
+            case ("POST", ["mcp", name, "restart"]):
+                await self._conversation.restart_mcp_server(name)
+                return json_response({"ok": True})
+            case ("GET", ["attachments"]):
+                return json_response(
+                    {"items": [self._attachment(item) for item in await self._conversation.pending_attachments()]}
+                )
+            case ("POST", ["attachments"]):
+                path = str(request.json.get("path", "")).strip()
+                if not path:
+                    raise ValueError("path is required")
+                return json_response(self._attachment(await self._conversation.attach(path)))
+            case ("GET", ["workspace", "diff"]):
+                return json_response({"diff": await self._conversation.git_diff()})
+            case ("GET", ["workspace", "status"]):
+                return json_response({"status": await self._conversation.git_status()})
+            case ("GET", ["workspace", "diagnostics"]):
+                path = (request.query.get("path") or [""])[0].strip()
+                if not path:
+                    raise ValueError("path is required")
+                return json_response({"diagnostics": await self._conversation.diagnostics(path)})
+            case ("GET", ["extensions"]):
+                return json_response(
+                    {
+                        "commands": self._conversation.custom_commands(),
+                        "skills": self._conversation.skills(),
+                        "plugins": self._conversation.plugins(),
+                    }
+                )
+            case ("POST", ["extensions", "expand"]):
+                name = str(request.json.get("name", "")).strip()
+                arguments = str(request.json.get("arguments", ""))
+                if not name:
+                    raise ValueError("name is required")
+                return json_response({"text": await self._conversation.expand_custom_command(name, arguments)})
+            case ("POST", ["memory", "items"]):
+                text = str(request.json.get("text", "")).strip()
+                if not text:
+                    raise ValueError("text is required")
+                await self._conversation.remember(text)
+                return json_response(await self._memory())
+            case ("DELETE", ["memory", "items"]):
+                await self._conversation.forget_memories()
+                return json_response(await self._memory())
+            case ("GET", ["agents"]):
+                return json_response(
+                    {
+                        "agents": [self._agent(item) for item in self._conversation.list_agents()],
+                        "current": self._agent(self._conversation.current_agent()),
+                    }
+                )
+            case ("POST", ["agents", name]):
+                await self._conversation.use_agent(name)
+                return json_response(self._config())
+            case ("POST", ["sessions", session_id, "compact"]):
+                self._require_current(session_id)
+                await self._conversation.compact(str(request.json.get("summary", "")))
+                self._hub.publish(self._runner.snapshot_event())
+                return json_response({"ok": True})
+            case ("POST", ["sessions", session_id, "fork"]):
+                self._require_current(session_id)
+                return json_response({"id": await self._conversation.fork(str(request.json.get("title", "")))})
+            case ("POST", ["sessions", session_id, "export"]):
+                self._require_current(session_id)
+                export_format = str(request.json.get("format", "markdown")).strip()
+                return json_response({"path": await self._conversation.export(export_format)})
             case _:
                 return error_response(404, f"no route for {method} {request.path}")
 
@@ -214,6 +308,29 @@ class Router:
             "cwd": item.cwd,
             "parent_id": item.parent_id,
         }
+
+    @staticmethod
+    def _mcp(item: frontend.MCPServerSummary) -> dict[str, Any]:
+        return {"name": item.name, "tools": list(item.tools)}
+
+    @staticmethod
+    def _attachment(item: frontend.AttachmentSummary) -> dict[str, Any]:
+        return {"name": item.name, "mime": item.mime}
+
+    @staticmethod
+    def _agent(item: frontend.AgentSummary) -> dict[str, Any]:
+        return {
+            "name": item.name,
+            "provider": item.provider,
+            "model": item.model,
+            "permission_mode": item.permission_mode,
+        }
+
+    def _require_current(self, session_id: str) -> None:
+        """Refuse a session-scoped command aimed at a session that is not active."""
+        current = self._conversation.config_view().session_id
+        if session_id != current:
+            raise ValueError("session id does not match the active session")
 
     @staticmethod
     def _text(request: Request) -> str:

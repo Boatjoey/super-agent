@@ -132,7 +132,7 @@ uv run pytest                   # 运行全部测试
 uv run ruff format <files>       # 格式化修改过的 Python 文件
 ./scripts/coverage.sh            # 全项目覆盖率检查
 ./scripts/verify.sh              # 格式、静态检查、类型、测试、并发和覆盖率
-uv run python scripts/smoke.py   # 伪终端与 Web/ACP 端到端验收
+uv run python scripts/smoke.py   # 伪终端与 Web 端到端验收
 ./scripts/build-local.sh        # 构建并安装本地程序
 ```
 
@@ -174,7 +174,6 @@ Web 交互源码使用 TypeScript，样式与页面结构保持原生 CSS 和 HT
 9. 输入 `/` 展示实时命令列表，中文问题完整到达模型。
 
 - `web` 启动 `--web` 后检查首页是可读页面、快照报告空闲、一轮回复按事件流式到达且以空错误结束、运行中再次提交返回 `409`、取消后界面继续应答。
-- `acp` 以 JSON-RPC 驱动 `--acp`，检查 `initialize` 的能力声明、`session/new` 的会话标识与可用模式、`session/prompt` 的增量文本与 `end_turn`，以及关闭标准输入后以 `0` 退出。
 
 冒烟测试有意不精确断言两类属性，它们分别由其他测试负责：**对话记录修改**（`/compact` 保留最新轮次，并扩展保留范围以包含开头工具结果的关联消息；`/undo` 先恢复文件再截断历史；重置保留 `system` 消息）由能精确检查结果的 session 测试固定；**交互与渲染**由注入输入、捕获普通输出的 `TerminalApplication` 测试固定。冒烟测试只证明这些路径能够通过真实界面到达，且不会造成破坏。
 

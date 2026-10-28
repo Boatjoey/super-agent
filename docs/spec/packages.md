@@ -10,15 +10,17 @@
 
 依赖向内指向 `runtime/machine`。这不只是文档约定：`tests/architecture/test_dependencies.py` 解析各包的导入，一旦违规就使构建失败。
 
+端口与适配器的方向定义见[软件架构](../design/software-architecture.md#端口与适配器)；本节只维护代码落点与导入约束。
+
 - `runtime/machine` 是领域核心，负责状态、事件、运行数据变更、动作计划、调度动作和转移，见 [状态机规范](machine.md)。
 - `runtime/protocol` 负责模型与工具适配器契约（`Message`、`ToolCall`、`Model`、`ToolRunner`），不包含状态机策略。
 - `runtime/permission` 负责权限请求与命令分类的值类型。
 - `runtime/engine` 驱动状态机，负责唯一的 Agent 循环、同步、调度动作的队列排空，以及运行身份，见 [运行时规范](runtime.md)。
-- `runtime/execution` 实现出站的模型、工具和权限端口。
+- `runtime/execution` 调用出站的模型和工具端口，并承载审批等待。
 - `runtime/session` 提供应用用例，不得包含终端行为，也不得导入 `os` 或 `pathlib`；文件系统访问必须经过端口。
-- `frontend` 是前端契约：驱动端端口、展示 DTO、通知集合、通道与取消值，以及契约的 JSON 投影。它不导入运行时、不导入任何适配器，只依赖自身。
-- `tui` 负责 `TerminalApplication` 及其不依赖框架的交互模型。Rich 仅限于此适配器；视图保持纯函数，端口归属各功能模块；它只通过 `Conversation` 端口和展示 DTO 依赖应用，并按终端既有名称重新导出契约中的展示值。
-- `web` 与 `acp` 是另外两个前端适配器，只依赖 `frontend`。前者把端口承载为本机 HTTP 与服务器推送事件，后者承载为标准输入输出的 JSON-RPC。二者都不得导入运行时、`tui` 或组合根。
+- `frontend` 是前端契约：驱动端端口（含 MCP、附件、工作区查询、扩展、记忆）、展示 DTO、通知集合、通道与取消值，以及契约的 JSON 投影。两个前端使用同一份契约；它不导入运行时、不导入任何适配器，只依赖自身。
+- `tui` 负责 `TerminalApplication` 及其不依赖框架的交互模型。Rich 仅限于此适配器；视图保持纯函数；它只通过 `Conversation` 端口和展示 DTO 依赖应用，并按终端既有名称重新导出契约中的展示值。
+- `web` 是另一个前端适配器，只依赖 `frontend`，把端口承载为本机 HTTP 与服务器推送事件；不得导入运行时、`tui` 或组合根。
 - `app` 是组合根，负责创建依赖，并在唯一一处把运行时值转换为前端契约的值。
 - `llm`、`tools`、`store`、`project` 和 `workspace` 是顶层适配器。`llm` 和 `tools` 可以导入 `runtime/protocol`，不得导入根 `runtime` 门面；`store` 和 `workspace` 还可以导入声明其端口的 `runtime/session`。
 
@@ -26,13 +28,31 @@
 
 导入 `llm` 或构造内建模型时，不得导入模型服务商 SDK。选中的服务商适配器及 SDK 在首次模型请求时加载，避免无关服务商拖慢终端启动。
 
-`tui` 不得导入 `runtime`，运行时也不得导入 `tui`。在 app 边界的 `app/conversation_adapter.py` 中，运行时状态被转换为仅用于展示的 `frontend.AgentStatus`；三个前端都不拥有运行时状态枚举。`app/tui_adapter.py` 只保留历史名称的重新导出，不含实现。
+`tui` 不得导入 `runtime`，运行时也不得导入 `tui`。在 app 边界的 `app/conversation_adapter.py` 中，运行时状态被转换为仅用于展示的 `frontend.AgentStatus`；两个前端都不拥有运行时状态枚举。`app/tui_adapter.py` 只保留历史名称的重新导出，不含实现。
 
 根 `runtime` 包是兼容门面，按 `api_model.py`、`api_machine.py`、`api_execution.py`、`api_engine.py` 和 `api_session.py` 组织。它公开会话持久化端口和元数据，不导入具体适配器。内部包必须依赖拥有该类型的窄接口包，而不是这个门面。
 
 `ToolBatchReceived`、`ToolCallNeedsApproval` 和 `ActionResultResolver` 分别是工具批次接收、审批请求和结果映射的规范名称；运行时不得为它们重新导出其他名称。
 
-`TerminalApplication`、`web.Server` 与 `acp.AcpAgent` 是[系统范围](../design/software-architecture.md#系统范围)规定的三个用户交互入口。它们共享同一应用接口，因此新增前端只需新增一个承载层，不需要复制业务规则。
+`TerminalApplication` 与 `web.Server` 是[系统范围](../design/software-architecture.md#系统范围)规定的两个用户交互入口。它们共享同一应用接口，暴露同一组操作，只有承载方式不同；因此新增前端只需新增一个承载层，不需要复制业务规则。
+
+## 端口与适配器映射
+
+本节把[软件架构](../design/software-architecture.md#端口与适配器)定义的端口映射到包与文件。内侧是应用侧：实现入站端口、调用出站端口；外侧是边界外的适配器：调用入站端口、实现出站端口。
+
+| 方向 | 端口 | 契约位置 | 内侧 | 外侧 |
+|---|---|---|---|---|
+| 入站 | 快照、配置、轮次、会话、权限、Agent、记忆、服务商、MCP、附件、工作区查询、扩展 | `frontend/ports.py` | `app/conversation_adapter.py` | `tui`、`web` |
+| 出站 | 模型 | `runtime/protocol/types.py` | `runtime/execution` | `llm` |
+| 出站 | 工具 | `runtime/protocol/types.py` | `runtime/execution` | `tools` |
+| 出站 | 会话持久化 | `runtime/session/repository.py` | `runtime/session` | `store` |
+| 出站 | 工作区 | `runtime/session/repository.py` | `runtime/session` | `workspace` |
+| 出站 | 跨会话记忆 | `runtime/session/memory.py` | `runtime/session` | `store/memory.py` |
+| 出站 | 附件读取与导出（可选） | `runtime/session/attachments.py`、`export.py` | `runtime/session` | `workspace` |
+
+终端不再单独声明 `MemoryPort`；两个前端使用前端契约里的同一个端口。
+
+人工审批不在此表：请求由应用发起，回答经 `TurnPort.approve` 入站，因此横跨两侧。`ApprovalWaiter`、`Closer`、`WorkspaceContext` 与适配器内部的 `Tool`、`command_sandbox`、`KeyReader` 等接口不满足边界判据，不算端口。
 
 ## 文件分工
 
@@ -60,7 +80,7 @@
 
 Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归属；包内不设别名门面。
 
-`runtime/execution` 实现端口：
+`runtime/execution` 负责出站调用与结果解析：
 
 - `scheduled_action_runner.py`：执行调度动作，返回 `ActionCompletion`。
 - `scheduled_action_executor.py`：调用模型或工具执行器。
@@ -84,14 +104,14 @@ Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归
 
 - `frontend/view.py`：展示值（消息、工具调用、状态、权限请求、用量、视图、受理回执、配置视图）与角色、状态常量。
 - `frontend/notifications.py`：封闭的通知集合与 `NOTIFICATION_KINDS`。
-- `frontend/ports.py`：快照、配置、轮次、会话、权限与 Agent 端口，能力清单 `CAPABILITIES`，以及会话与 Agent 摘要。
+- `frontend/ports.py`：快照、配置、轮次、会话、权限、Agent、记忆、服务商、MCP、附件、工作区查询与扩展端口，能力清单 `CAPABILITIES`，以及会话与 Agent 摘要。
+- `frontend/workflows.py`：终端与 Web 共用的工作流提示词（Review、Fix CI、Commit message）。
 - `frontend/transport.py`：`Channel` 与 `Cancellation`；`frontend/approval.py`：审批决定值。
 - `frontend/failure.py`：可展示的失败值 `Failure` 与 `CANCELLED`/`FAILED` 分类，含从异常转换的入口。
-- `frontend/wire.py`：契约的 JSON 投影，供 Web 事件与 ACP 更新共用，避免两套编码。
+- `frontend/wire.py`：契约的 JSON 投影，供 Web 事件使用。
 - `app/conversation_adapter.py`：唯一实现，负责运行时到展示值的映射与一轮的通道桥接。
 - `web/hub.py` 事件分发、`web/turns.py` 单轮槽位、`web/routes.py` 路由表、`web/server.py` HTTP 与事件流、`web/assets.py` 随包静态文件。
 - `web/static/index.html` 页面语义结构与可访问性容器、`web/static/style.css` 设计令牌、组件和响应式布局、`web/static/favicon.svg` 站点图标、`web/static/app.ts` 快照重建、事件消费、视图渲染与用户操作的 TypeScript 源码；`web/static/app.js` 是其随包发布的浏览器构建产物。静态前端不拥有业务规则，也不引入运行时或模型依赖。
-- `acp/jsonrpc.py` 消息与错误码、`acp/connection.py` 请求应答配对、`acp/agent.py` 协议方法、`acp/updates.py` 更新负载、`acp/stdio.py` 换行分隔的读写循环。
 
 `project` 解析选中的项目，与文件系统访问策略相互独立。`workspace.Context` 是工作区根目录和 cwd 的、独立于进程的唯一权威来源；`workspace.Workspace` 将其适配到会话检查点、附件、导出和工作区恢复端口，包括对旧版保存路径的一次性规范化升级。`store/store.py` 写入和回放持久化会话记录；其保证的持久化顺序见 `session.md`。`store/memory.py` 提供跨会话记忆的两个文件后端（会话存储自己的文件、用户指定路径的文件），实现 `runtime/session/memory.py` 声明的端口。`app/mcp.py` 协调 MCP 生命周期、动态工具注册、回滚和配置的原子持久化。`app/memory.py` 按设置挑选记忆后端，并把开关的变化写回设置。
 

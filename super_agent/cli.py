@@ -42,19 +42,14 @@ class Flag:
 
 #: Every flag this program defines. They are sorted by name when printed.
 FLAGS: Final[tuple[Flag, ...]] = (
-    Flag(name="acp", is_bool=True, usage="Serve the Agent Client Protocol on stdin/stdout instead of the terminal"),
     Flag(name="host", is_bool=False, usage="Web interface bind address (default 127.0.0.1)"),
     Flag(name="no-tools", is_bool=True, usage="Disable tool calling"),
     Flag(name="port", is_bool=False, usage="Web interface port (default 8765)"),
-    Flag(name="web", is_bool=True, usage="Serve the local web interface instead of the terminal"),
+    Flag(name="web", is_bool=True, usage="Serve the local web interface"),
     Flag(name="yolo", is_bool=True, usage="Auto-approve tool execution"),
     Flag(name="approval-mode", is_bool=False, usage="Permission mode: ask, accept-edits, plan, bypass"),
     Flag(name="cwd", is_bool=False, usage="Project directory (defaults to nearest Git root)"),
 )
-
-#: The flags that pick a front end. At most one may be set; the terminal is the
-#: default, so naming none is not an error.
-FRONT_END_FLAGS: Final[tuple[str, ...]] = ("web", "acp")
 
 
 class FlagError(Exception):
@@ -133,7 +128,6 @@ def parse(argv: Sequence[str]) -> Flags:
         permission_mode=values["approval-mode"],
         cwd=values["cwd"],
         web=_boolValue(values["web"], "web"),
-        acp=_boolValue(values["acp"], "acp"),
         host=values["host"],
         port=values["port"],
     )

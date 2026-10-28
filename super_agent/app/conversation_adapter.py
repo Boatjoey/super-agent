@@ -3,7 +3,7 @@
 Conversion lives at the composition edge, so neither side knows the other: a
 front end sees only the contract's display DTOs, and the runtime only knows its
 own notifications and views. There is exactly one such edge, which is why the
-terminal, the web interface, and the ACP server cannot drift apart in what a
+terminal and the web interface cannot drift apart in what a
 conversation looks like.
 
 Two things this file is the single home of:
@@ -16,9 +16,9 @@ Two things this file is the single home of:
   channels by coroutines over queues, and the run context is built from the turn's
   :class:`frontend.Cancellation` so the runtime still sees one cancellation signal.
 
-A front end that is not in this process — a browser, an editor — still calls the
-same object: :class:`super_agent.web` and :class:`super_agent.acp` are transports
-over this port, not second adapters.
+A front end that is not in this process — a browser — still calls the same
+object: :class:`super_agent.web` is a transport over this port, not a second
+adapter.
 """
 
 from __future__ import annotations
@@ -270,6 +270,7 @@ class ConversationAdapter:
             session_title=meta.title,
             workspace="" if spec is None else spec.cwd,
             roots=() if spec is None else tuple(root.path for root in spec.roots),
+            instruction_sources=meta.instruction_sources,
             agent=agent.name,
             provider=agent.provider,
             model=agent.model,

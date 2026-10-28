@@ -13,6 +13,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Callable, Coroutine
 
+from super_agent.frontend.workflows import WORKFLOW_PROMPTS
 from super_agent.tui.commands import catalog, format
 from super_agent.tui.commands.outcome import CompactDone, MCPDone, Outcome, StatusBar
 from super_agent.tui.commands.ports import Attachment, Ports
@@ -112,11 +113,11 @@ class Model:
             case "/branch":
                 return self, await self._handleGitStatus(), None
             case "/review":
-                return self, Outcome(prompt=_REVIEW_PROMPT), None
+                return self, Outcome(prompt=WORKFLOW_PROMPTS["review"]), None
             case "/fix-ci":
-                return self, Outcome(prompt=_FIX_CI_PROMPT), None
+                return self, Outcome(prompt=WORKFLOW_PROMPTS["fix-ci"]), None
             case "/commit-message":
-                return self, Outcome(prompt=_COMMIT_MESSAGE_PROMPT), None
+                return self, Outcome(prompt=WORKFLOW_PROMPTS["commit-message"]), None
             case "/export":
                 if len(parts) != 2:
                     return self, Outcome(err="Usage: /export <markdown|json>"), None
@@ -442,18 +443,8 @@ class Model:
         return Outcome(status="Branch status", output=result)
 
 
-#: The workflow prompts, verbatim from ``handle``.
-_REVIEW_PROMPT = (
-    "Review the current changes. Inspect the git diff, relevant code, and LSP diagnostics when configured, "
-    "then report only actionable defects with file and line references. Do not modify files."
-)
-_FIX_CI_PROMPT = (
-    "Inspect the repository CI configuration and current failures, reproduce them locally, implement the "
-    "fixes, and verify the result."
-)
-_COMMIT_MESSAGE_PROMPT = (
-    "Inspect the current git diff and suggest one concise conventional commit subject. Do not modify files or commit."
-)
+#: The workflow prompts live in :mod:`super_agent.frontend.workflows`, shared
+#: with the Web front end so the two cannot drift.
 
 
 def new(config: Config, ports: Ports) -> Model:

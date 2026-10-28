@@ -1,6 +1,6 @@
 # 运行时
 
-`runtime/engine` 驱动状态机，负责唯一的 Agent 循环、状态锁、运行生命周期、调度动作的队列排空和过期结果丢弃。`runtime/execution` 实现循环调用的出站模型、工具和权限端口。
+`runtime/engine` 驱动状态机，负责唯一的 Agent 循环、状态锁、运行生命周期、调度动作的队列排空和过期结果丢弃。`runtime/execution` 调用循环所需的出站模型和工具端口，并承载审批等待。
 
 状态定义与转移图见 `machine.md`；本文件说明如何应用转移，以及如何持续驱动循环。
 
@@ -16,7 +16,7 @@ Turn、Step 和输入归属的定义以[核心概念](../design/concepts.md)为�
 6. 正常收尾前检查是否还有当前 Turn 待接纳的输入；有则继续后续 Step，没有则结束 Turn。下一 Turn 的排队输入不参与这个继续判断。
 7. 取消或失败时结算当前处理，并沿状态机的取消或错误路径收尾；不得留下没有结果的已分发工具调用。具体补齐规则见[状态机规范](machine.md#转移表)。
 
-步骤边界和守卫属于 Machine，Engine 负责统一调度并执行决策；Session 只连接输入、通知和持久化端口。
+步骤边界和守卫属于 Machine，Engine 负责统一调度并执行决策；Session 只连接输入、通知，以及持久化端口。
 
 ### 步骤数据与不变式
 
@@ -99,7 +99,7 @@ while True:
 
 共有四种动作，由 `machine.ALL_SCHEDULED_ACTIONS` 枚举，并在 `machine.md` 中定义：`CallModel`、`RunTool`、`CheckToolQueue` 和 `AwaitApproval`。
 
-模型调用、工具执行和人工审批都经过同一条“动作 → 结果 → 事件”路径。因此审批不需要第二个循环：`AwaitApproval` 等待 Session 注入的端口，但调度权仍属于 engine。
+模型调用、工具执行和人工审批都经过同一条“动作 → 结果 → 事件”路径。因此审批不需要第二个循环：`AwaitApproval` 等待 Session 注入的审批决定，但调度权仍属于 engine。
 
 ## 动作结果
 

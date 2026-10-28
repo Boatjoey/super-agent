@@ -1,7 +1,7 @@
 """A conversation port that needs no runtime.
 
-The web and ACP adapters are transports: they may only depend on
-``super_agent.frontend``, so their tests must not build an engine. This double
+The web adapter is a transport: it may only depend on
+``super_agent.frontend``, so its tests must not build an engine. This double
 implements that contract and nothing else, which is also what proves the contract
 is small enough for a transport to drive.
 """
@@ -55,6 +55,12 @@ class FakeConversation:
         self.memory_on = True
         self.providers: list[frontend.ProviderView] = []
         self.configured: list[tuple[str, str, str]] = []
+        self.mcp_servers: list[frontend.MCPServerSummary] = []
+        self.added_mcp: list[tuple[str, str, list[str]]] = []
+        self.removed_mcp: list[str] = []
+        self.restarted_mcp: list[str] = []
+        self.attachments: list[frontend.AttachmentSummary] = []
+        self.expanded_commands: list[tuple[str, str]] = []
         self.last_turn: (
             tuple[
                 frontend.Channel[frontend.ConversationNotification],
@@ -197,6 +203,52 @@ class FakeConversation:
     async def set_memory_enabled(self, enabled: bool) -> None:
         self.memory_switches.append(enabled)
         self.memory_on = enabled
+
+    # --- MCP, workspace queries, extensions, attachments ---------------------
+
+    def list_mcp_servers(self) -> list[frontend.MCPServerSummary]:
+        return list(self.mcp_servers)
+
+    async def add_mcp_server(self, name: str, command: str, args: list[str]) -> None:
+        self.added_mcp.append((name, command, list(args)))
+        self.mcp_servers.append(frontend.MCPServerSummary(name=name))
+
+    async def remove_mcp_server(self, name: str) -> None:
+        self.removed_mcp.append(name)
+        self.mcp_servers = [item for item in self.mcp_servers if item.name != name]
+
+    async def restart_mcp_server(self, name: str) -> None:
+        self.restarted_mcp.append(name)
+
+    async def attach(self, path: str) -> frontend.AttachmentSummary:
+        item = frontend.AttachmentSummary(name=path, mime="text/plain")
+        self.attachments.append(item)
+        return item
+
+    async def pending_attachments(self) -> tuple[frontend.AttachmentSummary, ...]:
+        return tuple(self.attachments)
+
+    async def git_diff(self) -> str:
+        return "diff"
+
+    async def git_status(self) -> str:
+        return "status"
+
+    async def diagnostics(self, path: str) -> str:
+        return f"diagnostics:{path}"
+
+    def custom_commands(self) -> list[str]:
+        return ["/review"]
+
+    async def expand_custom_command(self, name: str, arguments: str) -> str:
+        self.expanded_commands.append((name, arguments))
+        return f"{name} {arguments}"
+
+    def skills(self) -> list[str]:
+        return ["skill"]
+
+    def plugins(self) -> list[str]:
+        return ["plugin"]
 
 
 class AwaitingConversation(FakeConversation):

@@ -41,11 +41,11 @@ from super_agent.app.config import (
     settings_path as settings_path,
 )
 
-# --- the three front-end adapters' shared implementation ---------------------
+# --- the front-end adapters' shared implementation ---------------------------
 #
-# Imported under both names: ``ConversationAdapter`` is what the web and ACP
-# entry points build, and ``TerminalConversation`` is the spelling the terminal
-# and its tests have always used. They are one class.
+# Imported under both names: ``ConversationAdapter`` is what the entry points
+# build, and ``TerminalConversation`` is the spelling the terminal and its tests
+# have always used. They are one class.
 from super_agent.app.conversation_adapter import (
     ConversationAdapter as ConversationAdapter,
     new_conversation_adapter as new_conversation_adapter,

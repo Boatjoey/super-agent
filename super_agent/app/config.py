@@ -110,9 +110,9 @@ class Flags:
     no_tools: bool = False
     permission_mode: str = ""
     cwd: str = ""
-    #: Which front end to run. Both default to false, which means the terminal.
+    #: Which front end to run. False means the entry point picks the platform
+    #: default (terminal on POSIX, web on Windows).
     web: bool = False
-    acp: bool = False
     #: Web bind address and port, as typed. Empty means the defaults.
     host: str = ""
     port: str = ""

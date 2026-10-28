@@ -12,12 +12,11 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable, Coroutine
-from typing import Protocol
 
 from rich.style import Style
 from rich.text import Text
 
-from super_agent.frontend.ports import AttachmentSummary as Item
+from super_agent.frontend.ports import AttachmentSummary as Item, AttachmentsPort as Port
 
 __all__ = ["AttachCommand", "Attached", "Item", "Loaded", "Model", "Outcome", "Port", "Styles", "new"]
 
@@ -43,14 +42,6 @@ def default_styles() -> Styles:
     :func:`new`.
     """
     return Styles(accent=Style())
-
-
-class Port(Protocol):
-    """The attachments capability, implemented at the composition boundary."""
-
-    async def attach(self, path: str) -> Item: ...
-
-    async def pending_attachments(self) -> tuple[Item, ...]: ...
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

@@ -8,12 +8,11 @@ loading), the front end is real, and the only thing faked is the model provider 
 so nothing here touches the network.
 
 The terminal front end is driven inside a pseudo-terminal, so its checks need
-POSIX; the web and ACP checks use only pipes and sockets and run anywhere. Pick
-one with ``--front-end``, or let the default run every front end this platform
-can support.
+POSIX; the web checks use only sockets and run anywhere. Pick one with
+``--front-end``, or let the default run every front end this platform can support.
 
     uv run python scripts/smoke.py
-    uv run python scripts/smoke.py --front-end acp
+    uv run python scripts/smoke.py --front-end web
 
 Exit code 0 means every step passed; anything else prints the failing step.
 """
@@ -25,7 +24,6 @@ import contextlib
 import http.client
 import json
 import os
-import queue
 import shutil
 import signal
 import socket
@@ -195,7 +193,7 @@ class Terminal:
 
     def __init__(self, home: Path, workspace: Path, columns: int = 100, rows: int = 30) -> None:
         # Imported here, not at module scope: a pseudo-terminal only exists on
-        # POSIX, and the web and ACP checks must run on a machine without one.
+        # POSIX, and the web checks must run on a machine without one.
         import pty
 
         self.master, slave = pty.openpty()
@@ -610,102 +608,13 @@ def run_web_checks(home: Path, workspace: Path) -> None:
         stop(process)
 
 
-class JsonRpcPipes:
-    """A client on the other end of an ACP conversation, over the process pipes."""
-
-    def __init__(self, process: subprocess.Popen[bytes]) -> None:
-        self.process = process
-        self.messages: queue.Queue[dict] = queue.Queue()
-        self._next_id = 1
-        threading.Thread(target=self._drain, daemon=True).start()
-
-    def _drain(self) -> None:
-        assert self.process.stdout is not None
-        for line in self.process.stdout:
-            text = line.decode("utf-8", errors="replace").strip()
-            if not text:
-                continue
-            # Anything that is not JSON-RPC is a protocol violation: stdout belongs
-            # to the client, so it must be reported rather than skipped.
-            self.messages.put(json.loads(text))
-
-    def request(self, method: str, params: dict[str, object]) -> int:
-        request_id = self._next_id
-        self._next_id += 1
-        self._write({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
-        return request_id
-
-    def respond(self, request_id: object, result: dict[str, object]) -> None:
-        self._write({"jsonrpc": "2.0", "id": request_id, "result": result})
-
-    def _write(self, message: dict[str, object]) -> None:
-        assert self.process.stdin is not None
-        self.process.stdin.write((json.dumps(message) + "\n").encode())
-        self.process.stdin.flush()
-
-    def next_message(self, timeout: float = STEP_TIMEOUT_SECONDS) -> dict:
-        try:
-            return self.messages.get(timeout=timeout)
-        except queue.Empty:
-            raise AssertionError("timed out waiting for the ACP agent\n" + failed_output(self.process)) from None
-
-    def answer_until(self, request_id: int) -> tuple[dict, list[dict]]:
-        """Every notification sent before the response to ``request_id``."""
-        notifications: list[dict] = []
-        while True:
-            message = self.next_message()
-            if message.get("method") == "session/request_permission":
-                # Nothing in this smoke asks for a tool, so a permission request
-                # would be a surprise; refuse it rather than hang.
-                self.respond(message.get("id"), {"outcome": {"outcome": "cancelled"}})
-                continue
-            if message.get("id") == request_id and "method" not in message:
-                return message, notifications
-            notifications.append(message)
-
-
-def run_acp_checks(home: Path, workspace: Path) -> None:
-    """The ACP front end: initialize, session/new, a streamed session/prompt."""
-    process = spawn_front_end(["--acp"], home, workspace, stdin=subprocess.PIPE)
-    client = JsonRpcPipes(process)
-    try:
-        request_id = client.request("initialize", {"protocolVersion": 1, "clientCapabilities": {}})
-        response, _ = client.answer_until(request_id)
-        result = response.get("result") or {}
-        assert result.get("protocolVersion") == 1, response
-        assert "agentCapabilities" in result, response
-
-        request_id = client.request("session/new", {"cwd": str(workspace), "mcpServers": []})
-        response, _ = client.answer_until(request_id)
-        result = response.get("result") or {}
-        assert result.get("sessionId"), response
-        assert (result.get("modes") or {}).get("availableModes"), response
-
-        request_id = client.request("session/prompt", {"prompt": [{"type": "text", "text": "hello smoke"}]})
-        response, notifications = client.answer_until(request_id)
-        updates = [
-            message["params"]["update"] for message in notifications if message.get("method") == "session/update"
-        ]
-        chunks = [update for update in updates if update.get("sessionUpdate") == "agent_message_chunk"]
-        streamed = "".join(update["content"]["text"] for update in chunks)
-        assert streamed == REPLY, f"streamed {streamed!r}, want {REPLY!r} in {updates}"
-        assert (response.get("result") or {}).get("stopReason") == "end_turn", response
-
-        assert process.stdin is not None
-        process.stdin.close()
-        status = process.wait(timeout=STEP_TIMEOUT_SECONDS)
-        assert status == 0, f"the ACP front end exited with {status}\n{failed_output(process)}"
-    finally:
-        stop(process)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--columns", type=int, default=100)
     parser.add_argument("--rows", type=int, default=30)
     parser.add_argument(
         "--front-end",
-        choices=("all", "terminal", "web", "acp"),
+        choices=("all", "terminal", "web"),
         default="all",
         help="which front end to drive (default: every front end this platform supports)",
     )
@@ -722,7 +631,7 @@ def main() -> int:
     try:
         home = write_home(root, port)
         binary = [sys.executable, "-m", "super_agent"]
-        wants = {arguments.front_end} if arguments.front_end != "all" else {"terminal", "web", "acp"}
+        wants = {arguments.front_end} if arguments.front_end != "all" else {"terminal", "web"}
         if "terminal" in wants:
             if os.name == "nt":
                 if arguments.front_end == "terminal":
@@ -738,9 +647,6 @@ def main() -> int:
         if "web" in wants:
             run_web_checks(home, workspace)
             print("ok   web: page, snapshot, streamed turn, single-turn slot, cancel")
-        if "acp" in wants:
-            run_acp_checks(home, workspace)
-            print("ok   acp: initialize, session/new, streamed session/prompt, clean exit")
     finally:
         server.shutdown()
         shutil.rmtree(root, ignore_errors=True)

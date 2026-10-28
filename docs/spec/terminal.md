@@ -6,11 +6,11 @@
 
 `TerminalApplication` 使用普通终端输入、标准输出和滚动历史，遵守 [UI 设计](../design/ui.md#对标目标与范围)确定的 Codex CLI 对标形态。已提交历史顺序追加，输入草稿、实时活动与状态可以原位更新，不进入全屏备用屏幕。输入采用 UTF-8，无效字节替换为 `�`，不得因此终止命令行。
 
-终端输入读取跨平台：逐字符（cbreak）模式与按键名解析由 `tui/terminal_io.py` 抽象，POSIX 用 `termios`/`tty`/`select`，Windows 用 `msvcrt`，`TerminalApplication` 本身不持有平台分支。Ctrl+C 在 POSIX 经事件循环的 `add_signal_handler` 路由为 `ctrl+c`，在 Windows 经 `signal.signal` 的 `SIGINT` 处理器路由为同一键名。
+本文件只描述 POSIX 平台的终端行为：Windows 不提供终端前端，默认入口与各平台可用范围见[产品定义](../design/product.md#前端与平台)。逐字符（cbreak）模式与按键名解析由 `tui/terminal_io.py` 抽象，使用 `termios`/`tty`/`select`，`TerminalApplication` 本身不持有平台分支。Ctrl+C 经事件循环的 `add_signal_handler` 路由为 `ctrl+c`。
 
 回复、工具活动、错误和斜杠命令的已提交结果追加到标准输出，实时状态更新当前交互区。Rich 负责 Markdown 与 ANSI 渲染，不拥有终端生命周期。窗口宽度变化时重新布局当前交互区，保持草稿、当前选择和光标位置，不重放工具操作或重复追加历史。
 
-不依赖框架的交互模型与会话端口出于兼容性保留在 `tui/` 下；包名不表示存在第二种产品入口。交互入口范围由[软件架构](../design/software-architecture.md#系统范围)规定。
+不依赖框架的交互模型与会话端口出于兼容性保留在 `tui/` 下；包名不表示存在第二种产品入口。交互入口范围由[软件架构](../design/software-architecture.md#系统范围)规定，各平台的可用前端见[产品定义](../design/product.md#前端与平台)。
 
 ## 流式输出与历史
 

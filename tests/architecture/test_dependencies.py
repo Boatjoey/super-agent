@@ -17,7 +17,7 @@ R6  ``tui/<feature>/**``             must not import a sibling feature
 R7  ``runtime/machine/**`` (new)     must not import I/O modules or anything outside the pure core
 R8  ``tui/<feature>/**`` (new)       must not import the root ``super_agent.tui`` package
 R9  ``tui/<feature>/**`` (new)       must not import the composition root ``super_agent.app``
-R10 ``web/**``, ``acp/**`` (new)     must not import runtime, tui, app, or a concrete adapter
+R10 ``web/**`` (new)                 must not import runtime, tui, app, or a concrete adapter
 R11 ``frontend/**`` (new)            must not import anything but itself
 
 Two Python-shaped adjustments, both narrowing a hole rather than widening a
@@ -283,11 +283,11 @@ def _rule_violations(
     if feature is not None and _within(name, "super_agent.app"):
         found.append(("R9", "CLI features must not import the composition root"))
 
-    # R10: the web and ACP adapters are transports over the front-end contract.
-    # They may not reach for the runtime the contract hides, for another front
-    # end, or for the composition root: any of those would make one of the three
-    # front ends a second application.
-    if top in ("web", "acp") and name.startswith("super_agent."):
+    # R10: the web adapter is a transport over the front-end contract. It may not
+    # reach for the runtime the contract hides, for another front end, or for the
+    # composition root: any of those would make the Web front end a second
+    # application.
+    if top == "web" and name.startswith("super_agent."):
         allowed = (_within(name, f"super_agent.{top}"), _within(name, "super_agent.frontend"))
         if not any(allowed):
             found.append(("R10", f"{top} may depend only on the front-end contract"))
@@ -367,8 +367,6 @@ _RULE_ABIDING_TREE = {
     "super_agent/frontend/wire.py": "",
     "super_agent/web/__init__.py": "",
     "super_agent/web/routes.py": "",
-    "super_agent/acp/__init__.py": "",
-    "super_agent/acp/agent.py": "",
     "super_agent/llm/__init__.py": "",
     "super_agent/tools/__init__.py": "",
     "super_agent/store/__init__.py": "",

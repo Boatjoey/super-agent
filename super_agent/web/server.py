@@ -196,7 +196,13 @@ async def _read_request(reader: asyncio.StreamReader) -> Request:
     if length > MAX_BODY:
         raise PayloadTooLarge(length)
     body = await reader.readexactly(length) if length > 0 else b""
-    return Request(method=method.upper(), path=urllib.parse.urlsplit(target).path, body=body)
+    parsed = urllib.parse.urlsplit(target)
+    return Request(
+        method=method.upper(),
+        path=parsed.path,
+        body=body,
+        query=urllib.parse.parse_qs(parsed.query),
+    )
 
 
 async def _write(writer: asyncio.StreamWriter, response: Response) -> None:

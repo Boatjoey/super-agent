@@ -15,6 +15,7 @@ import pytest
 
 from super_agent import frontend
 from super_agent.web import new_server
+from super_agent.web.server import _read_request
 from tests.fakes.frontend import FakeConversation
 
 
@@ -136,3 +137,15 @@ async def test_only_the_events_path_streams() -> None:
             assert response.status_code == 404
     finally:
         await server.close()
+
+
+@pytest.mark.asyncio
+async def test_the_request_reader_keeps_the_query_string() -> None:
+    reader = asyncio.StreamReader()
+    reader.feed_data(b"GET /api/workspace/diagnostics?path=x.py HTTP/1.1\r\nHost: localhost\r\n\r\n")
+    reader.feed_eof()
+
+    request = await _read_request(reader)
+
+    assert request.path == "/api/workspace/diagnostics"
+    assert request.query == {"path": ["x.py"]}

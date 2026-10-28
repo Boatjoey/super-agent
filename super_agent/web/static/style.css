@@ -1836,3 +1836,33 @@ details.thinking > *:not(summary) {
     scroll-behavior: auto;
   }
 }
+
+.tools-panel {
+  width: min(560px, 100%);
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tools-output {
+  margin: 12px 0 0;
+  padding: 10px;
+  min-height: 80px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+@media (max-width: 560px) {
+  .tools-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

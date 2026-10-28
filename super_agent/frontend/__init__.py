@@ -3,14 +3,12 @@
 This package is the driving side of the hexagon: the ports a front end calls, the
 display values it reads, and the notification set it consumes. It has no
 dependency on the runtime, on a transport, or on a particular front end — the
-terminal, the web interface, and the ACP server all import this and nothing else
-of each other.
+terminal and the web interface both import this and nothing else of each other.
 
-Three front ends, one contract:
+Two front ends, one contract:
 
 * :mod:`super_agent.tui` renders it in a terminal;
-* :mod:`super_agent.web` carries it over HTTP and server-sent events;
-* :mod:`super_agent.acp` carries it over JSON-RPC on stdio for editors.
+* :mod:`super_agent.web` carries it over HTTP and server-sent events.
 
 Implementation is supplied by :mod:`super_agent.app.conversation_adapter`, which
 is the only place runtime values are converted into these types.
@@ -51,10 +49,13 @@ from super_agent.frontend.ports import (
     AgentPort as AgentPort,
     AgentSummary as AgentSummary,
     AttachmentSummary as AttachmentSummary,
+    AttachmentsPort as AttachmentsPort,
     ConfigPort as ConfigPort,
     ConfigView as ConfigView,
     Conversation as Conversation,
+    ExtensionPort as ExtensionPort,
     MCPServerSummary as MCPServerSummary,
+    MCPPort as MCPPort,
     MemoryPort as MemoryPort,
     PermissionPort as PermissionPort,
     ProviderPort as ProviderPort,
@@ -63,6 +64,7 @@ from super_agent.frontend.ports import (
     SessionSummary as SessionSummary,
     SnapshotPort as SnapshotPort,
     TurnPort as TurnPort,
+    WorkspacePort as WorkspacePort,
 )
 from super_agent.frontend.transport import Cancellation as Cancellation, Channel as Channel
 from super_agent.frontend.view import (
@@ -85,6 +87,7 @@ from super_agent.frontend.view import (
     SteeringReceipt as SteeringReceipt,
     ToolCall as ToolCall,
 )
+from super_agent.frontend.workflows import WORKFLOW_PROMPTS as WORKFLOW_PROMPTS
 
 __all__ = [
     "ACCEPTED",
@@ -109,6 +112,7 @@ __all__ = [
     "ApprovalReceipt",
     "Attachment",
     "AttachmentSummary",
+    "AttachmentsPort",
     "Cancellation",
     "Channel",
     "ConfigPort",
@@ -119,8 +123,10 @@ __all__ = [
     "ConversationNotification",
     "ConversationView",
     "Decision",
+    "ExtensionPort",
     "Failure",
     "MCPServerSummary",
+    "MCPPort",
     "MemoryPort",
     "Message",
     "MessageAppended",
@@ -144,5 +150,7 @@ __all__ = [
     "ToolCall",
     "TurnPort",
     "UsageReported",
+    "WORKFLOW_PROMPTS",
+    "WorkspacePort",
     "failure_from",
 ]

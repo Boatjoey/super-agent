@@ -313,6 +313,10 @@ function loadElements() {
         settingsKey: typedElement("settings-key", HTMLInputElement),
         settingsModel: typedElement("settings-model", HTMLInputElement),
         sandboxWarning: findElement("sandbox-warning"),
+        tools: typedElement("tools", HTMLButtonElement),
+        toolsModal: findElement("tools-modal"),
+        toolsClose: typedElement("tools-close", HTMLButtonElement),
+        toolsOutput: findElement("tools-output"),
     };
 }
 const els = loadElements();
@@ -1533,6 +1537,205 @@ async function saveSettings() {
         markPending(els.settingsSave, false);
     }
 }
+// --- tools and session operations -------------------------------------------
+function openTools() {
+    els.toolsModal.classList.remove("hidden");
+    els.toolsOutput.textContent = "";
+    els.toolsClose.focus();
+}
+function closeTools() {
+    els.toolsModal.classList.add("hidden");
+}
+function toolsShow(value) {
+    els.toolsOutput.textContent = JSON.stringify(value, null, 2);
+}
+async function toolsCall(path, init) {
+    try {
+        toolsShow(await api(path, init));
+    }
+    catch (error) {
+        toast(errorMessage(error), "error");
+    }
+}
+function promptText(label, value = "") {
+    const answer = window.prompt(label, value);
+    return answer === null ? null : answer.trim();
+}
+function splitArguments(value) {
+    return value.split(/\s+/).filter((item) => item.length > 0);
+}
+function activeSessionId() {
+    const sessionId = state.config?.session_id ?? "";
+    if (!sessionId) {
+        toast("当前没有活动会话", "error");
+    }
+    return sessionId;
+}
+async function toolsMcpAdd() {
+    const name = promptText("MCP 服务器名称");
+    if (name === null || !name)
+        return;
+    const command = promptText("启动命令");
+    if (command === null || !command)
+        return;
+    const args = promptText("参数（空格分隔，可留空）");
+    if (args === null)
+        return;
+    await toolsCall("/api/mcp", {
+        method: "POST",
+        body: JSON.stringify({ name, command, args: splitArguments(args) }),
+    });
+}
+async function toolsMcpRemove() {
+    const name = promptText("要删除的 MCP 服务器名称");
+    if (name === null || !name)
+        return;
+    await toolsCall(`/api/mcp/${encodeURIComponent(name)}`, { method: "DELETE" });
+}
+async function toolsMcpRestart() {
+    const name = promptText("要重启的 MCP 服务器名称");
+    if (name === null || !name)
+        return;
+    await toolsCall(`/api/mcp/${encodeURIComponent(name)}/restart`, { method: "POST" });
+}
+async function toolsAttach() {
+    const path = promptText("工作区文件路径");
+    if (path === null || !path)
+        return;
+    await toolsCall("/api/attachments", { method: "POST", body: JSON.stringify({ path }) });
+}
+async function toolsDiagnostics() {
+    const path = promptText("要诊断的文件路径");
+    if (path === null || !path)
+        return;
+    await toolsCall(`/api/workspace/diagnostics?path=${encodeURIComponent(path)}`);
+}
+async function toolsSession(action) {
+    const sessionId = activeSessionId();
+    if (!sessionId)
+        return;
+    const path = `/api/sessions/${encodeURIComponent(sessionId)}/${action}`;
+    if (action === "compact") {
+        const summary = promptText("压缩摘要（可留空）", "");
+        if (summary === null)
+            return;
+        await toolsCall(path, { method: "POST", body: JSON.stringify({ summary }) });
+        return;
+    }
+    if (action === "fork") {
+        const title = promptText("分支标题（可留空）", "");
+        if (title === null)
+            return;
+        await toolsCall(path, { method: "POST", body: JSON.stringify({ title }) });
+        return;
+    }
+    const format = promptText("导出格式", "markdown");
+    if (format === null || !format)
+        return;
+    await toolsCall(path, { method: "POST", body: JSON.stringify({ format }) });
+}
+async function toolsRemember() {
+    const text = promptText("要记住的内容");
+    if (text === null || !text)
+        return;
+    await toolsCall("/api/memory/items", { method: "POST", body: JSON.stringify({ text }) });
+}
+async function toolsRename() {
+    const sessionId = activeSessionId();
+    if (!sessionId)
+        return;
+    const title = promptText("新的会话标题");
+    if (title === null || !title)
+        return;
+    await toolsCall(`/api/sessions/${encodeURIComponent(sessionId)}/rename`, {
+        method: "POST",
+        body: JSON.stringify({ title }),
+    });
+}
+async function toolsDelete() {
+    const sessionId = activeSessionId();
+    if (!sessionId)
+        return;
+    if (!window.confirm("删除当前会话？此操作不可撤销。"))
+        return;
+    await toolsCall(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+    void loadSessions(true);
+    void loadSnapshot();
+}
+async function toolsExpand() {
+    const name = promptText("自定义命令名称");
+    if (name === null || !name)
+        return;
+    const args = promptText("命令参数（可留空）", "");
+    if (args === null)
+        return;
+    await toolsCall("/api/extensions/expand", {
+        method: "POST",
+        body: JSON.stringify({ name, arguments: args }),
+    });
+}
+async function toolsAgent() {
+    const name = promptText("Agent 名称");
+    if (name === null || !name)
+        return;
+    await toolsCall(`/api/agents/${encodeURIComponent(name)}`, { method: "POST" });
+    void loadConfig();
+}
+function toolsHelp() {
+    els.toolsOutput.textContent = [
+        "可用操作",
+        "· MCP：列表、添加、删除、重启",
+        "· 附件：列出、暂存工作区文件",
+        "· 仓库：Diff、Status、诊断",
+        "· 会话：压缩、分支、导出、重命名、删除、撤销",
+        "· 记忆：列表、记住、清空",
+        "· 扩展：列表、展开自定义命令",
+        "· Agent：切换",
+        "· 工作流：Review、Fix CI、Commit message",
+        "",
+        "输入框 Enter 发送，Shift+Enter 换行；运行中可引导、排队或取消。",
+    ].join("\n");
+}
+function wireTools() {
+    els.tools.addEventListener("click", openTools);
+    els.toolsClose.addEventListener("click", closeTools);
+    els.toolsModal.addEventListener("click", (event) => {
+        if (event.target === els.toolsModal) {
+            closeTools();
+        }
+    });
+    const actions = {
+        "tools-mcp-list": () => void toolsCall("/api/mcp"),
+        "tools-mcp-add": () => void toolsMcpAdd(),
+        "tools-mcp-remove": () => void toolsMcpRemove(),
+        "tools-mcp-restart": () => void toolsMcpRestart(),
+        "tools-attach-list": () => void toolsCall("/api/attachments"),
+        "tools-attach": () => void toolsAttach(),
+        "tools-diff": () => void toolsCall("/api/workspace/diff"),
+        "tools-status": () => void toolsCall("/api/workspace/status"),
+        "tools-diagnostics": () => void toolsDiagnostics(),
+        "tools-compact": () => void toolsSession("compact"),
+        "tools-fork": () => void toolsSession("fork"),
+        "tools-export": () => void toolsSession("export"),
+        "tools-rename": () => void toolsRename(),
+        "tools-delete": () => void toolsDelete(),
+        "tools-undo": () => void toolsCall("/api/undo", { method: "POST", body: "{}" }),
+        "tools-memory-list": () => void toolsCall("/api/memory"),
+        "tools-remember": () => void toolsRemember(),
+        "tools-forget": () => void toolsCall("/api/memory/items", { method: "DELETE" }),
+        "tools-extensions": () => void toolsCall("/api/extensions"),
+        "tools-expand": () => void toolsExpand(),
+        "tools-agent": () => void toolsAgent(),
+        "tools-review": () => void toolsCall("/api/workflows/review", { method: "POST", body: "{}" }),
+        "tools-fix-ci": () => void toolsCall("/api/workflows/fix-ci", { method: "POST", body: "{}" }),
+        "tools-commit-message": () => void toolsCall("/api/workflows/commit-message", { method: "POST", body: "{}" }),
+        "tools-instructions": () => void toolsCall("/api/instructions"),
+        "tools-help": toolsHelp,
+    };
+    for (const [id, action] of Object.entries(actions)) {
+        findElement(id).addEventListener("click", action);
+    }
+}
 // --- data loads -------------------------------------------------------------
 async function loadConfig() {
     state.configLoad = { loading: true, error: "" };
@@ -1813,6 +2016,7 @@ els.settingsProvider.addEventListener("change", () => {
     const selected = state.providers.find((provider) => provider.name === els.settingsProvider.value);
     els.settingsModel.value = selected?.model ?? "";
 });
+wireTools();
 els.newChat.addEventListener("click", () => {
     void newChat();
 });
