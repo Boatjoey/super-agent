@@ -33,3 +33,5 @@ node_modules/
 
 # 本地 Agent 工作目录（记忆与项目缓存，不纳入版本控制）
 .workbuddy/
+# WorkBuddy 打包演示时留在包目录里的应用描述文件
+.wbapp_*.genie
