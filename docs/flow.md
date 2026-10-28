@@ -8,7 +8,7 @@
 
 - 每一行是一个开发节点，ID 稳定；“后继节点”是该节点完成后可以参与解锁的直接下游。
 - 边 `A → B` 表示 B 的完成依赖 A 的交付；B 有多个前驱时，必须全部验收完成才能进入正式实施。独立的调查和准备可以提前进行，但不算完成下游交付。
-- 没有前驱的节点可以独立推进，当前入口是 D00、D01、D02、D30、D31。D00 的最终目标确认不阻止已明确的 Turn/Step 与 Web 界面工作先推进。
+- 没有前驱的节点可以独立推进，当前入口是 D00、D01、D02、D30、D31、D48。D00 的最终目标确认不阻止已明确的 Turn/Step 与 Web 界面工作先推进。
 - `—` 表示没有后继节点。依赖图不得出现环、未知节点或悬空引用；并行行进到汇合节点时采用“全部满足”的条件。
 - 节点状态与验收证据在本文件维护。状态改变不等于自动满足后继节点条件。
 
@@ -18,30 +18,31 @@
 |---|---|---|---|---|---|---|
 | D00 | 最终产品目标与验收场景收敛 | G00 | 待确认 | D90 | [产品定义](design/product.md) | 待确认目标场景 |
 | D01 | 既有功能基线与验证环境 | G05 | 已完成 | D90 | [验证方法](development.md#验收) | 见 E01、E25、E26、E28；验证环境已建立并有真实基线，验收由项目负责人确认 |
-| D02 | 文档入口与差距推进机制整理 | G06 | 已完成 | D90 | [文档职责](../AGENTS.md#文档职责与决策权)、[完整开发工作流](development.md#完整开发工作流)、Gap 与本表 | 见 E02、E03、E04、E05、E06、E28；文档职责与去重经审阅通过 |
-| D10 | 细化 Step 与输入接纳契约 | G01、G02 | 已完成 | D11 | [运行时](spec/runtime.md#轮次与步骤边界)、[状态机](spec/machine.md) | 见 E07；按用户指示推进后续节点验收通过 |
-| D11 | 实现 Step 生命周期 | G01 | 已完成 | D12 | Step 实现及行为测试 | 见 E08；按用户指示推进后续节点验收通过 |
+| D02 | 文档入口与差距推进机制整理 | — | 已完成 | D90 | [文档职责](../AGENTS.md#文档职责与决策权)、[完整开发工作流](development.md#完整开发工作流)、Gap 与本表 | 见 E02、E03、E04、E05、E06、E28；文档职责与去重经审阅通过 |
+| D10 | 细化 Step 与输入接纳契约 | G02 | 已完成 | D11 | [运行时](spec/runtime.md#轮次与步骤边界)、[状态机](spec/machine.md) | 见 E07；按用户指示推进后续节点验收通过 |
+| D11 | 实现 Step 生命周期 | — | 已完成 | D12 | Step 实现及行为测试 | 见 E08；按用户指示推进后续节点验收通过 |
 | D12 | 实现当前 Turn 的 steering 接纳 | G02 | 已完成 | D13、D14、D32 | 输入接纳实现及行为测试 | 见 E09；按用户指示推进 D32 后视为验收通过 |
 | D13 | 验证输入交互与轮次边界 | G02 | 待验收 | D33 | 输入交互验证结果 | D14 已完成，阻塞解除；steering 与排队交互证据见 E13、E15、E20、E25；真实终端按键仍未执行 |
-| D14 | 实现下一 Turn 的排队输入 | G02、G08 | 已完成 | D13 | 输入接纳实现及行为测试、[应用接口](spec/application-interface.md#已有通知契约) | 见 E13、E15、E28；终端与 Web 入口均已提供，验收由项目负责人确认，真实按键与竞态验证仍缺 |
-| D20 | 对齐记忆的产品范围与行为 | G03 | 已完成 | D90 | [会话规范](spec/session.md#跨会话记忆)、[记忆端口](../super_agent/runtime/session/memory.py)、实现与回归 | 见 E17；产品范围确定为“要有跨会话记忆，由开关控制，后端可换”，规范与实现对齐 |
-| D21 | 对齐委派工作树的结果与生命周期 | G04 | 已完成 | D90 | 委派工作树实现及回归 | 见 E14；按用户指示推进，证明工作树在成功、失败与取消三条路径都保留 |
+| D14 | 实现下一 Turn 的排队输入 | G02 | 已完成 | D13 | 输入接纳实现及行为测试、[应用接口](spec/application-interface.md#已有通知契约) | 见 E13、E15、E28；终端与 Web 入口均已提供，验收由项目负责人确认，真实按键与竞态验证仍缺 |
+| D20 | 对齐记忆的产品范围与行为 | — | 已完成 | D90 | [会话规范](spec/session.md#跨会话记忆)、[记忆端口](../super_agent/runtime/session/memory.py)、实现与回归 | 见 E17；产品范围确定为“要有跨会话记忆，由开关控制，后端可换”，规范与实现对齐 |
+| D21 | 对齐委派工作树的结果与生命周期 | — | 已完成 | D90 | 委派工作树实现及回归 | 见 E14；按用户指示推进，证明工作树在成功、失败与取消三条路径都保留 |
 | D30 | UI 与 UX 设计基线 | G07 | 已完成 | D32 | [UI](design/ui.md)、[UX](design/ux.md) | 见 E28；设计基线经项目负责人验收通过 |
-| D31 | 前端应用接口契约 | G08 | 已完成 | D32 | [应用接口](spec/application-interface.md) | 见 E28；契约经项目负责人验收通过 |
-| D40 | Web UI 设计契约、TypeScript 构建约定与任务分解 | G12 | 已完成 | D41、D42 | [UI](design/ui.md)、[UX](design/ux.md)、[开发命令](development.md#开发命令)、Gap 与本表 | 见 E22 |
-| D41 | Web 语义结构与 TypeScript 交互重构 | G12 | 已完成 | D43 | `web/static/index.html`、`web/static/app.ts`、构建产物 `app.js` | 见 E19 |
-| D42 | Web 设计令牌、统一组件与响应式视觉 | G12 | 已完成 | D44 | `web/static/style.css` | 见 E18 |
-| D43 | Web 加载、空数据、异常、重连与可访问性完善 | G12 | 已完成 | D44 | `web/static/index.html`、`web/static/app.ts`、`web/static/style.css` | 见 E19、E20 |
-| D44 | Web 构建与自动回归验收 | G12 | 已完成 | D45 | `tests/web`、`npm run check:web`、相关自动测试 | 见 E19、E21 |
-| D45 | 桌面与移动浏览器真实交互验收 | G12 | 已完成 | D33 | 浏览器检查记录与必要截图 | 见 E20 |
-| D46 | 对齐 Windows 前端矩阵与回归用例 | G11 | 已完成 | D33 | [产品定义](design/product.md#前端与平台)、[终端规范](spec/terminal.md)、`tests/app/test_front_end_selection.py` | 见 E23、E25；用例已在本机执行通过（4 条） |
+| D31 | 前端应用接口契约 | — | 已完成 | D32 | [应用接口](spec/application-interface.md) | 见 E28；契约经项目负责人验收通过 |
+| D40 | Web UI 设计契约、TypeScript 构建约定与任务分解 | — | 已完成 | D41、D42 | [UI](design/ui.md)、[UX](design/ux.md)、[开发命令](development.md#开发命令)、Gap 与本表 | 见 E22 |
+| D41 | Web 语义结构与 TypeScript 交互重构 | — | 已完成 | D43 | `web/static/index.html`、`web/static/app.ts`、构建产物 `app.js` | 见 E19 |
+| D42 | Web 设计令牌、统一组件与响应式视觉 | — | 已完成 | D44 | `web/static/style.css` | 见 E18 |
+| D43 | Web 加载、空数据、异常、重连与可访问性完善 | — | 已完成 | D44 | `web/static/index.html`、`web/static/app.ts`、`web/static/style.css` | 见 E19、E20 |
+| D44 | Web 构建与自动回归验收 | — | 已完成 | D45 | `tests/web`、`npm run check:web`、相关自动测试 | 见 E19、E21 |
+| D45 | 桌面与移动浏览器真实交互验收 | — | 已完成 | D33 | 浏览器检查记录与必要截图 | 见 E20 |
+| D46 | 对齐 Windows 前端矩阵与回归用例 | — | 已完成 | D33 | [产品定义](design/product.md#前端与平台)、[终端规范](spec/terminal.md)、`tests/app/test_front_end_selection.py` | 见 E23、E25；用例已在本机执行通过（4 条） |
 | D47 | 移除 ACP 并让终端/Web 功能对等 | G13 | 阻塞 | D33 | [产品定义](design/product.md#前端与平台)、[应用接口规范](spec/application-interface.md)、[模块职责](spec/packages.md) | 见 E24、E25、E26；实现、静态检查、pytest 与浏览器工具面板验收完成。阻塞：真实终端验收需 POSIX 环境，Windows 不提供终端；E11–E23 中的 ACP 记录是历史证据 |
-| D32 | 对齐前端与应用接口实现 | G07、G08 | 已完成 | D34 | 前端及应用适配器实现 | 见 E10、E14、E16、E25、E28；实现经项目负责人验收通过 |
-| D34 | 接入终端与 Web 两个前端适配器 | G07、G08 | 已完成 | D33 | [前端契约](../super_agent/frontend/__init__.py)、[Web 适配器](../super_agent/web/__init__.py)、[应用接口规范](spec/application-interface.md#两个前端与承载方式) | 见 E11、E12、E15、E20、E25、E28；两端接入经项目负责人验收通过 |
-| D33 | 前端与 Agent 端到端验收 | G02、G07、G08 | 已完成 | D90 | [验收方法](development.md#验收)、[冒烟脚本](../scripts/smoke.py) | 见 E12、E13、E15、E20、E21、E25、E28；Web 端到端与浏览器验收经项目负责人确认，真实终端按键仍缺 |
+| D48 | 为非 Linux 平台实现命令隔离沙箱 | G09 | 待开始 | D90 | [工具沙箱](spec/tools.md#沙箱)、[配置](spec/config.md#沙箱) | 项目负责人已于 2026-10-29 决定实现；机制选型与实现均未开始 |
+| D32 | 对齐前端与应用接口实现 | G07 | 已完成 | D34 | 前端及应用适配器实现 | 见 E10、E14、E16、E25、E28；实现经项目负责人验收通过 |
+| D34 | 接入终端与 Web 两个前端适配器 | G07 | 已完成 | D33 | [前端契约](../super_agent/frontend/__init__.py)、[Web 适配器](../super_agent/web/__init__.py)、[应用接口规范](spec/application-interface.md#两个前端与承载方式) | 见 E11、E12、E15、E20、E25、E28；两端接入经项目负责人验收通过 |
+| D33 | 前端与 Agent 端到端验收 | G02、G07 | 已完成 | D90 | [验收方法](development.md#验收)、[冒烟脚本](../scripts/smoke.py) | 见 E12、E13、E15、E20、E21、E25、E28；Web 端到端与浏览器验收经项目负责人确认，真实终端按键仍缺 |
 | D90 | 阶段产品验收 | G00、G05 | 待开始 | — | 确认场景的阶段验收记录 | — |
 
-完成条件统一引用关联 Gap，具体行为由交付物所属 Spec 定义。已完成节点为 D01、D02、D10–D12、D14、D20、D21、D30–D34、D40–D46：D40 分两路进入 D44（D40 → D41 → D43 → D44，以及 D40 → D42 → D44），并在 D45 之后汇合到 D33 端到端验收。D13 在 D14 完成后解除阻塞并转入待验收，剩余真实终端按键验证；D47 覆盖 ACP 移除与终端/Web 功能对等，实现与浏览器验收已完成，只剩需 POSIX 环境的真实终端验收；D90 仍待 D00 确认目标场景。项目负责人已按 E27、E28 确认上述节点的验收结论。
+完成条件统一引用关联 Gap，具体行为由交付物所属 Spec 定义。已完成节点为 D01、D02、D10–D12、D14、D20、D21、D30–D34、D40–D46：D40 分两路进入 D44（D40 → D41 → D43 → D44，以及 D40 → D42 → D44），并在 D45 之后汇合到 D33 端到端验收。D13 在 D14 完成后解除阻塞并转入待验收，剩余真实终端按键验证；D47 覆盖 ACP 移除与终端/Web 功能对等，实现与浏览器验收已完成，只剩需 POSIX 环境的真实终端验收；D48 是为非 Linux 平台实现命令隔离沙箱的新节点，已由项目负责人决定实现、尚未开始；D90 仍待 D00 确认目标场景。项目负责人已按 E27、E28 确认上述节点的验收结论。
 
 ## 节点状态转移邻接表
 
@@ -95,5 +96,5 @@
 | E24 | 2026-10-29 | D47 | 移除 ACP 并统一终端/Web 契约：删除 `super_agent/acp` 与 `tests/acp`，移除 `--acp` 标志、入口分支、冒烟段与文档引用；把 MCP、附件、工作区查询、扩展、记忆端口并入 `frontend.Conversation`，`tui` 改为重导出；Web 新增 MCP、附件、仓库/诊断、扩展、记忆条目、Agent、压缩/分支/导出/重命名/删除/撤销、工作流提示、上下文文件与帮助入口；`frontend/workflows.py` 成为终端与 Web 共用的提示词来源；`ConfigView` 增加 `instruction_sources`；静态界面契约加入工具面板 30 个 id 与对话框可访问性用例。验证：`python -m compileall` 通过；`tsc -p tsconfig.web.json` 与 `--noEmit` 通过；`node --check app.js` 通过；`git diff --check` 通过；`check_dependencies` 直接运行 153 文件、0 违规；以 `FakeConversation` 直接驱动 19 条路由的冒烟检查通过；以真实 `web.Server` 在回环端口完成 6 条 HTTP 检查（含查询串、202、400 与指令文件），`_read_request` 查询串保留检查通过；代码/测试/脚本中 ACP 引用为 0。限制：本机无 pytest、rich 等依赖，未运行 pytest；Web 工具面板与真实浏览器/终端交互未做人工验收 |
 | E25 | 2026-10-29 | D46、D47 | 补齐本机验证环境并取得真实结果。环境：Python 3.13.17（`C:\Users\yjzq9\AppData\Local\Programs\Python\Python313`），仓库内 `.venv` 由 pip 装配、版本对齐 `uv.lock`（pytest 9.1.1、pytest-asyncio 1.4.0、pytest-cov 7.1.0、ruff 0.16.7、pyright 1.1.414、rich 15.0.0、httpx2 2.16.0、openai 3.14.1、anthropic 1.6.0）；PATH 前置 Git Bash（`C:\Program Files\Git\bin`），清除 `ALL_PROXY` 等代理变量（否则 `httpx` 因缺 `socksio` 报 `ImportError`），`TEMP` 与 pytest basetemp 放到 `.workbuddy/verify`（DSH 沙箱下子进程只能写工作区）；`uv sync --frozen` 因到 `files.pythonhosted.org` 的 TLS 连接反复中断未跑通，改由 pip 按锁文件版本装配。结果：`tests/app/test_front_end_selection.py` 4 条通过，D46 关闭；全仓 601 通过、14 失败、9 跳过、2 错误，`python -X dev` 下 `tests/runtime` 与 `tests/tools` 并发子集 389 通过、9 失败、6 跳过、2 错误；覆盖率 80%；`ruff format --check .` 通过，`ruff check .` 只剩 4 条既有 `RUF001`（`scripts/smoke.py`、`tests/tui/test_terminal.py`）；`pyright` 97 条（上次记录 80 条，代码量增长所致，仍未清零）；`npm run check:web` 通过。失败分类：5 条由沙箱临时目录引起（`tempfile.gettempdir()` 回退到仓库根，项目说明与插件发现因此向上找到了本仓库自己的 `AGENTS.md` 与 `plugin/`），9 条属 Windows 平台语义（`ntpath` 不把 `/etc/passwd` 判为绝对路径、`chmod` 不产生只读根、Git Bash 的 `pwd` 返回 `/c/...`、MSYS2 首次启动横幅、POSIX 进程组终止、测试以 JSON 文本比对未转义的反斜杠、`read_file` 未规范化 CRLF），2 个 error 与偶发的第 15 条失败来自 asyncio Proactor 传输对象析构触发的 `PytestUnraisableExceptionWarning`（`filterwarnings = ["error"]`）。顺带修掉 D47 的遗留项：`ruff` 报出的 9 条导入排序、`__all__` 排序与未使用导入，`super_agent/web/routes.py` 与 `tests/web/test_routes.py` 两处格式，以及工具面板未接入 Escape 层级（运行中按 Escape 会误触取消，违反 [UI 规范](design/ui.md) 的模态框要求）。浏览器验收：Edge 156 headless 经 CDP 驱动真实静态页面与真实 Web 适配器，既有 46 项交互检查全过（桌面 1440×900、移动 390×844、空态、离线重连，13 张截图存于 `.workbuddy/ui-acceptance`），新增 11 项工具面板检查全过（30 个控件齐备、`role=dialog` 与 `aria-modal` 及标题关联、焦点进入与返回触发按钮、Tab 不离开对话框、MCP/记忆/上下文文件在面板内应答、Escape 关闭、无 console 错误，截图 `.workbuddy/verify/shots/tools-panel.png`）。文档检查：22 份 Markdown 的本地链接与锚点全部可解析，Gap 与 Flow 的三张表列数一致，`git diff --check` 通过。限制：真实终端验收需 POSIX 环境，本机无法执行；`uv` 按锁文件复现未跑通；上述平台缺陷尚未修复，转入 G14（E26 修掉其中可直接修的部分） |
 | E26 | 2026-10-29 | D47、G14 | 按 E25 的失败分类修掉可直接修的四类问题并重跑。修复：`numbered_lines` 把 CRLF 行尾当作行结束，`read_file` 不再把回车符带进结果；权限策略新增 `isAbsolutePath`，Windows 上的驱动器相对路径（`/etc/passwd` 解析为 `C:\etc\passwd`）与普通绝对路径同样触发工作区外拒绝；`tests/conftest.py` 在设置 `HOME` 后创建该目录，Git Bash 不再因 `$HOME` 不存在打印 MSYS2 首次启动横幅；新增 `tests/tools/shell.py`，用 `pwd -W` 与分隔符归一化比较取代按 POSIX 拼写断言 `pwd` 输出；LSP 重连用例改为解析 JSON 后比较 `source`，不再在序列化文本里找未转义的反斜杠；工作区 display 用例按实现约定比较正斜杠；CRLF 行尾与绝对路径守卫两条行为已写入 [工具规范](spec/tools.md)。验证：全仓 609 通过、7 失败、9 跳过、1 错误，覆盖率 80%；`ruff format --check` 通过，`ruff check` 仍为 4 条既有 `RUF001`，`pyright` 92 条（E25 为 97 条）。剩余失败中 5 条仍是沙箱临时目录（`tempfile.gettempdir()` 回退到仓库根），1 条是 Windows 上的进程组终止用例，另 1 条与 1 个 error 是 asyncio Proactor 析构触发的 `PytestUnraisableExceptionWarning` 随机落到正在运行的用例上（两次复跑分别落在 `tests/web/test_routes.py` 与 `tests/web/test_server.py`，说明与具体用例无关）。限制：改动未提交，真实终端验收未执行 |
-| E27 | 2026-10-29 | D10、D11、D12、D20、D21、D40–D46 | 项目负责人确认已完成节点验收通过：D10–D12（Step 与输入接纳）、D20（跨会话记忆）、D21（委派工作树）、D40–D45（Web 设计与浏览器验收）、D46（Windows 前端矩阵）。同一确认覆盖已关闭工作 G01、G03、G04、G11、G12 的关闭依据，以及 E25、E26 记录的验证环境、pytest 基线、浏览器验收与四项修复。该确认只针对已完成项，不改变 D01、D02、D30–D34、D47 的待验收或阻塞状态 |
-| E28 | 2026-10-29 | D01、D02、D14、D30–D34 | 项目负责人验收通过 8 项：D01（验证环境与基线）、D02（文档入口与差距机制）、D14（排队输入）、D30（UI/UX 设计基线）、D31（应用接口契约）、D32（前端与接口实现）、D34（终端与 Web 适配器）、D33（端到端验收）。连带状态：D14 完成后 D13 的阻塞条件消失，转入待验收；D02 与 D33 完成后 G06、G08 的完成条件满足，移入已关闭工作。记录例外：D33 在 D13、D47 仍未完成时由项目负责人直接验收，其证据只覆盖 Web 端到端与浏览器交互，终端部分仍记在 D13、D47 与 G02、G07、G13 上；依赖图与前驱规则本身不作修改，此为例外而非新规则。本次确认不覆盖真实终端按键与竞态验证 |
+| E27 | 2026-10-29 | D10、D11、D12、D20、D21、D40–D46 | 项目负责人确认已完成节点验收通过：D10–D12（Step 与输入接纳）、D20（跨会话记忆）、D21（委派工作树）、D40–D45（Web 设计与浏览器验收）、D46（Windows 前端矩阵）。同一确认覆盖 G01、G03、G04、G11、G12 的完成依据（这些条目已从 Gap 清单移除），以及 E25、E26 记录的验证环境、pytest 基线、浏览器验收与四项修复。该确认只针对已完成项，不改变 D01、D02、D30–D34、D47 的待验收或阻塞状态 |
+| E28 | 2026-10-29 | D01、D02、D14、D30–D34 | 项目负责人验收通过 8 项：D01（验证环境与基线）、D02（文档入口与差距机制）、D14（排队输入）、D30（UI/UX 设计基线）、D31（应用接口契约）、D32（前端与接口实现）、D34（终端与 Web 适配器）、D33（端到端验收）。连带状态：D14 完成后 D13 的阻塞条件消失，转入待验收；D02 与 D33 完成后 G06、G08 的完成条件满足并从 Gap 清单移除。记录例外：D33 在 D13、D47 仍未完成时由项目负责人直接验收，其证据只覆盖 Web 端到端与浏览器交互，终端部分仍记在 D13、D47 与 G02、G07、G13 上；依赖图与前驱规则本身不作修改，此为例外而非新规则。本次确认不覆盖真实终端按键与竞态验证 |

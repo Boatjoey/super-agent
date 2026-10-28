@@ -32,7 +32,7 @@ flowchart TD
     accepted -->|是| done[在 Flow 记录验收证据并完成当前节点]
     done --> complete{Gap 完成条件全部满足？}
     complete -->|否| node
-    complete -->|是| close[将 Gap 移至已关闭记录，保留 ID 和证据引用]
+    complete -->|是| close[从 Gap 清单移除，关闭依据留在 Flow 证据中]
     close --> finish([结束：该项工作已验收关闭])
 ```
 
