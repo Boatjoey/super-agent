@@ -15,7 +15,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import urllib.parse
-from typing import Any
+from typing import Any, cast
 
 from super_agent import frontend
 from super_agent.frontend import wire
@@ -43,7 +43,7 @@ class Request:
             parsed = json.loads(self.body.decode("utf-8"))
         except (UnicodeDecodeError, ValueError):
             return {}
-        return parsed if isinstance(parsed, dict) else {}
+        return cast("dict[str, Any]", parsed) if isinstance(parsed, dict) else {}
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -58,6 +58,18 @@ class Response:
 
 def json_response(payload: object, status: int = 200) -> Response:
     return Response(status=status, body=json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+
+def string_list(value: object) -> list[str]:
+    """The value when it is a list of strings, refusing anything else."""
+    if not isinstance(value, list):
+        raise ValueError("args must be a list of strings")
+    items: list[str] = []
+    for item in cast("list[object]", value):
+        if not isinstance(item, str):
+            raise ValueError("args must be a list of strings")
+        items.append(item)
+    return items
 
 
 def error_response(status: int, message: str) -> Response:
@@ -194,9 +206,7 @@ class Router:
                     raise ValueError("name and command are required")
                 if args is None:
                     args = []
-                if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
-                    raise ValueError("args must be a list of strings")
-                await self._conversation.add_mcp_server(name, command, list(args))
+                await self._conversation.add_mcp_server(name, command, string_list(cast("object", args)))
                 return json_response({"ok": True})
             case ("DELETE", ["mcp", name]):
                 await self._conversation.remove_mcp_server(name)

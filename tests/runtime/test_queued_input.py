@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 
 import pytest
 
@@ -213,7 +213,13 @@ def test_a_reset_discards_the_queue_and_restarts_the_turn_number() -> None:
 class QueueingModel:
     """Replays responses and queues one input during a chosen model call."""
 
-    def __init__(self, responses: Sequence[ModelResponse], *, submit_on_call: int = 0, submit: object = None) -> None:
+    def __init__(
+        self,
+        responses: Sequence[ModelResponse],
+        *,
+        submit_on_call: int = 0,
+        submit: Callable[[str], Awaitable[object]] | None = None,
+    ) -> None:
         self.responses: list[ModelResponse] = list(responses)
         self.submit_on_call = submit_on_call
         self.submit = submit
@@ -227,8 +233,8 @@ class QueueingModel:
         on_stream_chunk: Callable[[StreamChunk], None],
     ) -> ModelResponse:
         self.inputs.append(tuple(messages))
-        if len(self.inputs) - 1 == self.submit_on_call and callable(self.submit):
-            await self.submit(QUEUED_TEXT)  # type: ignore[misc]
+        if len(self.inputs) - 1 == self.submit_on_call and self.submit is not None:
+            await self.submit(QUEUED_TEXT)
         return self.responses[len(self.inputs) - 1]
 
 
@@ -242,7 +248,11 @@ async def test_a_queued_input_runs_as_its_own_turn() -> None:
     model = QueueingModel([ModelResponse(content="first"), ModelResponse(content="second")])
     engine = new_engine(model, None, None)
     await engine.ready()
-    model.submit = lambda text: engine.submit_queued(live_context(), text, input_id="queue-1")
+
+    async def submit(text: str) -> None:
+        await engine.submit_queued(live_context(), text, input_id="queue-1")
+
+    model.submit = submit
 
     await run_turn(engine, "hi")
 
@@ -279,7 +289,11 @@ async def test_queueing_never_drains_the_running_turn() -> None:
     model = QueueingModel([ModelResponse(content="only")])
     engine = new_engine(model, None, None)
     await engine.ready()
-    model.submit = lambda text: engine.submit_queued(live_context(), text, input_id="queue-1")
+
+    async def submit(text: str) -> None:
+        await engine.submit_queued(live_context(), text, input_id="queue-1")
+
+    model.submit = submit
 
     await run_turn(engine, "hi")
 
@@ -328,7 +342,11 @@ async def test_starting_the_next_turn_reports_the_input_as_accepted() -> None:
     engine = new_engine(model, None, None)
     await engine.ready()
     session = new_session(engine)
-    model.submit = lambda text: session.submit_queued(text, input_id="queue-1")
+
+    async def submit(text: str) -> None:
+        await session.submit_queued(text, input_id="queue-1")
+
+    model.submit = submit
     first: asyncio.Queue[SessionNotification] = asyncio.Queue()
 
     await session.run_turn(live_context(), "hi", first, asyncio.Queue())

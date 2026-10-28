@@ -12,6 +12,7 @@ import shutil
 import signal
 import sys
 from collections.abc import Awaitable, Callable, Sequence
+from types import FrameType
 from typing import cast
 
 from rich.console import Console
@@ -26,6 +27,7 @@ from super_agent.tui.update import update
 __all__ = ["TerminalApplication"]
 
 type InputReader = Callable[[str], Awaitable[str]]
+type SignalHandler = Callable[[int, FrameType | None], object] | int | None
 
 
 async def _read_input(prompt: str) -> str:
@@ -55,14 +57,20 @@ class TerminalApplication:
         self.model = model
         self._reader = reader
         self._console = console or Console(highlight=False)
-        self._key_reader = key_reader if key_reader is not None else new_key_reader()
+        #: Created when the live prompt first needs it. Constructing the shell must
+        #: not touch the terminal: tests and embedded callers inject every stream
+        #: they use, and a captured stdin has no file descriptor to read keys from.
+        self._key_reader: KeyReader | None = key_reader
+        #: How many lines of the live prompt are on screen, so asynchronous output
+        #: can take the prompt down and put it back without guessing.
+        self._drawn_lines = 0
         self._messages: asyncio.Queue[Msg] = asyncio.Queue()
         self._tasks: set[asyncio.Task[None]] = set()
         self._listener: asyncio.Task[None] | None = None
         self._running = True
         self._rendered_messages = 0
-        self._last_error = ""
-        self._last_status = ""
+        self._last_error: str = ""
+        self._last_status: str = ""
         self._streamed_content = ""
         self._streamed_reasoning = ""
         self._live_input = reader is _read_input and sys.stdin.isatty() and sys.stdout.isatty()
@@ -73,6 +81,7 @@ class TerminalApplication:
         loop = asyncio.get_running_loop()
         previous_sigint = signal.getsignal(signal.SIGINT)
         self._install_sigint(loop)
+        self._install_resize(loop)
         width, height = shutil.get_terminal_size((80, 24))
         self._console.print(self.model.transcript.welcome)
         await self._dispatch(runtime.WindowSizeMsg(width=width, height=height))
@@ -92,6 +101,7 @@ class TerminalApplication:
                     await self._dispatch(await self._messages.get())
         finally:
             await self._close()
+            self._restore_resize(loop)
             self._restore_sigint(loop, previous_sigint)
 
     def _install_sigint(self, loop: asyncio.AbstractEventLoop) -> None:
@@ -108,12 +118,34 @@ class TerminalApplication:
         else:
             loop.add_signal_handler(signal.SIGINT, self._messages.put_nowait, runtime.KeyMsg(key="ctrl+c"))
 
-    def _restore_sigint(self, loop: asyncio.AbstractEventLoop, previous: object) -> None:
+    def _restore_sigint(self, loop: asyncio.AbstractEventLoop, previous: SignalHandler) -> None:
         if sys.platform == "win32":
             signal.signal(signal.SIGINT, previous)
         else:
             loop.remove_signal_handler(signal.SIGINT)
             signal.signal(signal.SIGINT, previous)
+
+    def _install_resize(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Turn ``SIGWINCH`` into a layout message, so a resize takes effect now.
+
+        Without it the app only learns the terminal size once, at startup, and a
+        resized window keeps the old transcript and palette budgets until restart.
+        Windows has no ``SIGWINCH`` and no terminal front end, so there is nothing
+        to install there.
+        """
+        if sys.platform == "win32":
+            return
+        loop.add_signal_handler(signal.SIGWINCH, self._queue_window_size)
+
+    def _restore_resize(self, loop: asyncio.AbstractEventLoop) -> None:
+        if sys.platform == "win32":
+            return
+        loop.remove_signal_handler(signal.SIGWINCH)
+
+    def _queue_window_size(self) -> None:
+        """Queue the terminal's current size as the next layout message."""
+        width, height = shutil.get_terminal_size((80, 24))
+        self._messages.put_nowait(runtime.WindowSizeMsg(width=width, height=height))
 
     async def _read_prompt(self) -> None:
         if self._live_input:
@@ -132,19 +164,18 @@ class TerminalApplication:
 
     async def _read_live_prompt(self) -> None:
         key_reader = self._key_reader
+        if key_reader is None:
+            key_reader = new_key_reader()
+            self._key_reader = key_reader
         key_reader.enter()
-        lines = 0
         try:
-            self._draw_prompt(lines)
-            lines = self._prompt_lines()
+            self._draw_prompt()
             while self._running and self.model.cancellation is None:
                 if not self._messages.empty():
-                    self._clear_prompt(lines)
-                    lines = 0
+                    self._clear_prompt()
                     await self._dispatch(self._messages.get_nowait())
                     if self._running and self.model.cancellation is None:
-                        self._draw_prompt(0)
-                        lines = self._prompt_lines()
+                        self._draw_prompt()
                     continue
                 key = await asyncio.to_thread(key_reader.read_key)
                 if not key:
@@ -155,8 +186,7 @@ class TerminalApplication:
                 if key == "ctrl+c":
                     self._running = False
                     break
-                self._clear_prompt(lines)
-                lines = 0
+                self._clear_prompt()
                 draft = self.model.composer.draft()
                 matches = self.model.composer.matches()
                 completing = bool(matches and matches[self.model.composer.selection].name != draft)
@@ -165,11 +195,9 @@ class TerminalApplication:
                     sys.stdout.flush()
                 await self._dispatch(runtime.KeyMsg(key=key))
                 if self.model.cancellation is None and self._running:
-                    self._draw_prompt(0)
-                    lines = self._prompt_lines()
+                    self._draw_prompt()
         finally:
-            if lines:
-                self._clear_prompt(lines)
+            self._clear_prompt()
             key_reader.exit()
             sys.stdout.write("\n")
             sys.stdout.flush()
@@ -177,21 +205,23 @@ class TerminalApplication:
     def _prompt_lines(self) -> int:
         return len(self.model.composer.paletteView().plain.splitlines()) + 1 if self.model.composer.matches() else 1
 
-    def _draw_prompt(self, old_lines: int) -> None:
-        if old_lines:
-            self._clear_prompt(old_lines)
+    def _draw_prompt(self) -> None:
         palette = self.model.composer.paletteView().plain
         if palette:
             sys.stdout.write(palette + "\n")
         sys.stdout.write("\u276f " + self.model.composer.draft())
         sys.stdout.flush()
+        self._drawn_lines = self._prompt_lines()
 
-    @staticmethod
-    def _clear_prompt(lines: int) -> None:
+    def _clear_prompt(self) -> None:
+        lines = self._drawn_lines
+        if not lines:
+            return
         sys.stdout.write("\r\x1b[2K")
         for _ in range(lines - 1):
             sys.stdout.write("\x1b[1A\r\x1b[2K")
         sys.stdout.flush()
+        self._drawn_lines = 0
 
     async def _read_approval(self) -> None:
         self._console.print(self.model.approval.view(self.model.info.cwd))
@@ -287,7 +317,16 @@ class TerminalApplication:
             return None
 
         async def show() -> None:
+            # Command output is printed from a task, so the live prompt may already
+            # be on screen. Take it down first and put it back afterwards; otherwise
+            # the first output line replaces the prompt and no prompt returns until
+            # the next keystroke.
+            restore = self._drawn_lines
+            if restore:
+                self._clear_prompt()
             self._console.print(content)
+            if restore:
+                self._draw_prompt()
 
         return show
 

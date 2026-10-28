@@ -121,6 +121,8 @@ Spec 已正确表达预期时，无需为了“文档先行”改写它。若需
 
 ## 开发命令
 
+Linux 上的开发和验证把 `bubblewrap` 与 `util-linux`（`prlimit`）当作系统依赖：缺少时应用无法在严格沙箱下启动，`./scripts/verify.sh` 也会直接失败，而不是让严格沙箱用例静默跳过。安装命令见 [README](../README.md#安装与启动)。
+
 ```bash
 uv sync                         # 安装 Python 项目与开发依赖
 npm ci                          # 安装锁定的 Web TypeScript 开发依赖

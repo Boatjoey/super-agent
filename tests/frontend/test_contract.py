@@ -17,9 +17,7 @@ from super_agent.frontend import notifications, wire
 def test_the_notification_set_is_closed_to_this_package() -> None:
     """A transport cannot extend the set: unknown kinds would never be mapped."""
     with pytest.raises(TypeError, match="sealed"):
-
-        class Extra(frontend.ConversationNotification):
-            kind = "Extra"
+        type("Extra", (frontend.ConversationNotification,), {"kind": "Extra"})
 
 
 def test_the_kind_list_matches_the_declared_kinds() -> None:

@@ -96,8 +96,14 @@ def new_platform_sandbox(config: SandboxConfig) -> bubblewrap_sandbox:
     """Build the bubblewrap sandbox, or refuse when its tools are missing."""
     bwrap = shutil.which("bwrap")
     if bwrap is None:
-        raise RuntimeError("strict sandbox requires bubblewrap: bwrap not found in PATH")
+        raise RuntimeError(
+            "strict sandbox requires bubblewrap: bwrap not found in PATH "
+            "(install the bubblewrap package, or set sandbox.mode to off)"
+        )
     prlimit = shutil.which("prlimit")
     if prlimit is None:
-        raise RuntimeError("strict sandbox requires prlimit: prlimit not found in PATH")
+        raise RuntimeError(
+            "strict sandbox requires prlimit: prlimit not found in PATH "
+            "(install util-linux, or set sandbox.mode to off)"
+        )
     return bubblewrap_sandbox(bwrap=bwrap, prlimit=prlimit, config=config)

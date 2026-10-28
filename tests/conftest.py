@@ -46,7 +46,12 @@ def _deterministic_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.delenv("YOLO", raising=False)
     monkeypatch.delenv("NO_TOOLS", raising=False)
     for name in tuple(os.environ):
-        if name.endswith("_API_KEY"):
+        # A proxy inherited from the developer's shell changes how HTTP clients
+        # behave and how they parse ``NO_PROXY``; tests that stand up a loopback
+        # server must not be routed through it, and an unsupported proxy scheme
+        # (for example a SOCKS URL without the optional dependency) would fail
+        # client construction instead of testing this repository.
+        if name.endswith("_API_KEY") or name.lower().endswith("_proxy"):
             monkeypatch.delenv(name, raising=False)
     monkeypatch.chdir(tmp_path)
     yield

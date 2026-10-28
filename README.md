@@ -4,7 +4,16 @@ Super Agent 是在本地项目中使用的 Agent，可通过终端或本机浏�
 
 ## 安装与启动
 
-需要 Python 3.12 及 uv。在本仓库根目录执行：
+需要 Python 3.12 及 uv。Linux 上严格沙箱还依赖两个系统组件：
+
+```bash
+sudo apt install bubblewrap util-linux   # Debian/Ubuntu
+sudo dnf install bubblewrap util-linux   # Fedora
+```
+
+缺少 `bwrap` 或 `prlimit` 时，应用按[沙箱要求](docs/spec/tools.md#沙箱)拒绝启动。
+
+在本仓库根目录执行：
 
 ```bash
 uv sync
@@ -20,7 +29,7 @@ uv run super-agent
 super-agent
 ```
 
-安装位置及自定义方式见[构建说明](docs/development.md#构建)。Linux 命令执行所需的隔离组件见[沙箱要求](docs/spec/tools.md#沙箱)。
+安装位置及自定义方式见[构建说明](docs/development.md#构建)。
 
 ## 两个前端
 

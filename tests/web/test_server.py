@@ -9,13 +9,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+from typing import cast
 
 import httpx
 import pytest
 
 from super_agent import frontend
 from super_agent.web import new_server
-from super_agent.web.server import _read_request
+from super_agent.web.server import _read_request  # pyright: ignore[reportPrivateUsage]
 from tests.fakes.frontend import FakeConversation
 
 
@@ -89,14 +90,16 @@ async def test_the_event_stream_greets_a_tab_then_follows_a_turn() -> None:
 
         name, payload = await read_event(reader)
         assert name == "Snapshot"
-        assert payload["snapshot"]["agent_status"]["label"] == "Idle"
+        snapshot = cast("dict[str, object]", payload["snapshot"])
+        agent_status = cast("dict[str, object]", snapshot["agent_status"])
+        assert agent_status["label"] == "Idle"
 
         async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{server.port}", timeout=5) as client:
             accepted = await client.post("/api/turns", json={"text": "hello"})
         assert accepted.status_code == 202
         await runner.wait()
 
-        names = []
+        names: list[str] = []
         for _ in range(4):
             name, _payload = await read_event(reader)
             names.append(name)

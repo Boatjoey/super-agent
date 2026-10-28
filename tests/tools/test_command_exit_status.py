@@ -6,6 +6,9 @@ module is what makes the whole application importable, so the table is built
 leniently and these tests pin that down.
 """
 
+# These tables are implementation details of the module under test, and
+# pinning their platform-lenient construction is what this file is for.
+# pyright: reportPrivateUsage=false
 from __future__ import annotations
 
 import signal

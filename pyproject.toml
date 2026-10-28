@@ -7,8 +7,11 @@ requires-python = ">=3.12"
 license = { file = "LICENSE" }
 dependencies = [
     "anthropic>=0.69",
-    "httpx>=0.28",
-    "httpx2>=2.16",
+    # The ``socks`` extra pulls in ``socksio``: HTTP clients inherit ``ALL_PROXY``
+    # from the environment, and a SOCKS proxy without that package fails every
+    # request while the connection is still being set up.
+    "httpx[socks]>=0.28",
+    "httpx2[socks]>=2.16",
     "lxml>=5.3",
     "openai>=1.109",
     "pyperclip>=1.9",
@@ -65,6 +68,10 @@ select = [
 ignore = [
     "E501", # line length is handled by the formatter
 ]
+# The UI text is Chinese: the fullwidth comma is intentional, and the prompt
+# glyph is the one the terminal actually prints. RUF001 exists to catch a
+# lookalike that slipped into an identifier-like string, which neither does.
+allowed-confusables = ["，", "❯"]
 
 [tool.ruff.lint.isort]
 # Re-exports are written `X as X`, which isort would otherwise split onto one

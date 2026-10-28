@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import sys
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from super_agent.runtime.protocol.run_context import live_context
 from super_agent.runtime.protocol.types import ToolCall
 from super_agent.tools import default_registry, default_sandbox_config, sandboxed_registry
 from super_agent.tools.commands import command_exit_error, max_output_bytes
+from super_agent.tools.sandbox_linux import bubblewrap_sandbox, new_platform_sandbox
 from tests.helpers import spawn_tree
 from tests.tools.test_workspace import workspace_for
 
@@ -188,8 +190,9 @@ async def test_strict_sandbox_requires_bubblewrap(tmp_path: Path, monkeypatch: p
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty))
 
-    with pytest.raises(RuntimeError, match="requires bubblewrap"):
+    with pytest.raises(RuntimeError, match="requires bubblewrap") as excinfo:
         sandboxed_registry(default_sandbox_config(str(tmp_path)), workspace_for(tmp_path))
+    assert "sandbox.mode to off" in str(excinfo.value)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
@@ -204,10 +207,10 @@ async def test_strict_sandbox_restricts_filesystem_network_and_resources(tmp_pat
     config.memory_bytes = 64 << 20
     config.max_processes = 17
     config.max_open_files = 23
-    try:
-        registry = sandboxed_registry(config, workspace_for(workspace))
-    except RuntimeError as err:
-        pytest.skip(f"strict sandbox unavailable: {err}")
+    # Missing bubblewrap/prlimit is a declared dependency, not a reason to skip:
+    # verify.sh fails on it before the tests run, and a bare pytest run should
+    # surface it too.
+    registry = sandboxed_registry(config, workspace_for(workspace))
 
     try:
         probe = await registry.run(live_context(), ToolCall(name="run_command", input='{"command":"printf ready"}'))
@@ -243,3 +246,57 @@ async def test_strict_sandbox_restricts_filesystem_network_and_resources(tmp_pat
         ToolCall(name="run_command", input=json.dumps({"command": limits_command})),
     )
     assert limits == "65536 17 23"
+
+
+def _sandbox(tmp_path: Path, *, allow_network: bool = False) -> bubblewrap_sandbox:
+    config = default_sandbox_config(str(tmp_path))
+    config.allow_network = allow_network
+    return bubblewrap_sandbox(bwrap="/usr/bin/bwrap", prlimit="/usr/bin/prlimit", config=config)
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+def test_sandbox_defaults_an_empty_cwd_to_the_workspace(tmp_path: Path) -> None:
+    workspace = os.path.realpath(tmp_path)
+
+    _, args, cwd = _sandbox(tmp_path).wrap(str(tmp_path), "", "true", [])
+
+    assert cwd == workspace
+    assert args[args.index("--chdir") + 1] == workspace
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+def test_sandbox_refuses_a_cwd_outside_the_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    with pytest.raises(RuntimeError, match="outside workspace"):
+        _sandbox(workspace).wrap(str(workspace), str(outside), "true", [])
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+def test_sandbox_refuses_a_missing_workspace(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="workspace is not configured"):
+        _sandbox(tmp_path).wrap("", str(tmp_path), "true", [])
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+def test_sandbox_shares_the_network_only_when_allowed(tmp_path: Path) -> None:
+    _, denied, _ = _sandbox(tmp_path).wrap(str(tmp_path), str(tmp_path), "true", [])
+    _, allowed, _ = _sandbox(tmp_path, allow_network=True).wrap(str(tmp_path), str(tmp_path), "true", [])
+
+    assert "--share-net" not in denied
+    assert "--share-net" in allowed
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+def test_sandbox_refuses_without_prlimit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def which(name: str) -> str | None:
+        return "/usr/bin/bwrap" if name == "bwrap" else None
+
+    monkeypatch.setattr(shutil, "which", which)
+
+    with pytest.raises(RuntimeError, match="requires prlimit") as excinfo:
+        new_platform_sandbox(default_sandbox_config(str(tmp_path)))
+    assert "sandbox.mode to off" in str(excinfo.value)

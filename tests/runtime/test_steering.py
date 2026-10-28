@@ -308,7 +308,11 @@ async def test_an_input_during_the_final_answer_keeps_the_turn_running() -> None
     model = SteeringModel([ModelResponse(content="first"), ModelResponse(content="second")])
     engine = new_engine(model, None, None)
     await engine.ready()
-    model.submit = lambda text: engine.submit_steering(live_context(), text)
+
+    async def submit(text: str) -> None:
+        await engine.submit_steering(live_context(), text)
+
+    model.submit = submit
 
     await run_turn(engine, "hi")
 
@@ -324,7 +328,11 @@ async def test_the_session_boundary_accepts_steering_the_same_way() -> None:
     engine = new_engine(model, None, None)
     await engine.ready()
     session = new_session(engine)
-    model.submit = lambda text: session.submit_steering(text)
+
+    async def submit(text: str) -> None:
+        await session.submit_steering(text)
+
+    model.submit = submit
 
     await run_turn(engine, "hi")
 
@@ -392,16 +400,16 @@ async def test_the_view_reports_the_step_an_input_would_join() -> None:
         view = engine.snapshot()
         seen.append((view.step_index, tuple(item.id for item in view.steering)))
 
-    model.submit = lambda text: submit(text)
+    model.submit = submit
 
     await run_turn(engine, "hi")
 
     assert seen == [(1, ("steer-1",))]
 
 
-async def drain(queue: asyncio.Queue[object]) -> list[object]:
+async def drain[T](queue: asyncio.Queue[T]) -> list[T]:
     """Everything a turn published, in order, up to the close marker."""
-    seen: list[object] = []
+    seen: list[T] = []
     while True:
         item = queue.get_nowait()
         seen.append(item)
@@ -417,7 +425,11 @@ async def test_the_session_reports_the_step_that_took_the_input_up() -> None:
     await engine.ready()
     session = new_session(engine)
     notifications: asyncio.Queue[SessionNotification] = asyncio.Queue()
-    model.submit = lambda text: session.submit_steering(text, input_id="steer-1")
+
+    async def submit(text: str) -> None:
+        await session.submit_steering(text, input_id="steer-1")
+
+    model.submit = submit
 
     await session.run_turn(live_context(), "hi", notifications, asyncio.Queue())
 
@@ -453,7 +465,11 @@ async def test_an_input_without_an_id_is_not_announced() -> None:
     await engine.ready()
     session = new_session(engine)
     notifications: asyncio.Queue[SessionNotification] = asyncio.Queue()
-    model.submit = lambda text: session.submit_steering(text)
+
+    async def submit(text: str) -> None:
+        await session.submit_steering(text)
+
+    model.submit = submit
 
     await session.run_turn(live_context(), "hi", notifications, asyncio.Queue())
 

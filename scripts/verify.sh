@@ -4,6 +4,17 @@ set -euo pipefail
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${project_root}"
 
+# The strict sandbox is the Linux default, and these are its declared system
+# dependencies. Fail here instead of letting the sandbox tests skip silently.
+if [[ "$(uname -s)" == "Linux" ]]; then
+    for tool in bwrap prlimit; do
+        if ! command -v "${tool}" >/dev/null 2>&1; then
+            printf 'missing Linux sandbox dependency: %s (install bubblewrap or util-linux)\n' "${tool}" >&2
+            exit 1
+        fi
+    done
+fi
+
 # The four gates: formatting, linting, strict typing, and behaviour.
 npm run check:web
 uv run ruff format --check .

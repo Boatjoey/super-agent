@@ -23,7 +23,7 @@ import codecs
 import os
 import select
 import sys
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 __all__ = ["KeyReader", "new_key_reader"]
 
@@ -33,15 +33,41 @@ class KeyReader(Protocol):
 
     def enter(self) -> None:
         """Switch the terminal to cbreak: per-keystroke, no echo."""
+        ...
 
     def exit(self) -> None:
         """Restore the terminal's original mode."""
+        ...
 
     def ready(self) -> bool:
         """Whether a keystroke is already buffered."""
+        ...
 
     def read_key(self) -> str:
         """Block until one keystroke arrives and return its canonical name."""
+        ...
+
+
+class _Console(Protocol):
+    """The slice of ``msvcrt`` the Windows reader uses.
+
+    The standard-library module is not fully typed on every platform, so the
+    reader casts it to this protocol instead of relying on the host's stubs.
+    """
+
+    def kbhit(self) -> bool:
+        """Whether a key is waiting."""
+        ...
+
+    def getwch(self) -> str:
+        """Read one wide character without echoing it."""
+        ...
+
+
+def _console() -> _Console:
+    import msvcrt
+
+    return cast("_Console", msvcrt)
 
 
 #: The arrow-key escape sequences, by the bytes a terminal sends.
@@ -72,7 +98,7 @@ class PosixKeyReader:
 
     def __init__(self) -> None:
         self._fd = sys.stdin.fileno()
-        self._original: object | None = None
+        self._original: list[Any] | None = None
 
     def enter(self) -> None:
         import termios
@@ -112,7 +138,12 @@ class PosixKeyReader:
         decoder = codecs.getincrementaldecoder("utf-8")("replace")
         character = decoder.decode(first)
         while not character:
-            character = decoder.decode(os.read(fd, 1))
+            chunk = os.read(fd, 1)
+            if not chunk:
+                # EOF in the middle of a multibyte character: report it as the
+                # end of input instead of spinning on the empty read forever.
+                return "ctrl+d"
+            character = decoder.decode(chunk)
         return character
 
 
@@ -137,24 +168,22 @@ class WindowsKeyReader:
         return
 
     def ready(self) -> bool:
-        import msvcrt
-
-        return bool(msvcrt.kbhit())
+        return _console().kbhit()
 
     def read_key(self) -> str:
-        import msvcrt
+        console = _console()
 
-        while not msvcrt.kbhit():
+        while not console.kbhit():
             # msvcrt has no blocking "wait for a key" that also participates in the
             # event loop; the caller awaits this on a worker thread, so a short poll
             # is how it waits without spinning the CPU.
             import time
 
             time.sleep(0.02)
-        first = msvcrt.getwch()
+        first = console.getwch()
         if first in ("\x00", "\xe0"):
             # A function/arrow key: the lead byte followed by the direction code.
-            second = msvcrt.getwch()
+            second = console.getwch()
             return {
                 "H": "up",
                 "P": "down",

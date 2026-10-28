@@ -151,6 +151,22 @@ def home_environment(home: Path) -> dict[str, str]:
     return {"HOME": str(home), "USERPROFILE": str(home)}
 
 
+def local_environment(home: Path) -> dict[str, str]:
+    """The process environment for a run against the fake provider.
+
+    Every endpoint here is loopback, so an inherited proxy is wrong in two ways:
+    it can send local requests to a remote proxy, and a proxy scheme whose client
+    support is not installed fails the whole run. The smoke is an acceptance test
+    of this repository, not of the developer's shell, so proxy variables are
+    dropped the way the pytest fixtures drop them.
+    """
+    environment = {**os.environ, **home_environment(home)}
+    for name in tuple(environment):
+        if name.lower().endswith("_proxy"):
+            del environment[name]
+    return environment
+
+
 def free_port() -> int:
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -199,8 +215,7 @@ class Terminal:
         self.master, slave = pty.openpty()
         set_window_size(slave, rows, columns)
         environment = {
-            **os.environ,
-            **home_environment(home),
+            **local_environment(home),
             "TERM": "xterm-256color",
             "COLUMNS": str(columns),
             "LINES": str(rows),
@@ -300,7 +315,7 @@ def cell_length(line: str) -> int:
 
 def run_cli_checks(binary: list[str], workspace: Path, home: Path) -> None:
     """The non-interactive acceptance steps: usage, exit codes, error text."""
-    environment = {**os.environ, **home_environment(home), "COLUMNS": "100", "LINES": "30"}
+    environment = {**local_environment(home), "COLUMNS": "100", "LINES": "30"}
     environment.pop("YOLO", None)
     environment.pop("NO_TOOLS", None)
 
@@ -329,13 +344,39 @@ def run_cli_checks(binary: list[str], workspace: Path, home: Path) -> None:
     assert conflicting.returncode == 1, f"conflicting flags exit code {conflicting.returncode}, want 1"
     assert "mutually exclusive" in conflicting.stderr, conflicting.stderr
 
-    no_key = tempfile.mkdtemp()
+    # A provider with no usable credential is not a startup failure: the app
+    # starts and reports `credential_missing` so the front end can ask for one
+    # (see docs/spec/config.md#沙箱). This step therefore proves the interface
+    # still comes up. The sandbox is off for the same reason the interactive home
+    # disables it: the check is about credentials, not about whether the host has
+    # bubblewrap, which the strict default requires.
+    no_key = Path(tempfile.mkdtemp())
     try:
-        missing = subprocess.run(
-            binary, cwd=workspace, env={**environment, **home_environment(Path(no_key))}, capture_output=True, text=True
+        no_key_config = no_key / ".superagent"
+        no_key_config.mkdir(parents=True)
+        (no_key_config / "settings.json").write_text(
+            json.dumps(
+                {
+                    "provider": "deepseek",
+                    "providers": {"deepseek": {"base_url": "http://127.0.0.1:1/v1", "model": "smoke-model"}},
+                    "sandbox": {"mode": "off"},
+                    "telemetry": {"log_path": ""},
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
         )
-        assert missing.returncode == 1, f"missing credential exit code {missing.returncode}, want 1"
-        assert "has no api_key" in missing.stderr, missing.stderr
+        missing = subprocess.run(
+            binary,
+            cwd=workspace,
+            env={**environment, **home_environment(no_key)},
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+        )
+        assert missing.returncode == 0, f"missing credential exit code {missing.returncode}, want 0: {missing.stderr}"
+        assert "Super Agent" in missing.stdout, f"the terminal did not start without a credential: {missing.stdout!r}"
     finally:
         shutil.rmtree(no_key, ignore_errors=True)
 
@@ -431,7 +472,7 @@ def spawn_front_end(
     stdin: int | None = subprocess.DEVNULL,
 ) -> subprocess.Popen[bytes]:
     """Start the console script on one front end, with HOME pointing at the fake provider."""
-    environment = {**os.environ, **home_environment(home), "PYTHONUNBUFFERED": "1"}
+    environment = {**local_environment(home), "PYTHONUNBUFFERED": "1"}
     environment.pop("YOLO", None)
     environment.pop("NO_TOOLS", None)
     return subprocess.Popen(
