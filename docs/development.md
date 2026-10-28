@@ -122,15 +122,21 @@ Spec 已正确表达预期时，无需为了“文档先行”改写它。若需
 ## 开发命令
 
 ```bash
-uv sync                         # 安装项目与开发依赖
+uv sync                         # 安装 Python 项目与开发依赖
+npm ci                          # 安装锁定的 Web TypeScript 开发依赖
+npm run build:web               # 将 app.ts 编译为随包发布的 app.js
+npm run check:web               # TypeScript 严格检查与构建产物语法检查
 uv run super-agent              # 启动交互式命令行
+uv run super-agent --web        # 启动本机 Web 界面
 uv run pytest                   # 运行全部测试
 uv run ruff format <files>       # 格式化修改过的 Python 文件
 ./scripts/coverage.sh            # 全项目覆盖率检查
 ./scripts/verify.sh              # 格式、静态检查、类型、测试、并发和覆盖率
-uv run python scripts/smoke.py   # 伪终端端到端验收
+uv run python scripts/smoke.py   # 伪终端与 Web/ACP 端到端验收
 ./scripts/build-local.sh        # 构建并安装本地程序
 ```
+
+Web 交互源码使用 TypeScript，样式与页面结构保持原生 CSS 和 HTML，不引入浏览器运行时框架。修改 `super_agent/web/static/app.ts` 后必须执行 `npm run build:web` 并一起提交生成的 `app.js`；Python 包和本地 HTTP 服务不依赖 Node.js，Node.js 只用于开发期类型检查和构建。
 
 ## 测试
 
@@ -141,6 +147,7 @@ uv run python scripts/smoke.py   # 伪终端端到端验收
 - 重置测试证明 `system` 消息得到保留。
 - 解析文档或源码的测试必须在格式改变时明确失败，不能悄悄匹配不到任何内容。
 - 共享的测试替身放在 `tests/fakes/`；测试作为子进程启动的辅助程序放在 `tests/helpers/`，通过 `python -m tests.helpers.<name>` 运行。
+- `tests/web/test_static_ui.py` 校验页面地标、控件名称、状态区域、TypeScript 服务端路径与安全 DOM 约束；修改 Web 静态文件后需先执行 `npm run build:web`，其中 `node --check` 一项在未安装 Node.js 时跳过并在输出中注明。
 
 使用 `./scripts/verify.sh` 执行全部检查，包括格式、静态检查、严格类型检查、测试、在 `python -X dev` 下运行的并发测试子集，以及覆盖率。GitHub Actions 在每次推送和变更审阅记录时运行该脚本。
 

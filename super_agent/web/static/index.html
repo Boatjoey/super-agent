@@ -4,70 +4,174 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Super Agent</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
+    <!-- Icon sprite: referenced with <use href="#icon-…">, never re-encoded by
+         script. Dynamic icons are built with createElementNS + <use>. -->
+    <svg xmlns="http://www.w3.org/2000/svg" hidden aria-hidden="true" focusable="false">
+      <symbol id="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 7h16M4 12h16M4 17h16" />
+      </symbol>
+      <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 6l12 12M18 6L6 18" />
+      </symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+        <circle cx="15" cy="7" r="2.2" />
+        <circle cx="9" cy="17" r="2.2" />
+      </symbol>
+      <symbol id="icon-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11.5L20 4l-7.5 16-2.2-6.3L4 11.5z" />
+      </symbol>
+      <symbol id="icon-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6.5" y="6.5" width="11" height="11" rx="1.5" />
+      </symbol>
+      <symbol id="icon-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7.5V12l3 2" />
+      </symbol>
+      <symbol id="icon-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 6l6 6-6 6" />
+      </symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.98 6.63 2.63" />
+        <path d="M21 3v5.5h-5.5" />
+      </symbol>
+      <symbol id="icon-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 4L2.8 20h18.4L12 4z" />
+        <path d="M12 10v4.5" />
+        <path d="M12 17.5h.01" />
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12.5l4.5 4.5L19 7" />
+      </symbol>
+      <symbol id="icon-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3.5 7a1.5 1.5 0 0 1 1.5-1.5h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 17V7z" />
+      </symbol>
+      <symbol id="icon-memory" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="12" cy="5.5" rx="7.5" ry="3" />
+        <path d="M4.5 5.5v13c0 1.66 3.36 3 7.5 3s7.5-1.34 7.5-3v-13" />
+        <path d="M4.5 12c0 1.66 3.36 3 7.5 3s7.5-1.34 7.5-3" />
+      </symbol>
+    </svg>
+
+    <!-- Mobile drawer backdrop: shown by script together with
+         body.sidebar-open; the sidebar itself turns into the drawer. -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
+
     <div class="shell">
-      <aside class="sidebar">
-        <div class="brand"><span class="brand-mark"></span>Super Agent</div>
-        <button id="new-chat" class="new-chat" type="button">＋ 新对话</button>
+      <aside id="sidebar" class="sidebar" aria-label="会话导航">
+        <div class="sidebar-head">
+          <div class="brand"><span class="brand-mark"></span>Super Agent</div>
+          <button id="sidebar-close" class="sidebar-close hidden" type="button" aria-label="关闭会话菜单">
+            <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-close" /></svg>
+          </button>
+        </div>
+        <button id="new-chat" class="new-chat" type="button">
+          <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-plus" /></svg>
+          <span>新对话</span>
+        </button>
         <div class="sidebar-label">最近会话</div>
         <ul id="sessions" class="sessions"></ul>
         <div class="sidebar-foot">
           <div id="cwd" class="cwd" title="工作目录"></div>
           <div id="model" class="model"></div>
+          <div id="reasoning" class="reasoning hidden"></div>
         </div>
       </aside>
 
-      <main class="main">
+      <main id="main" class="main">
         <header class="topbar">
-          <div id="status" class="status">
-            <span class="status-dot"></span><span id="status-label">空闲</span>
+          <div class="topbar-left">
+            <button id="menu-toggle" class="toggle menu-toggle" type="button" aria-label="打开会话菜单" aria-expanded="false" aria-controls="sidebar">
+              <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-menu" /></svg>
+            </button>
+            <span id="session-title-top" class="topbar-title"></span>
           </div>
           <div class="topbar-right">
+            <div id="status" class="status" aria-live="polite">
+              <span class="status-dot" aria-hidden="true"></span><span id="status-label">空闲</span>
+            </div>
+            <div id="connection" class="status connection" data-state="connecting" title="事件流连接状态" aria-live="polite">
+              <span class="status-dot connection-dot" aria-hidden="true"></span><span id="connection-label" class="connection-label">连接中</span>
+            </div>
             <span id="usage" class="usage"></span>
-            <button id="memory" class="toggle" type="button" title="跨会话记忆">记忆</button>
-            <select id="permission" class="select" title="权限模式">
+            <button id="memory" class="toggle" type="button" title="跨会话记忆" aria-pressed="false">
+              <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-memory" /></svg>
+              <span>记忆</span>
+            </button>
+            <select id="permission" class="select" title="权限模式" aria-label="权限模式">
               <option value="ask">询问</option>
               <option value="accept-edits">接受编辑</option>
               <option value="plan">计划</option>
               <option value="bypass">全部允许</option>
             </select>
-            <button id="settings" class="toggle" type="button" title="模型与凭据配置">配置</button>
+            <button id="settings" class="toggle" type="button" title="模型与凭据配置">
+              <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-settings" /></svg>
+              <span>配置</span>
+            </button>
           </div>
         </header>
 
-        <section id="transcript" class="transcript" aria-live="polite"></section>
+        <!-- Persistent connection notice: visible while the event stream is
+             down and script is reconnecting with backoff. -->
+        <div id="connection-banner" class="connection-banner hidden" role="status" aria-live="polite"></div>
+        <!-- Region-level errors (snapshot/config reads) with retry entry. -->
+        <div id="error-region" class="error-region hidden" role="alert"></div>
 
-        <div id="approval" class="approval hidden" role="dialog" aria-modal="false"></div>
+        <section id="transcript" class="transcript" aria-label="对话记录" aria-busy="true">
+          <!-- The scroll container is the section; the centered rendering
+               column is this log. -->
+          <div id="conversation" class="conversation" role="log" aria-live="polite" aria-relevant="additions text"></div>
+        </section>
+
+        <div id="approval" class="approval hidden" role="region" aria-label="工具审批"></div>
 
         <footer class="composer">
           <div class="composer-box">
-            <textarea id="input" rows="1" placeholder="给 Agent 一个任务…" spellcheck="false"></textarea>
+            <textarea id="input" rows="1" placeholder="给 Agent 一个任务…" spellcheck="false" aria-label="任务输入"></textarea>
             <div class="composer-actions">
               <span id="hint" class="hint">Enter 发送 · Shift+Enter 换行</span>
               <div class="buttons">
-                <button id="queue" class="queue hidden" type="button">排队</button>
-                <button id="stop" class="stop hidden" type="button">停止</button>
-                <button id="send" class="send" type="button">发送</button>
+                <button id="queue" class="queue hidden" type="button">
+                  <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-queue" /></svg>
+                  <span>排队</span>
+                </button>
+                <button id="stop" class="stop hidden" type="button">
+                  <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-stop" /></svg>
+                  <span>停止</span>
+                </button>
+                <button id="send" class="send" type="button">
+                  <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-send" /></svg>
+                  <span>发送</span>
+                </button>
               </div>
             </div>
           </div>
         </footer>
       </main>
     </div>
-    <div id="toast" class="toast hidden" role="status"></div>
-    <div id="settings-modal" class="settings-modal hidden" role="dialog" aria-modal="true">
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+    <div id="settings-modal" class="settings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <div class="settings-panel">
         <div class="settings-head">
-          <span>模型与凭据配置</span>
-          <button id="settings-close" class="settings-close" type="button" aria-label="关闭">×</button>
+          <span id="settings-title">模型与凭据配置</span>
+          <button id="settings-close" class="settings-close" type="button" aria-label="关闭">
+            <svg class="icon" width="16" height="16" aria-hidden="true" focusable="false"><use href="#icon-close" /></svg>
+          </button>
         </div>
         <div id="sandbox-warning" class="settings-warning hidden"></div>
         <div class="settings-body">
           <label class="settings-field">
             <span>服务商</span>
-            <select id="settings-provider"></select>
+            <select id="settings-provider" aria-label="服务商"></select>
           </label>
           <label class="settings-field">
             <span>API Key</span>
@@ -84,6 +188,7 @@
         </div>
       </div>
     </div>
-    <script src="/app.js"></script>
+
+    <script type="module" src="/app.js"></script>
   </body>
 </html>

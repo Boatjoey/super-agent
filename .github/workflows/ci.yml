@@ -15,5 +15,12 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version-file: pyproject.toml
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
       - run: uv sync
+      - run: npm ci
+      - run: npm run build:web
+      - run: git diff --exit-code -- super_agent/web/static/app.js
       - run: ./scripts/verify.sh

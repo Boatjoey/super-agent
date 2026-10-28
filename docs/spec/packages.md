@@ -90,6 +90,7 @@ Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归
 - `frontend/wire.py`：契约的 JSON 投影，供 Web 事件与 ACP 更新共用，避免两套编码。
 - `app/conversation_adapter.py`：唯一实现，负责运行时到展示值的映射与一轮的通道桥接。
 - `web/hub.py` 事件分发、`web/turns.py` 单轮槽位、`web/routes.py` 路由表、`web/server.py` HTTP 与事件流、`web/assets.py` 随包静态文件。
+- `web/static/index.html` 页面语义结构与可访问性容器、`web/static/style.css` 设计令牌、组件和响应式布局、`web/static/favicon.svg` 站点图标、`web/static/app.ts` 快照重建、事件消费、视图渲染与用户操作的 TypeScript 源码；`web/static/app.js` 是其随包发布的浏览器构建产物。静态前端不拥有业务规则，也不引入运行时或模型依赖。
 - `acp/jsonrpc.py` 消息与错误码、`acp/connection.py` 请求应答配对、`acp/agent.py` 协议方法、`acp/updates.py` 更新负载、`acp/stdio.py` 换行分隔的读写循环。
 
 `project` 解析选中的项目，与文件系统访问策略相互独立。`workspace.Context` 是工作区根目录和 cwd 的、独立于进程的唯一权威来源；`workspace.Workspace` 将其适配到会话检查点、附件、导出和工作区恢复端口，包括对旧版保存路径的一次性规范化升级。`store/store.py` 写入和回放持久化会话记录；其保证的持久化顺序见 `session.md`。`store/memory.py` 提供跨会话记忆的两个文件后端（会话存储自己的文件、用户指定路径的文件），实现 `runtime/session/memory.py` 声明的端口。`app/mcp.py` 协调 MCP 生命周期、动态工具注册、回滚和配置的原子持久化。`app/memory.py` 按设置挑选记忆后端，并把开关的变化写回设置。

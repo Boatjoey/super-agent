@@ -49,6 +49,14 @@ async def test_the_page_the_script_and_the_json_surface_are_served() -> None:
             assert script.status_code == 200
             assert script.headers["content-type"].startswith("text/javascript")
 
+            style = await client.get("/style.css")
+            assert style.status_code == 200
+            assert style.headers["content-type"].startswith("text/css")
+
+            favicon = await client.get("/favicon.svg")
+            assert favicon.status_code == 200
+            assert favicon.headers["content-type"].startswith("image/svg+xml")
+
             missing = await client.get("/missing.js")
             assert missing.status_code == 404
 

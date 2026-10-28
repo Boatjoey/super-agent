@@ -19,6 +19,9 @@ __pycache__/
 # uv
 .venv/
 
+# Node 开发依赖（TypeScript 构建产物 app.js 需要纳入版本控制）
+node_modules/
+
 # IDE 目录
 .vscode/
 

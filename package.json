@@ -1,0 +1,12 @@
+{
+  "name": "super-agent-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:web": "tsc -p tsconfig.web.json",
+    "check:web": "tsc -p tsconfig.web.json --noEmit && node --check super_agent/web/static/app.js"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

@@ -11,7 +11,9 @@ trap 'rm -rf "$tmp_dir"' EXIT
 # The console script is installed into a dedicated virtual environment and a
 # small launcher is placed on PATH. The launcher forwards every argument and
 # exit code unchanged, so `super-agent -h` behaves exactly like the console
-# script.
+# script. The browser script is generated before packaging so the wheel always
+# contains the current TypeScript implementation.
+(cd "$repo_root" && npm run build:web)
 uv build --wheel --out-dir "$tmp_dir" "$repo_root" >/dev/null
 wheel="$(find "$tmp_dir" -maxdepth 1 -name '*.whl' -print -quit)"
 if [[ -z "$wheel" ]]; then

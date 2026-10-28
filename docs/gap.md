@@ -19,6 +19,14 @@ Gap 是我们需要努力完成的事情。本文件集中维护这些工作：�
 | G09 | 为非 Linux 平台提供命令隔离沙箱 | [工具沙箱](spec/tools.md#沙箱)、[配置](spec/config.md#沙箱) | `strict` 依赖 Linux `bubblewrap`，非 Linux 平台当前在未显式设置时自动降级为 `off` 并提示 `sandbox_downgraded`，命令以完整权限运行；Windows 上的真隔离（Windows Sandbox / AppContainer / Job Objects）尚未实现，Job Objects 只能限资源、不能限文件访问 | 非 Linux 平台具备命令隔离机制，或明确决定不提供并记录风险接受的依据 |
 | G11 | Windows 平台仅支持 Web 端，去掉终端 TUI 默认入口 | [产品定义](design/product.md)、[前端应用接口](spec/application-interface.md) | Windows 上无标志启动时当前默认走终端 TUI，而 Windows 不是本产品的目标前端载体；`__main__.py` 的 `run()` 前端选择只有 `acp`/`web`/终端三条路径，没有平台判断，Windows 会落入终端兜底 | Windows 上无标志启动默认走 Web 界面（`web.serve`），`-acp` 与 `-web` 照常保留；Linux/macOS 保持终端默认不变 |
 
+## 已关闭工作
+
+已完成工作从待完成清单移到这里，保留原 ID 和关闭证据。关闭证据只覆盖该项工作的完成条件，不代表其他 Gap 或全产品验收完成。
+
+| Gap | 已完成工作 | 关闭依据 |
+|---|---|---|
+| G12 | 按 DeepSeek Harness Web 风格改造本机 Web 界面：更新产品对标、Web 信息架构、视觉、状态和响应式规范；以原生 HTML/CSS + 严格 TypeScript 重构会话导航、对话、工具层次、审批、输入、设置、加载、空数据、异常、重连和移动抽屉；新增静态回归与真实浏览器验收 | [E19、E20、E21](flow.md#验证证据) |
+
 ## 证据入口
 
-以上缺口依据 2026-10-27 工作区源码和测试定义整理，尚未完成全产品验收。实际检查结果见 [Flow](flow.md#验证证据)，工作更新方法见[开发流程](development.md#开发前后的进度同步)。
+以上未关闭缺口依据 2026-10-27 工作区源码和测试定义整理，尚未完成全产品验收。实际检查结果见 [Flow](flow.md#验证证据)，工作更新方法见[开发流程](development.md#开发前后的进度同步)。

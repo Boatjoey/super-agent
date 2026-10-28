@@ -32,6 +32,8 @@ super-agent
 | Web | `super-agent --web` | 本机浏览器界面，默认 `http://127.0.0.1:8765/`；用 `--host`、`--port` 改变监听地址与端口 |
 | ACP | `super-agent --acp` | 编辑器通过 Agent Client Protocol 驱动，JSON-RPC 走标准输入输出 |
 
+Web 界面提供会话侧栏、移动抽屉、流式对话、工具活动、审批、引导/排队、权限与模型配置。它的布局与状态反馈见[界面设计](docs/design/ui.md#web-信息架构)，操作流程见[使用体验设计](docs/design/ux.md#web-任务流程)。
+
 Web 默认只监听回环地址，且没有认证：界面能触发工具执行，不要把端口暴露到网络。
 
 编辑器接入（以 Zed 的 `settings.json` 为例）：

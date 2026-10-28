@@ -1,0 +1,2212 @@
+// The web front end's whole behaviour, in strict TypeScript.
+//
+// It owns no conversation rules: everything it shows arrives as a snapshot or a
+// notification from the server, and everything it does is one HTTP call. That is
+// deliberate — a rebuild from /api/snapshot must produce the same screen as a
+// session that streamed in, or the interface is guessing.
+//
+// Every JSON payload is narrowed through a type guard before use, every DOM
+// lookup goes through one central helper that fails loudly when the document
+// and the script drift apart, and no model-controlled string is ever parsed as
+// HTML: markdown rendering uses DOM APIs only.
+
+export {};
+
+// --- payload types ----------------------------------------------------------
+
+type JsonRecord = Record<string, unknown>;
+
+interface ToolCallView {
+  readonly id: string;
+  readonly name: string;
+  readonly input: string;
+}
+
+interface AttachmentView {
+  readonly name: string;
+  readonly mime: string;
+}
+
+interface MessageView {
+  readonly role: string;
+  readonly content: string;
+  readonly reasoning_content: string;
+  readonly tool_call_id: string;
+  readonly tool_name: string;
+  readonly tool_calls: readonly ToolCallView[];
+  readonly interrupted: boolean;
+  readonly attachments: readonly AttachmentView[];
+}
+
+interface AgentStatusView {
+  readonly label: string;
+  readonly busy: boolean;
+  readonly awaiting_approval: boolean;
+}
+
+interface PermissionView {
+  readonly tool_name: string;
+  readonly command: string;
+  readonly command_class: string;
+  readonly cwd: string;
+  readonly touched_paths: readonly string[];
+  readonly env_vars: readonly string[];
+  readonly reason: string;
+}
+
+interface UsageView {
+  readonly input_tokens: number;
+  readonly output_tokens: number;
+  readonly total_tokens: number;
+}
+
+interface FailureView {
+  readonly message: string;
+  readonly code: string;
+  readonly operation: string;
+  readonly request_id: string;
+}
+
+interface ApprovalView {
+  readonly tool_call: ToolCallView;
+  readonly request: PermissionView;
+  readonly request_id: string;
+  readonly batch_index: number;
+  readonly batch_total: number;
+}
+
+interface ConversationSnapshot {
+  readonly agent_status: AgentStatusView;
+  readonly messages: readonly MessageView[];
+  readonly pending_tool: ToolCallView | null;
+  readonly pending_permission: PermissionView | null;
+  readonly pending_tool_batch_index: number;
+  readonly pending_tool_batch_total: number;
+  readonly pending_approval_id: string;
+  readonly streaming_message: MessageView | null;
+}
+
+interface AgentSummaryView {
+  readonly name: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly permission_mode: string;
+}
+
+interface ConfigView {
+  readonly session_id: string;
+  readonly session_title: string;
+  readonly workspace: string;
+  readonly roots: readonly string[];
+  readonly agent: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly permission_mode: string;
+  readonly auto_approve: boolean;
+  readonly reasoning_effort: string;
+  readonly reasoning_efforts: readonly string[];
+  readonly agents: readonly AgentSummaryView[];
+  readonly memory_enabled: boolean;
+  readonly memory_backend: string;
+  readonly credential_missing: boolean;
+  readonly sandbox_downgraded: boolean;
+  readonly capabilities: readonly string[];
+}
+
+interface SessionView {
+  readonly id: string;
+  readonly title: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly cwd: string;
+  readonly parent_id: string;
+}
+
+interface ProviderView {
+  readonly name: string;
+  readonly model: string;
+  readonly base_url: string;
+  readonly has_key: boolean;
+}
+
+interface ReceiptView {
+  readonly status: string;
+  readonly reason: string;
+}
+
+interface MemoryStateView {
+  readonly enabled: boolean;
+  readonly backend: string;
+}
+
+// --- payload guards ---------------------------------------------------------
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function asBoolean(value: unknown): boolean {
+  return value === true;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function parseToolCall(value: unknown): ToolCallView | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    id: asString(value.id),
+    name: asString(value.name),
+    input: asString(value.input),
+  };
+}
+
+function parseAttachments(value: unknown): AttachmentView[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const attachments: AttachmentView[] = [];
+  for (const item of value) {
+    if (isRecord(item)) {
+      attachments.push({ name: asString(item.name), mime: asString(item.mime) });
+    }
+  }
+  return attachments;
+}
+
+function parseToolCalls(value: unknown): ToolCallView[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const calls: ToolCallView[] = [];
+  for (const item of value) {
+    const call = parseToolCall(item);
+    if (call) {
+      calls.push(call);
+    }
+  }
+  return calls;
+}
+
+function parseMessage(value: unknown): MessageView | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    role: asString(value.role) || "user",
+    content: asString(value.content),
+    reasoning_content: asString(value.reasoning_content),
+    tool_call_id: asString(value.tool_call_id),
+    tool_name: asString(value.tool_name),
+    tool_calls: parseToolCalls(value.tool_calls),
+    interrupted: asBoolean(value.interrupted),
+    attachments: parseAttachments(value.attachments),
+  };
+}
+
+function parseStatus(value: unknown): AgentStatusView {
+  if (!isRecord(value)) {
+    return { label: "Idle", busy: false, awaiting_approval: false };
+  }
+  return {
+    label: asString(value.label) || "Idle",
+    busy: asBoolean(value.busy),
+    awaiting_approval: asBoolean(value.awaiting_approval),
+  };
+}
+
+function parsePermission(value: unknown): PermissionView | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    tool_name: asString(value.tool_name),
+    command: asString(value.command),
+    command_class: asString(value.command_class),
+    cwd: asString(value.cwd),
+    touched_paths: asStringArray(value.touched_paths),
+    env_vars: asStringArray(value.env_vars),
+    reason: asString(value.reason),
+  };
+}
+
+function parseUsage(value: unknown): UsageView | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    input_tokens: asNumber(value.input_tokens),
+    output_tokens: asNumber(value.output_tokens),
+    total_tokens: asNumber(value.total_tokens),
+  };
+}
+
+function parseFailure(value: unknown): FailureView | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    message: asString(value.message),
+    code: asString(value.code),
+    operation: asString(value.operation),
+    request_id: asString(value.request_id),
+  };
+}
+
+function parseApproval(
+  toolCall: unknown,
+  request: unknown,
+  requestId: string,
+  batchIndex: number,
+  batchTotal: number,
+): ApprovalView | null {
+  const tool = parseToolCall(toolCall);
+  const permission = parsePermission(request);
+  if (!tool || !permission) {
+    return null;
+  }
+  return {
+    tool_call: tool,
+    request: permission,
+    request_id: requestId,
+    batch_index: batchIndex,
+    batch_total: batchTotal,
+  };
+}
+
+function parseMessages(value: unknown): MessageView[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const messages: MessageView[] = [];
+  for (const item of value) {
+    const message = parseMessage(item);
+    if (message) {
+      messages.push(message);
+    }
+  }
+  return messages;
+}
+
+function parseSnapshot(value: unknown): ConversationSnapshot | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    agent_status: parseStatus(value.agent_status),
+    messages: parseMessages(value.messages),
+    pending_tool: parseToolCall(value.pending_tool),
+    pending_permission: parsePermission(value.pending_permission),
+    pending_tool_batch_index: asNumber(value.pending_tool_batch_index),
+    pending_tool_batch_total: asNumber(value.pending_tool_batch_total),
+    pending_approval_id: asString(value.pending_approval_id),
+    streaming_message: parseMessage(value.streaming_message),
+  };
+}
+
+function parseAgentSummary(value: unknown): AgentSummaryView | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    name: asString(value.name),
+    provider: asString(value.provider),
+    model: asString(value.model),
+    permission_mode: asString(value.permission_mode),
+  };
+}
+
+function parseConfig(value: unknown): ConfigView | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const agents: AgentSummaryView[] = [];
+  if (Array.isArray(value.agents)) {
+    for (const item of value.agents) {
+      const agent = parseAgentSummary(item);
+      if (agent) {
+        agents.push(agent);
+      }
+    }
+  }
+  return {
+    session_id: asString(value.session_id),
+    session_title: asString(value.session_title),
+    workspace: asString(value.workspace),
+    roots: asStringArray(value.roots),
+    agent: asString(value.agent),
+    provider: asString(value.provider),
+    model: asString(value.model),
+    permission_mode: asString(value.permission_mode),
+    auto_approve: asBoolean(value.auto_approve),
+    reasoning_effort: asString(value.reasoning_effort),
+    reasoning_efforts: asStringArray(value.reasoning_efforts),
+    agents,
+    memory_enabled: asBoolean(value.memory_enabled),
+    memory_backend: asString(value.memory_backend),
+    credential_missing: asBoolean(value.credential_missing),
+    sandbox_downgraded: asBoolean(value.sandbox_downgraded),
+    capabilities: asStringArray(value.capabilities),
+  };
+}
+
+function parseSessions(value: unknown): SessionView[] {
+  if (!isRecord(value) || !Array.isArray(value.sessions)) {
+    return [];
+  }
+  const sessions: SessionView[] = [];
+  for (const item of value.sessions) {
+    if (!isRecord(item)) {
+      continue;
+    }
+    sessions.push({
+      id: asString(item.id),
+      title: asString(item.title),
+      provider: asString(item.provider),
+      model: asString(item.model),
+      cwd: asString(item.cwd),
+      parent_id: asString(item.parent_id),
+    });
+  }
+  return sessions;
+}
+
+function parseProviders(value: unknown): ProviderView[] {
+  if (!isRecord(value) || !Array.isArray(value.providers)) {
+    return [];
+  }
+  const providers: ProviderView[] = [];
+  for (const item of value.providers) {
+    if (!isRecord(item)) {
+      continue;
+    }
+    providers.push({
+      name: asString(item.name),
+      model: asString(item.model),
+      base_url: asString(item.base_url),
+      has_key: asBoolean(item.has_key),
+    });
+  }
+  return providers;
+}
+
+function parseReceipt(value: unknown): ReceiptView {
+  if (!isRecord(value)) {
+    return { status: "", reason: "" };
+  }
+  return { status: asString(value.status), reason: asString(value.reason) };
+}
+
+function parseMemoryState(value: unknown): MemoryStateView {
+  if (!isRecord(value)) {
+    return { enabled: false, backend: "" };
+  }
+  return { enabled: asBoolean(value.enabled), backend: asString(value.backend) };
+}
+
+// --- central DOM lookup -----------------------------------------------------
+
+interface Elements {
+  readonly sidebar: HTMLElement;
+  readonly sidebarBackdrop: HTMLElement;
+  readonly sidebarClose: HTMLButtonElement;
+  readonly newChat: HTMLButtonElement;
+  readonly sessions: HTMLUListElement;
+  readonly sessionTitleTop: HTMLElement;
+  readonly cwd: HTMLElement;
+  readonly model: HTMLElement;
+  readonly reasoning: HTMLElement;
+  readonly main: HTMLElement;
+  readonly menuToggle: HTMLButtonElement;
+  readonly status: HTMLElement;
+  readonly statusLabel: HTMLElement;
+  readonly connection: HTMLElement;
+  readonly connectionLabel: HTMLElement;
+  readonly connectionBanner: HTMLElement;
+  readonly errorRegion: HTMLElement;
+  readonly usage: HTMLElement;
+  readonly memory: HTMLButtonElement;
+  readonly settings: HTMLButtonElement;
+  readonly permission: HTMLSelectElement;
+  readonly transcript: HTMLElement;
+  readonly conversation: HTMLElement;
+  readonly approval: HTMLElement;
+  readonly input: HTMLTextAreaElement;
+  readonly send: HTMLButtonElement;
+  readonly queue: HTMLButtonElement;
+  readonly stop: HTMLButtonElement;
+  readonly hint: HTMLElement;
+  readonly toast: HTMLElement;
+  readonly settingsModal: HTMLElement;
+  readonly settingsClose: HTMLButtonElement;
+  readonly settingsCancel: HTMLButtonElement;
+  readonly settingsSave: HTMLButtonElement;
+  readonly settingsProvider: HTMLSelectElement;
+  readonly settingsKey: HTMLInputElement;
+  readonly settingsModel: HTMLInputElement;
+  readonly sandboxWarning: HTMLElement;
+}
+
+function findElement(id: string): HTMLElement {
+  const element = document.getElementById(id);
+  if (!element) {
+    throw new Error(`界面结构不完整：缺少元素 #${id}`);
+  }
+  return element;
+}
+
+function typedElement<T extends HTMLElement>(id: string, ctor: abstract new (...args: never[]) => T): T {
+  const element = findElement(id);
+  if (!(element instanceof ctor)) {
+    throw new Error(`界面结构不正确：#${id} 不是预期的元素类型`);
+  }
+  return element;
+}
+
+function loadElements(): Elements {
+  return {
+    sidebar: findElement("sidebar"),
+    sidebarBackdrop: findElement("sidebar-backdrop"),
+    sidebarClose: typedElement("sidebar-close", HTMLButtonElement),
+    newChat: typedElement("new-chat", HTMLButtonElement),
+    sessions: typedElement("sessions", HTMLUListElement),
+    sessionTitleTop: findElement("session-title-top"),
+    cwd: findElement("cwd"),
+    model: findElement("model"),
+    reasoning: findElement("reasoning"),
+    main: findElement("main"),
+    menuToggle: typedElement("menu-toggle", HTMLButtonElement),
+    status: findElement("status"),
+    statusLabel: findElement("status-label"),
+    connection: findElement("connection"),
+    connectionLabel: findElement("connection-label"),
+    connectionBanner: findElement("connection-banner"),
+    errorRegion: findElement("error-region"),
+    usage: findElement("usage"),
+    memory: typedElement("memory", HTMLButtonElement),
+    settings: typedElement("settings", HTMLButtonElement),
+    permission: typedElement("permission", HTMLSelectElement),
+    transcript: findElement("transcript"),
+    conversation: findElement("conversation"),
+    approval: findElement("approval"),
+    input: typedElement("input", HTMLTextAreaElement),
+    send: typedElement("send", HTMLButtonElement),
+    queue: typedElement("queue", HTMLButtonElement),
+    stop: typedElement("stop", HTMLButtonElement),
+    hint: findElement("hint"),
+    toast: findElement("toast"),
+    settingsModal: findElement("settings-modal"),
+    settingsClose: typedElement("settings-close", HTMLButtonElement),
+    settingsCancel: typedElement("settings-cancel", HTMLButtonElement),
+    settingsSave: typedElement("settings-save", HTMLButtonElement),
+    settingsProvider: typedElement("settings-provider", HTMLSelectElement),
+    settingsKey: typedElement("settings-key", HTMLInputElement),
+    settingsModel: typedElement("settings-model", HTMLInputElement),
+    sandboxWarning: findElement("sandbox-warning"),
+  };
+}
+
+const els: Elements = loadElements();
+
+// --- state ------------------------------------------------------------------
+
+interface RegionState {
+  loading: boolean;
+  error: string;
+}
+
+interface PendingActions {
+  send: boolean;
+  queue: boolean;
+  stop: boolean;
+  approval: boolean;
+  resume: string | null;
+  memory: boolean;
+  permission: boolean;
+  settingsSave: boolean;
+  reset: boolean;
+}
+
+interface AppState {
+  messages: MessageView[];
+  streaming: MessageView | null;
+  status: AgentStatusView;
+  approval: ApprovalView | null;
+  usage: UsageView | null;
+  running: boolean;
+  config: ConfigView | null;
+  sessions: SessionView[];
+  providers: ProviderView[];
+  connection: "connecting" | "online" | "offline";
+  snapshotLoad: RegionState;
+  configLoad: RegionState;
+  sessionsLoad: RegionState;
+  pending: PendingActions;
+  error: string;
+  notice: string;
+}
+
+const state: AppState = {
+  messages: [],
+  streaming: null,
+  status: { label: "Idle", busy: false, awaiting_approval: false },
+  approval: null,
+  usage: null,
+  running: false,
+  config: null,
+  sessions: [],
+  providers: [],
+  connection: "connecting",
+  snapshotLoad: { loading: true, error: "" },
+  configLoad: { loading: true, error: "" },
+  sessionsLoad: { loading: true, error: "" },
+  pending: {
+    send: false,
+    queue: false,
+    stop: false,
+    approval: false,
+    resume: null,
+    memory: false,
+    permission: false,
+    settingsSave: false,
+    reset: false,
+  },
+  error: "",
+  notice: "",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  Idle: "空闲",
+  Initializing: "正在启动",
+  WaitingLLM: "等待模型",
+  WaitingApproval: "等待审批",
+  RunningTool: "运行工具",
+  AdvancingQueue: "推进队列",
+  Unknown: "未知状态",
+};
+
+const EXAMPLES: readonly string[] = [
+  "总结这个项目的结构",
+  "找出失败的测试并修复",
+  "解释 web 前端的事件流设计",
+];
+
+const EVENT_KINDS: readonly string[] = [
+  "Snapshot",
+  "TurnStarted",
+  "TurnFinished",
+  "AgentStatusChanged",
+  "StreamChunkReceived",
+  "MessageAppended",
+  "ToolApprovalRequested",
+  "ToolApprovalCleared",
+  "UsageReported",
+  "SteeringAccepted",
+  "SteeringWithdrawn",
+  "QueuedInputAccepted",
+  "QueuedInputWithdrawn",
+  "ConversationError",
+  "UnknownNotification",
+  "Closed",
+];
+
+// --- helpers ----------------------------------------------------------------
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
+function svgIcon(name: string): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NAMESPACE, "svg");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const use = document.createElementNS(SVG_NAMESPACE, "use");
+  use.setAttribute("href", `#${name}`);
+  svg.append(use);
+  return svg;
+}
+
+function setButtonLabel(button: HTMLButtonElement, text: string): void {
+  const label = button.querySelector("span");
+  if (label) {
+    label.textContent = text;
+  } else {
+    button.textContent = text;
+  }
+}
+
+function markPending(button: HTMLButtonElement, pending: boolean): void {
+  button.toggleAttribute("data-pending", pending);
+  button.setAttribute("aria-busy", String(pending));
+}
+
+function selectValues(select: HTMLSelectElement): string[] {
+  const values: string[] = [];
+  for (let index = 0; index < select.options.length; index += 1) {
+    const option = select.options.item(index);
+    if (option) {
+      values.push(option.value);
+    }
+  }
+  return values;
+}
+
+// <details> already conveys its state, but the explicit aria-expanded keeps
+// assistive technology and the markup in step.
+function wireDetails(details: HTMLDetailsElement): void {
+  const sync = (): void => {
+    const summary = details.querySelector("summary");
+    if (summary) {
+      summary.setAttribute("aria-expanded", String(details.open));
+    }
+  };
+  details.addEventListener("toggle", sync);
+  sync();
+}
+
+function hasCapability(name: string): boolean {
+  // Before the first config read the honest answer is unknown; keep controls
+  // visible rather than flashing them away, and hide them once facts arrive.
+  const config = state.config;
+  return config === null || config.capabilities.includes(name);
+}
+
+// --- transport --------------------------------------------------------------
+
+async function api(path: string, init?: RequestInit): Promise<JsonRecord> {
+  const response = await fetch(path, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+  let payload: unknown = {};
+  try {
+    payload = await response.json();
+  } catch {
+    payload = {};
+  }
+  if (!response.ok) {
+    const message = isRecord(payload) ? asString(payload.error) : "";
+    throw new Error(message || `${response.status} ${response.statusText}`);
+  }
+  return isRecord(payload) ? payload : {};
+}
+
+let eventSource: EventSource | null = null;
+let reconnectTimer = 0;
+let reconnectDelay = 1000;
+
+function setConnection(next: "connecting" | "online" | "offline"): void {
+  state.connection = next;
+  renderConnection();
+}
+
+function scheduleReconnect(): void {
+  if (reconnectTimer !== 0) {
+    return;
+  }
+  const delay = reconnectDelay;
+  reconnectDelay = Math.min(reconnectDelay * 2, 15000);
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = 0;
+    connect();
+  }, delay);
+}
+
+function connect(): void {
+  if (reconnectTimer !== 0) {
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = 0;
+  }
+  setConnection("connecting");
+  const events = new EventSource("/api/events");
+  eventSource = events;
+  events.onopen = () => {
+    reconnectDelay = 1000;
+    setConnection("online");
+  };
+  events.onerror = () => {
+    events.close();
+    if (eventSource === events) {
+      eventSource = null;
+    }
+    setConnection("offline");
+    scheduleReconnect();
+  };
+  for (const kind of EVENT_KINDS) {
+    events.addEventListener(kind, (event) => {
+      const data = (event as MessageEvent<string>).data;
+      let payload: unknown = null;
+      try {
+        payload = JSON.parse(data);
+      } catch {
+        return;
+      }
+      apply(kind, payload);
+    });
+  }
+}
+
+// --- events -----------------------------------------------------------------
+
+function apply(kind: string, payload: unknown): void {
+  if (!isRecord(payload)) {
+    return;
+  }
+  switch (kind) {
+    case "Snapshot": {
+      const snapshot = parseSnapshot(payload.snapshot);
+      if (snapshot) {
+        applySnapshot(snapshot);
+        state.snapshotLoad = { loading: false, error: "" };
+      }
+      break;
+    }
+    case "TurnStarted": {
+      state.running = true;
+      state.error = "";
+      state.notice = "";
+      break;
+    }
+    case "TurnFinished": {
+      state.running = false;
+      state.streaming = null;
+      state.approval = null;
+      state.pending.stop = false;
+      disarmStop();
+      const failure = parseFailure(payload.error);
+      if (!failure) {
+        state.error = "";
+        state.notice = "";
+      } else if (failure.code === "cancelled") {
+        // A cancelled turn is the user's own decision, not a failure: say so
+        // plainly and keep what already happened on the record.
+        state.error = "";
+        state.notice = "本轮已取消";
+      } else {
+        state.error = failure.message || "本轮失败";
+        state.notice = "";
+      }
+      break;
+    }
+    case "AgentStatusChanged": {
+      state.status = parseStatus(payload.status);
+      state.running = state.status.busy || state.status.awaiting_approval;
+      break;
+    }
+    case "StreamChunkReceived": {
+      state.streaming = parseMessage(payload.message);
+      break;
+    }
+    case "MessageAppended": {
+      const message = parseMessage(payload.message);
+      if (message) {
+        state.messages.push(message);
+        if (message.role !== "user") {
+          state.streaming = null;
+        }
+      }
+      break;
+    }
+    case "ToolApprovalRequested": {
+      const approval = parseApproval(
+        payload.tool_call,
+        payload.request,
+        asString(payload.request_id),
+        asNumber(payload.batch_index),
+        asNumber(payload.batch_total),
+      );
+      if (approval) {
+        state.approval = approval;
+      }
+      break;
+    }
+    case "ToolApprovalCleared": {
+      const clearedId = asString(payload.request_id);
+      if (!clearedIdMatches(clearedId)) {
+        break;
+      }
+      state.approval = null;
+      state.pending.approval = false;
+      break;
+    }
+    case "UsageReported": {
+      const usage = parseUsage(payload.usage);
+      if (usage) {
+        state.usage = usage;
+      }
+      break;
+    }
+    case "SteeringAccepted": {
+      toast(`输入已在第 ${asNumber(payload.step)} 步纳入对话`);
+      break;
+    }
+    case "SteeringWithdrawn": {
+      toast("输入未被纳入：本轮已结束");
+      break;
+    }
+    case "QueuedInputAccepted": {
+      toast(`排队输入已成为第 ${asNumber(payload.turn)} 轮`);
+      break;
+    }
+    case "QueuedInputWithdrawn": {
+      toast("排队输入已作废：本轮被取消");
+      break;
+    }
+    case "ConversationError": {
+      const failure = parseFailure(payload.failure);
+      state.error = (failure && failure.message) || "本轮失败";
+      break;
+    }
+    case "UnknownNotification": {
+      state.error = `收到未知通知：${asString(payload.type)}`;
+      break;
+    }
+    case "Closed": {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      setConnection("offline");
+      scheduleReconnect();
+      return;
+    }
+    default:
+      break;
+  }
+  scheduleRender();
+}
+
+function clearedIdMatches(clearedId: string): boolean {
+  // An empty id clears unconditionally; otherwise the id must pair with the
+  // pending request so a late clear cannot dismiss a newer prompt.
+  if (!clearedId) {
+    return true;
+  }
+  const approval = state.approval;
+  return approval === null || approval.request_id === clearedId;
+}
+
+function applySnapshot(snapshot: ConversationSnapshot): void {
+  state.messages = [...snapshot.messages];
+  state.streaming = snapshot.streaming_message;
+  state.status = snapshot.agent_status;
+  state.running = snapshot.agent_status.busy || snapshot.agent_status.awaiting_approval;
+  const tool = snapshot.pending_tool;
+  const permission = snapshot.pending_permission;
+  state.approval =
+    tool && permission
+      ? {
+          tool_call: tool,
+          request: permission,
+          request_id: snapshot.pending_approval_id,
+          batch_index: snapshot.pending_tool_batch_index,
+          batch_total: snapshot.pending_tool_batch_total,
+        }
+      : null;
+  if (!state.approval) {
+    state.pending.approval = false;
+  }
+}
+
+// --- rendering --------------------------------------------------------------
+
+let renderQueued = false;
+
+function scheduleRender(): void {
+  if (renderQueued) {
+    return;
+  }
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    render();
+  });
+}
+
+function render(): void {
+  renderConnection();
+  renderErrorRegion();
+  renderStatus();
+  renderTranscript();
+  renderApproval();
+  renderComposer();
+  renderUsage();
+  renderSidebar();
+  renderSessions();
+}
+
+function renderConnection(): void {
+  const online = state.connection === "online";
+  const connecting = state.connection === "connecting";
+  els.connectionLabel.textContent = online ? "已连接" : connecting ? "连接中" : "已断开";
+  els.connection.dataset.state = state.connection;
+  els.connection.classList.toggle("error", state.connection === "offline");
+  els.connection.classList.toggle("busy", connecting);
+  if (state.connection === "offline") {
+    els.connectionBanner.classList.remove("hidden");
+    els.connectionBanner.replaceChildren(
+      svgIcon("icon-refresh"),
+      document.createTextNode(" 事件流已断开，正在自动重连。恢复后会自动重建界面，无需重新提交任务。"),
+    );
+  } else {
+    els.connectionBanner.classList.add("hidden");
+  }
+}
+
+function renderErrorRegion(): void {
+  const snapshotError = state.snapshotLoad.error;
+  const configError = state.configLoad.error;
+  if (!snapshotError && !configError) {
+    els.errorRegion.classList.add("hidden");
+    els.errorRegion.replaceChildren();
+    return;
+  }
+  els.errorRegion.classList.remove("hidden");
+  els.errorRegion.replaceChildren();
+  if (snapshotError) {
+    els.errorRegion.append(errorLine(`会话读取失败：${snapshotError}`, () => {
+      void loadSnapshot();
+    }));
+  }
+  if (configError) {
+    els.errorRegion.append(errorLine(`配置读取失败：${configError}`, () => {
+      void loadConfig();
+    }));
+  }
+}
+
+function errorLine(text: string, retry: () => void): HTMLElement {
+  const line = document.createElement("div");
+  line.className = "error-line";
+  line.append(svgIcon("icon-alert"), document.createTextNode(` ${text} `));
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn";
+  button.textContent = "重试";
+  button.addEventListener("click", retry);
+  line.append(button);
+  return line;
+}
+
+function renderStatus(): void {
+  const busy = state.status.busy || state.running;
+  const awaiting = Boolean(state.status.awaiting_approval) || Boolean(state.approval);
+  els.status.classList.toggle("busy", busy && !awaiting);
+  els.status.classList.toggle("awaiting", awaiting);
+  els.status.classList.toggle("error", Boolean(state.error) && !busy);
+  const fallback = state.status.label;
+  let label = STATUS_LABELS[fallback] ?? fallback;
+  if (state.error && !busy) {
+    label = "上一轮失败";
+  } else if (awaiting) {
+    label = "等待审批";
+  } else if (busy && (fallback === "Idle" || fallback === "")) {
+    // A turn can start before the application reports its first detailed
+    // status. "Working" is the only claim the start event supports.
+    label = "执行中";
+  }
+  els.statusLabel.textContent = label;
+}
+
+function renderUsage(): void {
+  if (!state.usage) {
+    els.usage.textContent = "";
+    return;
+  }
+  els.usage.textContent = `tokens ${formatTokens(state.usage.total_tokens)}`;
+}
+
+function formatTokens(value: number): string {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}m`;
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}k`;
+  }
+  return String(value);
+}
+
+function isPinnedToBottom(): boolean {
+  const el = els.transcript;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+}
+
+function renderTranscript(): void {
+  const pinned = isPinnedToBottom();
+  const container = els.conversation;
+  const loading = state.snapshotLoad.loading && state.messages.length === 0 && !state.streaming;
+  els.transcript.setAttribute("aria-busy", String(loading));
+  container.replaceChildren();
+
+  // First load: a structural placeholder, never a premature "no sessions".
+  if (loading) {
+    const skeleton = document.createElement("div");
+    skeleton.className = "loading";
+    skeleton.setAttribute("role", "status");
+    skeleton.setAttribute("aria-label", "正在读取会话");
+    for (let index = 0; index < 4; index += 1) {
+      const line = document.createElement("div");
+      line.className = "skeleton skeleton-line";
+      skeleton.append(line);
+    }
+    container.append(skeleton);
+    return;
+  }
+
+  // The empty state only appears after a successful read said "empty".
+  const loaded = !state.snapshotLoad.loading && !state.snapshotLoad.error;
+  if (loaded && state.messages.length === 0 && !state.streaming && !state.error && !state.notice) {
+    container.append(renderEmptyState());
+  }
+
+  for (const message of state.messages) {
+    container.append(renderMessage(message, false));
+  }
+  if (state.streaming) {
+    container.append(renderMessage(state.streaming, true));
+  }
+  if (state.notice) {
+    const note = document.createElement("div");
+    note.className = "note";
+    note.textContent = state.notice;
+    container.append(note);
+  }
+  if (state.error) {
+    const error = document.createElement("div");
+    error.className = "error-banner";
+    error.setAttribute("role", "alert");
+    const content = document.createElement("div");
+    content.className = "error-content";
+    content.textContent = `本轮失败：${state.error}`;
+    error.append(svgIcon("icon-alert"), content);
+    container.append(error);
+  }
+  if (pinned) {
+    els.transcript.scrollTop = els.transcript.scrollHeight;
+  }
+}
+
+function renderEmptyState(): HTMLElement {
+  const empty = document.createElement("div");
+  empty.className = "empty";
+  const title = document.createElement("h1");
+  title.className = "empty-title";
+  title.textContent = "开始一个任务";
+  const hint = document.createElement("p");
+  hint.className = "empty-hint";
+  hint.textContent = "描述你要做的事。Agent 会自己读代码、改文件、跑命令，需要许可时会在这里问你。";
+  empty.append(title, hint);
+  if (state.config?.credential_missing === true) {
+    const warning = document.createElement("p");
+    warning.className = "empty-warning";
+    warning.setAttribute("role", "status");
+    warning.textContent = "尚未配置模型凭据。打开右上角“配置”填写 API Key 后即可开始。";
+    empty.append(warning);
+  }
+  const examples = document.createElement("div");
+  examples.className = "example-list";
+  for (const sample of EXAMPLES) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "example";
+    chip.textContent = sample;
+    // An example only prepares a draft; it never fakes a submitted message.
+    chip.addEventListener("click", () => {
+      els.input.value = sample;
+      autoGrow();
+      renderComposer();
+      els.input.focus();
+    });
+    examples.append(chip);
+  }
+  empty.append(examples);
+  return empty;
+}
+
+function renderMessage(message: MessageView, streaming: boolean): HTMLElement {
+  const role = message.role || "user";
+  const wrapper = document.createElement("div");
+  wrapper.className = `msg ${role}`;
+
+  if (role === "tool") {
+    const content = message.content || "";
+    const label = document.createElement("div");
+    label.className = "who";
+    label.textContent = message.tool_name ? `工具结果 · ${message.tool_name}` : "工具结果";
+    wrapper.append(label);
+    if (content.length > 600) {
+      // Long results stay collapsed by default so one tool call cannot eat
+      // the page; the full text remains one click away.
+      const details = document.createElement("details");
+      details.className = "tool-result-details";
+      const summary = document.createElement("summary");
+      summary.textContent = "工具结果（点击展开）";
+      const result = document.createElement("div");
+      result.className = "tool-result";
+      result.textContent = content;
+      details.append(summary, result);
+      wireDetails(details);
+      wrapper.append(details);
+    } else {
+      const result = document.createElement("div");
+      result.className = "tool-result";
+      result.textContent = content;
+      wrapper.append(result);
+    }
+    return wrapper;
+  }
+
+  if (role === "assistant" && message.reasoning_content) {
+    const thinking = document.createElement("details");
+    thinking.className = "thinking";
+    const summary = document.createElement("summary");
+    summary.textContent = "思考过程";
+    const body = document.createElement("div");
+    body.className = "thinking-body";
+    body.textContent = message.reasoning_content;
+    thinking.append(summary, body);
+    wireDetails(thinking);
+    wrapper.append(thinking);
+  }
+
+  if (message.content) {
+    const body = document.createElement("div");
+    body.className = "body";
+    if (streaming) {
+      body.classList.add("cursor");
+    }
+    renderMarkdown(body, message.content);
+    wrapper.append(body);
+  } else if (role === "assistant" && streaming) {
+    const body = document.createElement("div");
+    body.className = "body cursor";
+    wrapper.append(body);
+  }
+
+  if (message.tool_calls.length) {
+    for (const call of message.tool_calls) {
+      wrapper.append(renderToolCall(call));
+    }
+  }
+
+  if (message.attachments.length) {
+    const note = document.createElement("div");
+    note.className = "note";
+    note.textContent = `附件：${message.attachments.map((item) => item.name).join("、")}`;
+    wrapper.append(note);
+  }
+
+  if (message.interrupted) {
+    const note = document.createElement("div");
+    note.className = "interrupted";
+    note.textContent = "（本轮被中断）";
+    wrapper.append(note);
+  }
+  return wrapper;
+}
+
+function renderToolCall(call: ToolCallView): HTMLElement {
+  const activity = document.createElement("div");
+  activity.className = "tool-activity";
+  const summary = document.createElement("div");
+  summary.className = "tool-summary";
+  const name = document.createElement("span");
+  name.className = "tool-name";
+  name.textContent = call.name || "tool";
+  const detail = document.createElement("code");
+  detail.className = "tool-input";
+  detail.textContent = summariseToolInput(call.input);
+  detail.title = call.input || "";
+  summary.append(name, detail);
+  activity.append(summary);
+  return activity;
+}
+
+function summariseToolInput(input: string): string {
+  if (!input) {
+    return "";
+  }
+  try {
+    const parsed: unknown = JSON.parse(input);
+    if (isRecord(parsed)) {
+      for (const key of ["command", "path", "query", "url", "pattern"]) {
+        const value = parsed[key];
+        if (typeof value === "string" && value) {
+          return value;
+        }
+      }
+    }
+    const text = JSON.stringify(parsed);
+    return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+  } catch {
+    return input.length > 120 ? `${input.slice(0, 117)}…` : input;
+  }
+}
+
+// A small markdown renderer: fenced code, inline code, bold, paragraphs.
+// Anything else stays text, which is the honest failure mode — no HTML is ever
+// interpreted, so model output cannot inject markup into the page.
+function renderMarkdown(container: HTMLElement, text: string): void {
+  const segments = text.split("```");
+  segments.forEach((segment, index) => {
+    if (index % 2 === 1) {
+      const newline = segment.indexOf("\n");
+      const language = newline >= 0 ? segment.slice(0, newline).trim() : "";
+      const code = newline >= 0 ? segment.slice(newline + 1) : segment;
+      const pre = document.createElement("pre");
+      const codeEl = document.createElement("code");
+      if (language) {
+        codeEl.dataset.language = language;
+      }
+      codeEl.textContent = code.replace(/\n$/, "");
+      pre.append(codeEl);
+      container.append(pre);
+      return;
+    }
+    appendProse(container, segment);
+  });
+}
+
+function appendProse(container: HTMLElement, text: string): void {
+  const blocks = text.split(/\n{2,}/);
+  for (const block of blocks) {
+    if (!block.trim()) {
+      continue;
+    }
+    const paragraph = document.createElement("p");
+    const inline = block.split(/(`[^`]*`|\*\*[^*]+\*\*)/g);
+    for (const piece of inline) {
+      if (!piece) {
+        continue;
+      }
+      if (piece.startsWith("`") && piece.endsWith("`") && piece.length > 1) {
+        const code = document.createElement("code");
+        code.textContent = piece.slice(1, -1);
+        paragraph.append(code);
+      } else if (piece.startsWith("**") && piece.endsWith("**") && piece.length > 4) {
+        const strong = document.createElement("strong");
+        strong.textContent = piece.slice(2, -2);
+        paragraph.append(strong);
+      } else {
+        paragraph.append(document.createTextNode(piece));
+      }
+    }
+    container.append(paragraph);
+  }
+}
+
+function renderApproval(): void {
+  const approval = state.approval;
+  if (!approval) {
+    els.approval.classList.add("hidden");
+    els.approval.replaceChildren();
+    return;
+  }
+  els.approval.classList.remove("hidden");
+  els.approval.replaceChildren();
+
+  const head = document.createElement("div");
+  head.className = "approval-head";
+  head.append(svgIcon("icon-alert"), document.createTextNode(` 需要许可：${approval.tool_call.name || "工具"}`));
+  if (approval.batch_total > 1) {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = `${approval.batch_index + 1}/${approval.batch_total}`;
+    head.append(badge);
+  }
+  els.approval.append(head);
+
+  const detail = document.createElement("div");
+  detail.className = "approval-detail";
+  detail.textContent = approval.request.command || approval.tool_call.input || approval.request.tool_name;
+  els.approval.append(detail);
+
+  const meta: string[] = [];
+  if (approval.request.reason) {
+    meta.push(approval.request.reason);
+  }
+  if (approval.request.command_class) {
+    meta.push(`分类：${approval.request.command_class}`);
+  }
+  if (approval.request.cwd) {
+    meta.push(`目录：${approval.request.cwd}`);
+  }
+  if (approval.request.touched_paths.length) {
+    meta.push(`涉及：${approval.request.touched_paths.join("、")}`);
+  }
+  if (approval.request.env_vars.length) {
+    meta.push(`环境变量：${approval.request.env_vars.join("、")}`);
+  }
+  if (meta.length) {
+    const metaEl = document.createElement("div");
+    metaEl.className = "approval-meta";
+    metaEl.textContent = meta.join(" · ");
+    els.approval.append(metaEl);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "approval-actions";
+  if (hasCapability("approve")) {
+    actions.append(
+      decisionButton("允许一次", "once", "btn primary"),
+      decisionButton("始终允许", "always", "btn"),
+      decisionButton("拒绝", "deny", "btn danger"),
+    );
+    els.approval.append(actions);
+  } else {
+    const unavailable = document.createElement("p");
+    unavailable.className = "approval-meta";
+    unavailable.textContent = "当前界面不支持提交审批决定。";
+    els.approval.append(unavailable);
+  }
+}
+
+function decisionButton(label: string, decision: string, className: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.textContent = label;
+  button.disabled = state.pending.approval;
+  markPending(button, state.pending.approval);
+  button.addEventListener("click", () => {
+    void submitDecision(decision);
+  });
+  return button;
+}
+
+async function submitDecision(decision: string): Promise<void> {
+  if (state.pending.approval) {
+    return;
+  }
+  const approval = state.approval;
+  if (!approval) {
+    return;
+  }
+  state.pending.approval = true;
+  renderApproval();
+  try {
+    // The id names the prompt this click belongs to: a second click, or one
+    // from a tab that reconnected to a different prompt, is refused instead
+    // of approving a tool call nobody saw.
+    await api("/api/approvals", {
+      method: "POST",
+      body: JSON.stringify({ decision, request_id: approval.request_id }),
+    });
+    // Buttons stay locked until ToolApprovalCleared / a snapshot confirms it.
+  } catch (error) {
+    toast(errorMessage(error), "error");
+    state.pending.approval = false;
+    renderApproval();
+  }
+}
+
+function renderComposer(): void {
+  const running = state.running;
+  const ready = els.input.value.trim().length > 0;
+  const canQueue = running && hasCapability("queue");
+  const canStop = running && hasCapability("cancel");
+  const canSend = running ? hasCapability("steer") : hasCapability("turn");
+  const credentialMissing = state.config?.credential_missing === true;
+  els.queue.classList.toggle("hidden", !canQueue);
+  els.stop.classList.toggle("hidden", !canStop);
+  els.send.classList.toggle("hidden", !canSend);
+  setButtonLabel(els.send, running ? "引导" : "发送");
+  els.send.disabled = !ready || !canSend || credentialMissing || state.pending.send || state.pending.queue;
+  els.queue.disabled = !ready || credentialMissing || state.pending.queue || state.pending.send;
+  markPending(els.send, state.pending.send);
+  markPending(els.queue, state.pending.queue);
+  if (state.pending.stop) {
+    setButtonLabel(els.stop, "停止中…");
+    els.stop.disabled = true;
+  } else if (stopArmed) {
+    setButtonLabel(els.stop, "确认停止");
+    els.stop.disabled = false;
+  } else {
+    setButtonLabel(els.stop, "停止");
+    els.stop.disabled = false;
+  }
+  markPending(els.stop, state.pending.stop);
+  if (credentialMissing && !running) {
+    els.hint.textContent = "请先在“配置”中填写模型凭据";
+  } else {
+    els.hint.textContent = running
+      ? "Enter 在当前步骤后插入 · 排队留给下一轮 · Shift+Enter 换行"
+      : "Enter 发送 · Shift+Enter 换行";
+  }
+}
+
+function renderSidebar(): void {
+  const config = state.config;
+  const workspace = config?.workspace ?? "";
+  if (!config && state.configLoad.loading) {
+    els.cwd.textContent = "正在读取工作区…";
+    els.model.textContent = "";
+  } else if (!config && state.configLoad.error) {
+    els.cwd.textContent = "工作区配置不可用";
+    els.model.textContent = "";
+  } else {
+    els.cwd.textContent = workspace;
+    els.model.textContent = config ? `${config.provider} ${config.model}`.trim() : "";
+  }
+  els.cwd.title = workspace ? `工作目录：${workspace}` : "工作目录";
+  // An absent reasoning effort is "not provided": the row hides rather than
+  // inventing a default the application never stated.
+  const effort = config?.reasoning_effort ?? "";
+  els.reasoning.textContent = effort ? `推理：${effort}` : "";
+  els.reasoning.classList.toggle("hidden", !effort);
+  els.sessionTitleTop.textContent = config?.session_title ?? "";
+
+  if (config) {
+    const mode = config.permission_mode;
+    if (mode && !selectValues(els.permission).includes(mode)) {
+      // Unknown modes display as-is instead of a blank select.
+      const option = document.createElement("option");
+      option.value = mode;
+      option.textContent = mode;
+      els.permission.append(option);
+    }
+    if (mode) {
+      els.permission.value = mode;
+    }
+  }
+
+  // The memory switch only exists when the application actually has the
+  // port and a backend; anything else would be an entry that must fail.
+  const memorySupported =
+    config !== null && config.capabilities.includes("memory") && config.memory_backend !== "";
+  els.memory.classList.toggle("hidden", !memorySupported);
+  renderMemory(config?.memory_enabled === true, config?.memory_backend ?? "");
+  els.settings.classList.toggle("attention", config?.credential_missing === true);
+  renderSandboxWarning(config?.sandbox_downgraded === true);
+}
+
+function renderMemory(enabled: boolean, backend: string): void {
+  els.memory.dataset.on = enabled ? "true" : "false";
+  els.memory.setAttribute("aria-pressed", String(enabled));
+  const label = els.memory.querySelector("span");
+  if (label) {
+    label.textContent = enabled ? "记忆 开" : "记忆 关";
+  }
+  els.memory.title = enabled
+    ? `跨会话记忆已开启（${backend || "未知位置"}），点击关闭`
+    : `跨会话记忆已关闭（${backend || "未知位置"}），点击开启`;
+}
+
+function renderSandboxWarning(downgraded: boolean): void {
+  if (downgraded) {
+    els.sandboxWarning.textContent =
+      "当前平台不支持严格沙箱，命令将以你的完整权限运行（无隔离）。";
+    els.sandboxWarning.classList.remove("hidden");
+  } else {
+    els.sandboxWarning.classList.add("hidden");
+  }
+}
+
+let sessionsRenderKey = "";
+
+function renderSessions(): void {
+  const currentId = state.config?.session_id ?? "";
+  const key = JSON.stringify({
+    loading: state.sessionsLoad.loading,
+    error: state.sessionsLoad.error,
+    sessions: state.sessions,
+    currentId,
+    resume: state.pending.resume,
+  });
+  if (key === sessionsRenderKey) {
+    return;
+  }
+  sessionsRenderKey = key;
+
+  const list = els.sessions;
+  list.replaceChildren();
+
+  if (state.sessionsLoad.loading) {
+    list.append(sessionNote("正在读取会话…"));
+    return;
+  }
+
+  if (state.sessionsLoad.error) {
+    const item = document.createElement("li");
+    item.className = "session-empty";
+    item.textContent = `会话列表读取失败：${state.sessionsLoad.error} `;
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "btn";
+    retry.textContent = "重试";
+    retry.addEventListener("click", () => {
+      void loadSessions();
+    });
+    item.append(retry);
+    list.append(item);
+    return;
+  }
+  if (!state.sessions.length) {
+    list.append(sessionNote("还没有保存的会话"));
+    return;
+  }
+
+  const canResume = hasCapability("resume");
+  for (const session of state.sessions) {
+    const item = document.createElement("li");
+    item.className = "session";
+    item.title = session.cwd || session.id;
+    item.setAttribute("role", "button");
+    item.tabIndex = 0;
+    if (!canResume) {
+      item.setAttribute("aria-disabled", "true");
+      item.classList.add("disabled");
+    }
+    if (state.pending.resume === session.id) {
+      item.setAttribute("aria-busy", "true");
+    }
+    if (session.id === currentId) {
+      item.classList.add("active");
+      item.setAttribute("aria-current", "true");
+    }
+    const title = document.createElement("span");
+    title.className = "session-title";
+    title.textContent =
+      state.pending.resume === session.id ? "恢复中…" : session.title || "未命名会话";
+    const model = document.createElement("span");
+    model.className = "session-model";
+    model.textContent = session.model || "";
+    item.append(title, model);
+    item.addEventListener("click", () => {
+      if (canResume) {
+        void resumeSession(session);
+      }
+    });
+    item.addEventListener("keydown", (event) => {
+      if (canResume && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        void resumeSession(session);
+      }
+    });
+    list.append(item);
+  }
+}
+
+function sessionNote(text: string): HTMLLIElement {
+  const item = document.createElement("li");
+  item.className = "session-empty";
+  item.textContent = text;
+  return item;
+}
+
+// --- actions ----------------------------------------------------------------
+
+async function deliver(kind: "turn" | "steer" | "queue"): Promise<void> {
+  const text = els.input.value.trim();
+  if (!text || state.pending.send || state.pending.queue) {
+    return;
+  }
+  if (kind === "queue" && !hasCapability("queue")) {
+    return;
+  }
+  if (kind === "steer" && state.running && !hasCapability("steer")) {
+    return;
+  }
+  els.input.value = "";
+  autoGrow();
+  if (kind === "queue") {
+    state.pending.queue = true;
+  } else {
+    state.pending.send = true;
+  }
+  renderComposer();
+
+  if (kind === "turn") {
+    try {
+      await api("/api/turns", { method: "POST", body: JSON.stringify({ text }) });
+    } catch (error) {
+      toast(errorMessage(error), "error");
+      restoreDraft(text);
+    } finally {
+      state.pending.send = false;
+      renderComposer();
+    }
+    return;
+  }
+
+  // Two different owners for the same draft: steering joins this turn,
+  // queueing becomes the next one. The port answers which one it accepted,
+  // and the reason is shown rather than swallowed.
+  const path = kind === "queue" ? "/api/queue" : "/api/steering";
+  const accepted = kind === "queue" ? "queued" : "held";
+  try {
+    const receipt = parseReceipt(await api(path, { method: "POST", body: JSON.stringify({ text }) }));
+    if (receipt.status === accepted) {
+      toast(kind === "queue" ? "已排队：将在下一轮开始时接纳" : "已受理：将在当前步骤后纳入", "success");
+    } else {
+      toast(`未受理：${receipt.reason || "运行时拒绝"}`, "error");
+      restoreDraft(text);
+    }
+  } catch (error) {
+    toast(errorMessage(error), "error");
+    restoreDraft(text);
+  } finally {
+    state.pending.send = false;
+    state.pending.queue = false;
+    renderComposer();
+  }
+}
+
+function restoreDraft(text: string): void {
+  els.input.value = text;
+  autoGrow();
+}
+
+function submitDraft(): void {
+  void deliver(state.running ? "steer" : "turn");
+}
+
+function queueDraft(): void {
+  void deliver("queue");
+}
+
+// Stopping is a two-step action: the first press only arms the intent, the
+// second confirms it. A cancel request is just an intent until the
+// application reports the turn finished.
+let stopArmed = false;
+let stopArmTimer = 0;
+
+function disarmStop(): void {
+  stopArmed = false;
+  if (stopArmTimer !== 0) {
+    window.clearTimeout(stopArmTimer);
+    stopArmTimer = 0;
+  }
+}
+
+function requestStop(): void {
+  if (state.pending.stop) {
+    return;
+  }
+  if (!stopArmed) {
+    stopArmed = true;
+    if (stopArmTimer !== 0) {
+      window.clearTimeout(stopArmTimer);
+    }
+    stopArmTimer = window.setTimeout(() => {
+      stopArmTimer = 0;
+      stopArmed = false;
+      renderComposer();
+    }, 3000);
+    renderComposer();
+    return;
+  }
+  disarmStop();
+  void confirmStop();
+}
+
+async function confirmStop(): Promise<void> {
+  if (state.pending.stop) {
+    return;
+  }
+  state.pending.stop = true;
+  renderComposer();
+  try {
+    await api("/api/cancel", { method: "POST", body: "{}" });
+    // Remains "停止中…" until TurnFinished reports the turn actually ended.
+  } catch (error) {
+    toast(errorMessage(error), "error");
+    state.pending.stop = false;
+    renderComposer();
+  }
+}
+
+// --- mobile drawer ----------------------------------------------------------
+
+function drawerOpen(): boolean {
+  return document.body.classList.contains("sidebar-open");
+}
+
+function openDrawer(): void {
+  document.body.classList.add("sidebar-open");
+  els.sidebarBackdrop.classList.remove("hidden");
+  els.sidebarClose.classList.remove("hidden");
+  els.menuToggle.setAttribute("aria-expanded", "true");
+  els.sidebarClose.focus();
+}
+
+function closeDrawer(): void {
+  const wasOpen = drawerOpen();
+  document.body.classList.remove("sidebar-open");
+  els.sidebarBackdrop.classList.add("hidden");
+  els.sidebarClose.classList.add("hidden");
+  els.menuToggle.setAttribute("aria-expanded", "false");
+  if (wasOpen) {
+    els.menuToggle.focus();
+  }
+}
+
+// --- settings modal ---------------------------------------------------------
+
+let settingsReturnFocus: HTMLElement | null = null;
+
+function settingsFocusables(): HTMLElement[] {
+  const nodes = els.settingsModal.querySelectorAll<HTMLElement>("button, select, input");
+  return Array.from(nodes).filter((node) => !node.hasAttribute("disabled"));
+}
+
+async function openSettings(): Promise<void> {
+  if (!state.providers.length) {
+    await loadProviders();
+    if (!state.providers.length) {
+      toast("无法读取服务商列表", "error");
+    }
+  }
+  settingsReturnFocus = els.settings;
+  els.settingsKey.value = "";
+  els.settingsProvider.replaceChildren();
+  const current = state.config?.provider ?? "";
+  for (const provider of state.providers) {
+    const option = document.createElement("option");
+    option.value = provider.name;
+    option.textContent = `${provider.name}${provider.has_key ? "" : "（未配置）"}`;
+    if (provider.name === current) {
+      option.selected = true;
+    }
+    els.settingsProvider.append(option);
+  }
+  const selected = state.providers.find(
+    (provider) => provider.name === (els.settingsProvider.value || current),
+  );
+  els.settingsModel.value = selected?.model ?? "";
+  renderSandboxWarning(state.config?.sandbox_downgraded === true);
+  els.settingsModal.classList.remove("hidden");
+  if (els.settingsProvider.options.length > 0) {
+    els.settingsProvider.focus();
+  } else {
+    els.settingsKey.focus();
+  }
+}
+
+function closeSettings(): void {
+  els.settingsModal.classList.add("hidden");
+  if (settingsReturnFocus) {
+    settingsReturnFocus.focus();
+    settingsReturnFocus = null;
+  }
+}
+
+async function saveSettings(): Promise<void> {
+  if (state.pending.settingsSave) {
+    return;
+  }
+  const provider = els.settingsProvider.value;
+  const apiKey = els.settingsKey.value.trim();
+  const model = els.settingsModel.value.trim();
+  if (!provider) {
+    toast("请选择一个服务商");
+    return;
+  }
+  if (!apiKey) {
+    toast("API Key 不能为空");
+    return;
+  }
+  state.pending.settingsSave = true;
+  els.settingsSave.disabled = true;
+  markPending(els.settingsSave, true);
+  try {
+    const config = parseConfig(
+      await api(`/api/providers/${encodeURIComponent(provider)}`, {
+        method: "POST",
+        body: JSON.stringify({ api_key: apiKey, model }),
+      }),
+    );
+    if (config) {
+      state.config = config;
+    }
+    closeSettings();
+    toast("配置已保存", "success");
+    renderSidebar();
+    void loadProviders();
+    void loadConfig();
+  } catch (error) {
+    toast(errorMessage(error), "error");
+  } finally {
+    state.pending.settingsSave = false;
+    els.settingsSave.disabled = false;
+    markPending(els.settingsSave, false);
+  }
+}
+
+// --- data loads -------------------------------------------------------------
+
+async function loadConfig(): Promise<void> {
+  state.configLoad = { loading: true, error: "" };
+  renderSidebar();
+  try {
+    const config = parseConfig(await api("/api/config"));
+    if (!config) {
+      throw new Error("配置响应格式不正确");
+    }
+    state.config = config;
+    state.configLoad = { loading: false, error: "" };
+  } catch (error) {
+    state.configLoad = { loading: false, error: errorMessage(error) };
+  }
+  renderSidebar();
+  renderSessions();
+  renderErrorRegion();
+}
+
+async function loadProviders(): Promise<void> {
+  try {
+    state.providers = parseProviders(await api("/api/providers"));
+  } catch {
+    state.providers = [];
+  }
+}
+
+async function loadSnapshot(): Promise<void> {
+  state.snapshotLoad = { loading: true, error: "" };
+  renderTranscript();
+  renderErrorRegion();
+  try {
+    const payload = await api("/api/snapshot");
+    const snapshot = parseSnapshot(payload.snapshot);
+    if (!snapshot) {
+      throw new Error("快照格式不正确");
+    }
+    applySnapshot(snapshot);
+    if (asBoolean(payload.running)) {
+      state.running = true;
+    }
+    const config = parseConfig(payload.config);
+    if (config) {
+      state.config = config;
+    }
+    state.snapshotLoad = { loading: false, error: "" };
+  } catch (error) {
+    // A failed read must not clear what is already on screen; it only adds
+    // an error line with a retry next to it. The skeleton ends because the
+    // request is no longer loading, even though it did not produce a view.
+    state.snapshotLoad = {
+      loading: false,
+      error: errorMessage(error),
+    };
+  }
+  scheduleRender();
+}
+
+async function loadSessions(silent = false): Promise<void> {
+  if (!silent) {
+    state.sessionsLoad = { loading: true, error: "" };
+    renderSessions();
+  }
+  try {
+    state.sessions = parseSessions(await api("/api/sessions"));
+    state.sessionsLoad = { loading: false, error: "" };
+  } catch (error) {
+    // A background poll that fails keeps the last known list. The connection
+    // banner already reports an offline event stream; replacing a usable list
+    // with an error every thirty seconds would be worse than stale data.
+    if (!silent || state.sessions.length === 0) {
+      state.sessionsLoad = { loading: false, error: errorMessage(error) };
+    }
+  }
+  renderSessions();
+}
+
+async function resumeSession(session: SessionView): Promise<void> {
+  if (state.pending.resume !== null || !hasCapability("resume")) {
+    return;
+  }
+  state.pending.resume = session.id;
+  renderSessions();
+  try {
+    await api(`/api/sessions/${encodeURIComponent(session.id)}/resume`, {
+      method: "POST",
+      body: "{}",
+    });
+    toast(`已切换到 ${session.title || session.id}`, "success");
+    closeDrawer();
+    // The pushed snapshot rebuilds the view; the configuration refresh catches
+    // the new session identity and the list refresh the current-session marker.
+    await loadConfig();
+    await loadSessions();
+  } catch (error) {
+    toast(errorMessage(error), "error");
+  } finally {
+    state.pending.resume = null;
+    renderSessions();
+  }
+}
+
+async function newChat(): Promise<void> {
+  if (state.pending.reset) {
+    return;
+  }
+  state.pending.reset = true;
+  els.newChat.disabled = true;
+  markPending(els.newChat, true);
+  try {
+    await api("/api/reset", { method: "POST", body: "{}" });
+    state.messages = [];
+    state.streaming = null;
+    state.error = "";
+    state.notice = "";
+    state.approval = null;
+    state.usage = null;
+    state.pending.approval = false;
+    closeDrawer();
+    scheduleRender();
+    void loadConfig();
+  } catch (error) {
+    toast(errorMessage(error), "error");
+  } finally {
+    state.pending.reset = false;
+    els.newChat.disabled = false;
+    markPending(els.newChat, false);
+  }
+}
+
+async function toggleMemory(): Promise<void> {
+  if (state.pending.memory) {
+    return;
+  }
+  const enabled = state.config?.memory_enabled === true;
+  state.pending.memory = true;
+  els.memory.disabled = true;
+  markPending(els.memory, true);
+  try {
+    const memory = parseMemoryState(
+      await api("/api/memory", {
+        method: "POST",
+        body: JSON.stringify({ enabled: !enabled }),
+      }),
+    );
+    const config = state.config;
+    if (config) {
+      state.config = {
+        ...config,
+        memory_enabled: memory.enabled,
+        memory_backend: memory.backend || config.memory_backend,
+      };
+    }
+    toast(memory.enabled ? "跨会话记忆已开启" : "跨会话记忆已关闭", "success");
+    renderSidebar();
+  } catch (error) {
+    toast(errorMessage(error), "error");
+    void loadConfig();
+  } finally {
+    state.pending.memory = false;
+    els.memory.disabled = false;
+    markPending(els.memory, false);
+  }
+}
+
+async function changePermission(): Promise<void> {
+  if (state.pending.permission) {
+    return;
+  }
+  const mode = els.permission.value;
+  const previous = state.config?.permission_mode ?? "";
+  state.pending.permission = true;
+  els.permission.disabled = true;
+  els.permission.setAttribute("aria-busy", "true");
+  els.permission.setAttribute("data-pending", "");
+  try {
+    const config = parseConfig(
+      await api("/api/permission-mode", {
+        method: "POST",
+        body: JSON.stringify({ mode }),
+      }),
+    );
+    if (config) {
+      state.config = config;
+    }
+    toast("权限模式已更新", "success");
+    renderSidebar();
+  } catch (error) {
+    toast(errorMessage(error), "error");
+    if (previous) {
+      els.permission.value = previous;
+    }
+    void loadConfig();
+  } finally {
+    state.pending.permission = false;
+    els.permission.disabled = false;
+    els.permission.removeAttribute("aria-busy");
+    els.permission.removeAttribute("data-pending");
+  }
+}
+
+// --- transient feedback -----------------------------------------------------
+
+let toastTimer = 0;
+
+function toast(message: string, kind: "info" | "success" | "error" = "info"): void {
+  els.toast.textContent = message;
+  els.toast.dataset.kind = kind;
+  els.toast.classList.remove("hidden");
+  if (toastTimer !== 0) {
+    window.clearTimeout(toastTimer);
+  }
+  toastTimer = window.setTimeout(() => {
+    toastTimer = 0;
+    els.toast.classList.add("hidden");
+  }, kind === "error" ? 4200 : 2600);
+}
+
+function autoGrow(): void {
+  els.input.style.height = "auto";
+  els.input.style.height = `${Math.min(els.input.scrollHeight, 220)}px`;
+}
+
+// --- wiring -----------------------------------------------------------------
+
+els.input.addEventListener("input", () => {
+  autoGrow();
+  renderComposer();
+});
+
+els.input.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey) {
+    return;
+  }
+  // During IME composition Enter confirms the candidate, not the draft.
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  event.preventDefault();
+  submitDraft();
+});
+
+els.send.addEventListener("click", submitDraft);
+els.queue.addEventListener("click", queueDraft);
+els.stop.addEventListener("click", requestStop);
+
+els.permission.addEventListener("change", () => {
+  void changePermission();
+});
+
+els.memory.addEventListener("click", () => {
+  void toggleMemory();
+});
+
+els.settings.addEventListener("click", () => {
+  void openSettings();
+});
+els.settingsClose.addEventListener("click", closeSettings);
+els.settingsCancel.addEventListener("click", closeSettings);
+els.settingsSave.addEventListener("click", () => {
+  void saveSettings();
+});
+els.settingsModal.addEventListener("click", (event) => {
+  if (event.target === els.settingsModal) {
+    closeSettings();
+  }
+});
+els.settingsModal.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab") {
+    return;
+  }
+  const focusables = settingsFocusables();
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (!first || !last) {
+    return;
+  }
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+els.settingsProvider.addEventListener("change", () => {
+  const selected = state.providers.find((provider) => provider.name === els.settingsProvider.value);
+  els.settingsModel.value = selected?.model ?? "";
+});
+
+els.newChat.addEventListener("click", () => {
+  void newChat();
+});
+
+els.menuToggle.addEventListener("click", () => {
+  if (drawerOpen()) {
+    closeDrawer();
+  } else {
+    openDrawer();
+  }
+});
+els.sidebarClose.addEventListener("click", closeDrawer);
+els.sidebarBackdrop.addEventListener("click", closeDrawer);
+els.sidebar.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab" || !drawerOpen()) {
+    return;
+  }
+  const focusables = Array.from(
+    els.sidebar.querySelectorAll<HTMLElement>("button:not([disabled]), [role='button'][tabindex='0']"),
+  );
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (!first || !last) {
+    return;
+  }
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+
+// Escape closes the topmost layer first: settings dialog, then the mobile
+// drawer, and only then — armed, not immediate — the running turn.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") {
+    return;
+  }
+  if (!els.settingsModal.classList.contains("hidden")) {
+    closeSettings();
+    return;
+  }
+  if (drawerOpen()) {
+    closeDrawer();
+    return;
+  }
+  if (state.running) {
+    requestStop();
+  }
+});
+
+// --- boot -------------------------------------------------------------------
+
+connect();
+void loadConfig();
+void loadProviders();
+void loadSnapshot();
+void loadSessions();
+window.setInterval(() => {
+  void loadSessions(true);
+}, 30000);
+render();

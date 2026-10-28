@@ -1,6 +1,6 @@
 # 前端与 Agent 的应用接口
 
-本规范定义终端前端与 Agent 应用服务之间的契约。架构边界见[软件架构](../design/software-architecture.md#前端与-agent-应用服务的边界)，体验要求见 [UI](../design/ui.md) 和 [UX](../design/ux.md)。
+本规范定义三个前端与 Agent 应用服务之间的契约。架构边界见[软件架构](../design/software-architecture.md#前端与-agent-应用服务的边界)，体验要求见 [UI](../design/ui.md) 和 [UX](../design/ux.md)。
 
 接口本身是进程内的异步端口；承载它的前端有三个——终端（进程内直连）、本机 Web 界面（HTTP 与服务器推送事件）、ACP 服务（标准输入输出的 JSON-RPC），见[三个前端与承载方式](#三个前端与承载方式)。本文件区分兼容接口与目标扩展；实现缺口及验收状态见 [Gap](../gap.md#已知待完成工作)和 [Flow](../flow.md#开发节点邻接表)。
 
@@ -34,6 +34,8 @@
 | 方法与路径 | 请求 | 结果 |
 |---|---|---|
 | `GET /api/snapshot` | — | 当前视图、配置视图与是否有轮次在运行；视图含 `pending_approval_id` |
+| `GET /api/config` | — | 当前配置视图；与快照中的配置同源 |
+| `GET /api/health` | — | 本机服务、单轮运行状态与事件订阅者数量 |
 | `GET /api/events` | — | 事件流：先发 `Snapshot`，随后是通知同名事件与 `TurnStarted`/`TurnFinished` |
 | `POST /api/turns` | `{"text"}` | 受理开始轮次；已有轮次在跑时返回 409 |
 | `POST /api/steering` | `{"text"}` | `SteeringReceipt`：`held` 或 `rejected` |

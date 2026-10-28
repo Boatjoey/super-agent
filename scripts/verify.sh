@@ -5,6 +5,7 @@ project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${project_root}"
 
 # The four gates: formatting, linting, strict typing, and behaviour.
+npm run check:web
 uv run ruff format --check .
 uv run ruff check .
 uv run pyright
