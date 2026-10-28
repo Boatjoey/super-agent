@@ -14,6 +14,7 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -195,6 +196,31 @@ async def test_strict_sandbox_requires_bubblewrap(tmp_path: Path, monkeypatch: p
     assert "sandbox.mode to off" in str(excinfo.value)
 
 
+def _namespace_refusal() -> str:
+    """Why this kernel cannot start bubblewrap, or an empty string when it can.
+
+    Hosted CI runs inside a container whose policy may forbid unprivileged user
+    namespaces. That is an environment limit, not a sandbox regression: probe
+    the capability directly and let the integration test skip. A missing binary
+    stays a failure, because it is a declared dependency.
+    """
+    bwrap = shutil.which("bwrap")
+    if bwrap is None:
+        return ""
+    try:
+        probe = subprocess.run(
+            [bwrap, "--ro-bind", "/", "/", "--unshare-all", "--", "true"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as err:
+        return str(err)
+    if probe.returncode == 0:
+        return ""
+    return (probe.stderr or probe.stdout).strip() or f"bwrap exited {probe.returncode}"
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
 @pytest.mark.asyncio
 async def test_strict_sandbox_restricts_filesystem_network_and_resources(tmp_path: Path) -> None:
@@ -211,11 +237,11 @@ async def test_strict_sandbox_restricts_filesystem_network_and_resources(tmp_pat
     # verify.sh fails on it before the tests run, and a bare pytest run should
     # surface it too.
     registry = sandboxed_registry(config, workspace_for(workspace))
+    refusal = _namespace_refusal()
+    if refusal:
+        pytest.skip(f"kernel namespaces unavailable: {refusal}")
 
-    try:
-        probe = await registry.run(live_context(), ToolCall(name="run_command", input='{"command":"printf ready"}'))
-    except RuntimeError as err:
-        pytest.skip(f"kernel namespaces unavailable: {err}")
+    probe = await registry.run(live_context(), ToolCall(name="run_command", input='{"command":"printf ready"}'))
     assert probe == "ready"
 
     inside = workspace / "inside"
