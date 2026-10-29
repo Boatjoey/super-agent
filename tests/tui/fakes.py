@@ -37,7 +37,7 @@ from super_agent.tui import (
 )
 
 
-class FakeConversation:
+class FakeFrontendPorts:
     """A conversation port with scripted notifications and submission receipts."""
 
     def __init__(
@@ -223,7 +223,7 @@ class FakeConversation:
         return ()
 
 
-class ApprovalConversation(FakeConversation):
+class ApprovalFrontendPorts(FakeFrontendPorts):
     """A turn that completes after one inline approval.
 
     It honours the same rule the application does: an answer must name the request
@@ -268,5 +268,5 @@ class ApprovalConversation(FakeConversation):
         return ApprovalReceipt.accepted(request_id)
 
 
-def new_app(fake: FakeConversation, *options: Option) -> App:
+def new_app(fake: FakeFrontendPorts, *options: Option) -> App:
     return new(fake, StartupInfo(model_name="test-model"), *options)

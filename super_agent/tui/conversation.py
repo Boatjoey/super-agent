@@ -1,12 +1,12 @@
-"""The boundary between the interactive CLI and the conversation runtime.
+"""Shared frontend contracts re-exported for the interactive CLI.
 
 The contract itself is :mod:`super_agent.frontend` — the ports, the display DTOs,
 the notification set, and the two concurrency primitives. This module re-exports
-it under the names the terminal has always used, and adds the capabilities only
-the terminal shows: the command ports, attachments, and MCP management.
+the shared types and the terminal display aliases. Both front ends use the
+same complete contract, including command ports, attachments and MCP management.
 
-Re-exporting rather than redefining is what makes the terminal one of three front
-ends rather than the owner of the contract: a browser and an editor protocol read
+Re-exporting rather than redefining is what makes the terminal one of two front
+ends rather than the owner of the contract: the web adapter reads
 the very same ``ConversationView`` and the very same notification kinds.
 
 Two pieces exist for Python's concurrency model and are re-exported here:
@@ -19,8 +19,6 @@ Two pieces exist for Python's concurrency model and are re-exported here:
 """
 
 from __future__ import annotations
-
-from typing import Protocol
 
 from super_agent.frontend import (
     ACCEPTED as ACCEPTED,
@@ -42,13 +40,13 @@ from super_agent.frontend import (
     Channel as Channel,
     ConfigView as ConfigView,
     ContextUsage as ContextUsage,
-    Conversation as ConversationPort,
     ConversationError as ConversationError,
     ConversationNotification as ConversationNotification,
     ConversationView as ConversationView,
     Decision as ApprovalDecision,
     Decision as Decision,
     Failure as Failure,
+    FrontendPorts as FrontendPorts,
     Message as Message,
     MessageAppended as MessageAppended,
     PermissionRequest as PermissionRequest,
@@ -98,12 +96,12 @@ __all__ = [
     "Channel",
     "ConfigView",
     "ContextUsage",
-    "Conversation",
     "ConversationError",
     "ConversationNotification",
     "ConversationView",
     "Decision",
     "Failure",
+    "FrontendPorts",
     "MCPServerSummary",
     "Message",
     "MessageAppended",
@@ -127,12 +125,3 @@ __all__ = [
     "TurnPort",
     "UsageReported",
 ]
-
-
-class Conversation(ConversationPort, Protocol):
-    """The terminal bundle :func:`super_agent.tui.new` accepts.
-
-    Both front ends now receive the same full contract; this name remains for the
-    terminal's historical spelling. ``Protocol`` is listed explicitly so the
-    bundle stays nominal rather than structural.
-    """

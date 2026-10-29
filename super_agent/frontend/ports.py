@@ -5,7 +5,7 @@ editor all read the same snapshot, start the same turn, and send the same three
 answers to an approval; nothing else is shared, and no front end is given the
 runtime's scheduler.
 
-Implementation lives in :mod:`super_agent.application.conversation`; runtime
+Implementation lives in :mod:`super_agent.application.agent_application`; runtime
 values are converted by :mod:`super_agent.application.presentation`.
 """
 
@@ -22,14 +22,15 @@ from super_agent.frontend.view import ApprovalReceipt, ConversationView, QueuedR
 
 __all__ = [
     "AgentInteractionPort",
+    "AgentManagementPort",
     "AgentPort",
     "AgentSummary",
     "AttachmentSummary",
     "AttachmentsPort",
     "ConfigPort",
     "ConfigView",
-    "Conversation",
     "ExtensionPort",
+    "FrontendPorts",
     "MCPPort",
     "MemoryPort",
     "PermissionPort",
@@ -220,10 +221,6 @@ class TurnPort(Protocol):
         ...
 
 
-class AgentInteractionPort(SnapshotPort, TurnPort, Protocol):
-    """Read the current view and interact with the running submission."""
-
-
 class SessionPort(Protocol):
     """The conversation lifecycle commands operate on."""
 
@@ -362,20 +359,26 @@ class AttachmentsPort(Protocol):
     async def pending_attachments(self) -> tuple[AttachmentSummary, ...]: ...
 
 
-class Conversation(
-    AgentInteractionPort,
-    ConfigPort,
+class AgentInteractionPort(SnapshotPort, TurnPort, AttachmentsPort, Protocol):
+    """View the conversation, stage attachments and interact with submissions."""
+
+
+class AgentManagementPort(
     SessionPort,
+    ConfigPort,
     PermissionPort,
     AgentPort,
-    MemoryPort,
     ProviderPort,
+    MemoryPort,
     MCPPort,
-    WorkspacePort,
     ExtensionPort,
-    AttachmentsPort,
+    WorkspacePort,
     Protocol,
 ):
+    """Manage sessions, agent configuration and the working environment."""
+
+
+class FrontendPorts(AgentInteractionPort, AgentManagementPort, Protocol):
     """The bundle a front end needs.
 
     Both front ends use this contract: the terminal renders it in process, the

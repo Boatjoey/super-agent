@@ -13,7 +13,7 @@ once the one before it has succeeded:
 The front end is one of two: the terminal, or the local web interface (``-web``).
 Naming no flag picks the platform default: the web interface on Windows, which
 ships without the terminal, and the terminal elsewhere. Both drive the same
-conversation adapter, so the only thing this file decides is which transport
+application service, so the only thing this file decides is which transport
 carries it.
 
 Status 1 means "the app refused to start" or "the interface failed"; the app
@@ -78,21 +78,21 @@ def main() -> None:
 async def run(cfg: app.Config, flags: app.Flags, *, port: int = DEFAULT_PORT) -> int:
     """Build the session and run the selected interface, returning the exit status."""
     try:
-        session, mcpController, agentController, memoryController = await app.new_session_with_extensions(cfg)
+        session, mcp_controller, agent_controller, memory_controller = await app.new_session_with_extensions(cfg)
     except Exception as error:
         print(error, file=sys.stderr)
         return 1
-    conversation = app.new_conversation_adapter(
-        session, mcpController, agentController, memoryController, sandbox_downgraded=cfg.sandbox_downgraded
+    frontend_ports = app.new_agent_application(
+        session, mcp_controller, agent_controller, memory_controller, sandbox_downgraded=cfg.sandbox_downgraded
     )
     workspace = cfg.workspace
     cwd = cfg.project.root if workspace is None else workspace.get_cwd()
     try:
         selected = select_front_end(flags, sys.platform)
         if selected == "web":
-            await web.serve(conversation, host=flags.host or DEFAULT_HOST, port=port)
+            await web.serve(frontend_ports, host=flags.host or DEFAULT_HOST, port=port)
         else:
-            await _run_terminal(cfg, session, conversation, agentController, cwd)
+            await _run_terminal(cfg, session, frontend_ports, agent_controller, cwd)
     except Exception as error:
         print(error, file=sys.stderr)
         return 1
@@ -121,8 +121,8 @@ def select_front_end(flags: app.Flags, platform: str) -> str:
 async def _run_terminal(
     cfg: app.Config,
     session: runtime.Session,
-    conversation: frontend.Conversation,
-    agentController: app.AgentController,
+    frontend_ports: frontend.FrontendPorts,
+    agent_controller: app.AgentController,
     cwd: str,
 ) -> None:
     """Run the interactive CLI.
@@ -133,10 +133,10 @@ async def _run_terminal(
     """
     from super_agent import tui
 
-    profile = agentController.active_profile()
+    profile = agent_controller.active_profile()
     program = tui.TerminalApplication(
         tui.new(
-            conversation,
+            frontend_ports,
             tui.StartupInfo(
                 model_name=llm.model_display_name(profile.provider, llm.ProviderConfig(model=profile.model)),
                 version=importlib.metadata.version("super-agent-py"),

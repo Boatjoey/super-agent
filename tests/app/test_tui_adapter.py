@@ -23,15 +23,15 @@ async def test_tui_adapter_maps_runtime_state() -> None:
     # and a nil tool runner, which is the same engine for a test that only reads
     # its state.
     engine = runtime.new_engine(None, None, None)
-    conversation = new_terminal_conversation(runtime.new_session(engine))
+    frontend_ports = new_terminal_conversation(runtime.new_session(engine))
 
-    status = conversation.snapshot().agent_status
+    status = frontend_ports.snapshot().agent_status
     assert status.label == "Initializing"
     assert status.busy is True
 
     await engine.ready()
 
-    status = conversation.snapshot().agent_status
+    status = frontend_ports.snapshot().agent_status
     assert status.label == "Idle"
     assert status.busy is False
     assert status.awaiting_approval is False
@@ -63,10 +63,10 @@ async def test_tui_adapter_delivers_provider_usage_through_a_turn() -> None:
     )
     engine = runtime.new_engine(model, None, None)
     await engine.ready()
-    conversation = new_terminal_conversation(runtime.new_session(engine))
+    frontend_ports = new_terminal_conversation(runtime.new_session(engine))
     notifications: tui.Channel[tui.ConversationNotification] = tui.Channel()
 
-    error = await conversation.run_turn("hi", notifications, tui.Cancellation())
+    error = await frontend_ports.run_turn("hi", notifications, tui.Cancellation())
     assert error is None
 
     seen: list[tui.ConversationNotification] = []
@@ -120,9 +120,9 @@ async def test_tui_adapter_refuses_steering_with_no_turn_running() -> None:
     """Nothing is running, so the input belongs nowhere: a value, not an exception."""
     engine = runtime.new_engine(None, None, None)
     await engine.ready()
-    conversation = new_terminal_conversation(runtime.new_session(engine))
+    frontend_ports = new_terminal_conversation(runtime.new_session(engine))
 
-    receipt = await conversation.steer("also check the tests")
+    receipt = await frontend_ports.steer("also check the tests")
 
     assert receipt.status == tui.REJECTED
     assert receipt.reason == "no turn is running"
@@ -135,17 +135,17 @@ async def test_tui_adapter_holds_a_steered_input_and_names_its_step() -> None:
     model = SteeringModel([runtime.ModelResponse(content="first"), runtime.ModelResponse(content="second")])
     engine = runtime.new_engine(model, None, None)
     await engine.ready()
-    conversation = new_terminal_conversation(runtime.new_session(engine))
+    frontend_ports = new_terminal_conversation(runtime.new_session(engine))
     notifications: tui.Channel[tui.ConversationNotification] = tui.Channel()
 
     receipts: list[tui.SteeringReceipt] = []
 
     async def steer() -> None:
-        receipts.append(await conversation.steer("also check the tests"))
+        receipts.append(await frontend_ports.steer("also check the tests"))
 
     model.steer = steer
 
-    error = await conversation.run_turn("hi", notifications, tui.Cancellation())
+    error = await frontend_ports.run_turn("hi", notifications, tui.Cancellation())
     assert error is None
 
     assert len(receipts) == 1

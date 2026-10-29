@@ -40,8 +40,8 @@ from super_agent.runtime.session import (
 )
 
 __all__ = [
-    "ConversationAdapter",
-    "new_conversation_adapter",
+    "AgentApplication",
+    "new_agent_application",
     "to_conversation_notification",
     "to_conversation_view",
     "to_frontend_context_usage",
@@ -53,43 +53,43 @@ __all__ = [
 ]
 
 
-class ConversationAdapter:
-    """The application implementation of the shared frontend port."""
+class AgentApplication:
+    """The application service implementing the shared frontend ports."""
 
     __slots__ = (
-        "_approvalSink",
-        "_pendingApproval",
-        "_sandboxDowngraded",
-        "agents",
-        "mcp",
-        "memory",
+        "_approval_queue",
+        "_pending_approval_id",
+        "_sandbox_downgraded",
+        "agent_controller",
+        "mcp_controller",
+        "memory_controller",
         "session",
     )
 
     def __init__(self, session: Session, *controllers: object, sandbox_downgraded: bool = False) -> None:
         self.session = session
-        self.mcp: MCPController | None = None
-        self.agents: AgentController | None = None
+        self.mcp_controller: MCPController | None = None
+        self.agent_controller: AgentController | None = None
         #: The memory switch, when the application wired one. Without it the
         #: session's own port is still the truth about what is remembered.
-        self.memory: MemoryController | None = None
+        self.memory_controller: MemoryController | None = None
         #: Whether the strict sandbox was downgraded to ``off`` on this platform,
         #: reported to the interface so the operator sees commands run unsandboxed.
-        self._sandboxDowngraded = sandbox_downgraded
+        self._sandbox_downgraded = sandbox_downgraded
         #: Where a decision goes while a turn runs, and which request it answers.
         #: Both are per turn: the sink exists only between the turn's start and its
         #: end, so an answer offered outside a turn is refused rather than buffered
         #: for a turn that has not begun.
-        self._approvalSink: asyncio.Queue[ApprovalDecision | ApprovalsClosed] | None = None
-        self._pendingApproval: str = ""
+        self._approval_queue: asyncio.Queue[ApprovalDecision | ApprovalsClosed] | None = None
+        self._pending_approval_id: str = ""
         for controller in controllers:
             match controller:
                 case MCPController():
-                    self.mcp = controller
+                    self.mcp_controller = controller
                 case AgentController():
-                    self.agents = controller
+                    self.agent_controller = controller
                 case MemoryController():
-                    self.memory = controller
+                    self.memory_controller = controller
                 case _:
                     # An unrecognised controller is not an error: a caller may pass
                     # anything, so the default is silent.
@@ -99,7 +99,7 @@ class ConversationAdapter:
 
     def list_agents(self) -> list[frontend.AgentSummary]:
         """Every configured profile, or nothing when the controller is absent."""
-        if self.agents is None:
+        if self.agent_controller is None:
             return []
         return [
             frontend.AgentSummary(
@@ -108,14 +108,14 @@ class ConversationAdapter:
                 model=profile.model,
                 permission_mode=str(profile.permission_mode),
             )
-            for profile in self.agents.list()
+            for profile in self.agent_controller.list()
         ]
 
     def current_agent(self) -> frontend.AgentSummary:
         """The active profile, or an empty summary when there is no controller."""
-        if self.agents is None:
+        if self.agent_controller is None:
             return frontend.AgentSummary()
-        profile = self.agents.active_profile()
+        profile = self.agent_controller.active_profile()
         return frontend.AgentSummary(
             name=profile.name,
             provider=profile.provider,
@@ -125,15 +125,15 @@ class ConversationAdapter:
 
     async def use_agent(self, name: str) -> None:
         """Switch profiles, replacing the context, model, and visible tools."""
-        if self.agents is None:
+        if self.agent_controller is None:
             raise ValueError("agent profiles are unavailable")
-        await self.agents.use(name)
+        await self.agent_controller.use(name)
 
     # --- provider configuration ---------------------------------------------
 
     def list_providers(self) -> list[frontend.ProviderView]:
         """Every configured provider, credential redacted to a presence flag."""
-        if self.agents is None:
+        if self.agent_controller is None:
             return []
         return [
             frontend.ProviderView(
@@ -142,14 +142,14 @@ class ConversationAdapter:
                 base_url=config.base_url,
                 has_key=_has_credential(name, config.api_key),
             )
-            for name, config in sorted(self.agents.providers.items())
+            for name, config in sorted(self.agent_controller.providers.items())
         ]
 
     def provider(self, name: str) -> frontend.ProviderView:
         """One provider's configuration, credential redacted."""
-        if self.agents is None:
+        if self.agent_controller is None:
             return frontend.ProviderView()
-        config = self.agents.provider_config(name)
+        config = self.agent_controller.provider_config(name)
         return frontend.ProviderView(
             name=name,
             model=config.model,
@@ -159,9 +159,9 @@ class ConversationAdapter:
 
     async def configure_provider(self, name: str, api_key: str, model: str = "") -> None:
         """Set a provider's key (and model), persisting and rebuilding the model."""
-        if self.agents is None:
+        if self.agent_controller is None:
             raise ValueError("provider configuration is unavailable")
-        await self.agents.configure_provider(name, api_key, model)
+        await self.agent_controller.configure_provider(name, api_key, model)
 
     # --- conversation --------------------------------------------------------
 
@@ -180,14 +180,14 @@ class ConversationAdapter:
 
     def memory_enabled(self) -> bool:
         """Whether the cross-session memory is in use right now."""
-        if self.memory is not None:
-            return self.memory.enabled
+        if self.memory_controller is not None:
+            return self.memory_controller.enabled
         return self.session.memory.enabled
 
     def memory_backend(self) -> str:
         """Where the memory lines live, by name."""
-        if self.memory is not None:
-            return self.memory.backend
+        if self.memory_controller is not None:
+            return self.memory_controller.backend
         return self.session.memory.name
 
     async def set_memory_enabled(self, enabled: bool) -> None:
@@ -196,9 +196,9 @@ class ConversationAdapter:
         The stored lines are left alone either way, so turning the memory back on
         brings back exactly what was there before.
         """
-        if self.memory is None:
+        if self.memory_controller is None:
             raise ValueError("the memory switch is not available")
-        await self.memory.setEnabled(enabled)
+        await self.memory_controller.setEnabled(enabled)
 
     async def export(self, format: str) -> str:
         return self.session.export(format)
@@ -221,7 +221,7 @@ class ConversationAdapter:
         id it cannot read is an approval it cannot give.
         """
         view = to_conversation_view(self.session.snapshot())
-        return dataclasses.replace(view, pending_approval_id=self._pendingApproval)
+        return dataclasses.replace(view, pending_approval_id=self._pending_approval_id)
 
     def config_view(self) -> frontend.ConfigView:
         """The application's identity, policy, and the operations it performs.
@@ -253,20 +253,20 @@ class ConversationAdapter:
             "fork",
             "export",
         ]
-        if self.agents is not None:
+        if self.agent_controller is not None:
             capabilities.append("agents")
-        if self.mcp is not None:
+        if self.mcp_controller is not None:
             capabilities.append("mcp")
-        if self.memory is not None or self.session.memory.enabled:
+        if self.memory_controller is not None or self.session.memory.enabled:
             capabilities.append("memory")
         # The credential is missing when the active provider resolved to an empty
         # key. It is read from the controller's resolved table, not the raw
         # settings, so a key supplied through the environment does not read as
         # missing.
         credential_missing = False
-        if self.agents is not None:
-            active_provider = self.agents.active_profile().provider
-            credential_missing = self.agents.provider_config(active_provider).api_key == ""
+        if self.agent_controller is not None:
+            active_provider = self.agent_controller.active_profile().provider
+            credential_missing = self.agent_controller.provider_config(active_provider).api_key == ""
         return frontend.ConfigView(
             session_id=str(meta.id),
             session_title=meta.title,
@@ -282,7 +282,7 @@ class ConversationAdapter:
             memory_enabled=self.memory_enabled(),
             memory_backend=self.memory_backend(),
             credential_missing=credential_missing,
-            sandbox_downgraded=self._sandboxDowngraded,
+            sandbox_downgraded=self._sandbox_downgraded,
             capabilities=tuple(capabilities),
         )
 
@@ -295,17 +295,17 @@ class ConversationAdapter:
         to the wrong prompt" — and either way, no decision reaches a tool call the
         user did not see.
         """
-        sink = self._approvalSink
-        if sink is None:
+        approval_queue = self._approval_queue
+        if approval_queue is None:
             return frontend.ApprovalReceipt.rejected(request_id, "no turn is running")
         if not request_id:
             return frontend.ApprovalReceipt.rejected(request_id, "the decision names no approval request")
-        if request_id != self._pendingApproval:
+        if request_id != self._pending_approval_id:
             return frontend.ApprovalReceipt.rejected(request_id, "that request is no longer pending")
         # Consumed before the hand-off: a second click on the same prompt is the
         # common way a decision arrives twice, and it must not run the tool twice.
-        self._pendingApproval = ""
-        await sink.put(ApprovalDecision(str(decision)))
+        self._pending_approval_id = ""
+        await approval_queue.put(ApprovalDecision(str(decision)))
         return frontend.ApprovalReceipt.accepted(request_id)
 
     async def steer(self, text: str) -> frontend.SteeringReceipt:
@@ -402,61 +402,63 @@ class ConversationAdapter:
     # --- MCP servers ---------------------------------------------------------
 
     def list_mcp_servers(self) -> list[frontend.MCPServerSummary]:
-        if self.mcp is None:
+        if self.mcp_controller is None:
             return []
-        return [frontend.MCPServerSummary(name=server.name, tools=server.tools) for server in self.mcp.list()]
+        return [
+            frontend.MCPServerSummary(name=server.name, tools=server.tools) for server in self.mcp_controller.list()
+        ]
 
     async def add_mcp_server(self, name: str, command: str, args: list[str]) -> None:
-        if self.mcp is None:
+        if self.mcp_controller is None:
             raise ValueError("MCP management is unavailable")
-        await self.mcp.add(live_context(), name, command, args)
+        await self.mcp_controller.add(live_context(), name, command, args)
 
     async def remove_mcp_server(self, name: str) -> None:
-        if self.mcp is None:
+        if self.mcp_controller is None:
             raise ValueError("MCP management is unavailable")
-        await self.mcp.remove(name)
+        await self.mcp_controller.remove(name)
 
     async def restart_mcp_server(self, name: str) -> None:
-        if self.mcp is None:
+        if self.mcp_controller is None:
             raise ValueError("MCP management is unavailable")
-        await self.mcp.restart(live_context(), name)
+        await self.mcp_controller.restart(live_context(), name)
 
     # --- repository and extension queries ------------------------------------
 
     async def git_diff(self) -> str:
-        if self.agents is None:
+        if self.agent_controller is None:
             raise ValueError("workflow tools are unavailable")
-        return await self.agents.git_diff(live_context())
+        return await self.agent_controller.git_diff(live_context())
 
     async def git_status(self) -> str:
-        if self.agents is None:
+        if self.agent_controller is None:
             raise ValueError("workflow tools are unavailable")
-        return await self.agents.git_status(live_context())
+        return await self.agent_controller.git_status(live_context())
 
     async def diagnostics(self, path: str) -> str:
-        if self.agents is None:
+        if self.agent_controller is None:
             raise ValueError("diagnostics are unavailable")
-        return await self.agents.diagnostics(live_context(), path)
+        return await self.agent_controller.diagnostics(live_context(), path)
 
     def custom_commands(self) -> list[str]:
-        if self.agents is None:
+        if self.agent_controller is None:
             return []
-        return self.agents.custom_commands()
+        return self.agent_controller.custom_commands()
 
     async def expand_custom_command(self, name: str, arguments: str) -> str:
-        if self.agents is None:
+        if self.agent_controller is None:
             raise ValueError("custom commands are unavailable")
-        return self.agents.expand_command(name, arguments)
+        return self.agent_controller.expand_command(name, arguments)
 
     def skills(self) -> list[str]:
-        if self.agents is None:
+        if self.agent_controller is None:
             return []
-        return self.agents.skills()
+        return self.agent_controller.skills()
 
     def plugins(self) -> list[str]:
-        if self.agents is None:
+        if self.agent_controller is None:
             return []
-        return self.agents.plugins()
+        return self.agent_controller.plugins()
 
     # --- the turn ------------------------------------------------------------
 
@@ -528,57 +530,59 @@ class ConversationAdapter:
         the message.
         """
         ctx = RunContext()
-        watcher = asyncio.create_task(_watchCancellation(cancellation, ctx))
+        watcher = asyncio.create_task(_watch_cancellation(cancellation, ctx))
         try:
-            if self.agents is not None:
+            if self.agent_controller is not None:
                 try:
-                    await self.agents.run_hook(ctx, "before_turn")
+                    await self.agent_controller.run_hook(ctx, "before_turn")
                 except Exception as error:
                     return frontend.failure_from(error, operation="run_turn")
-            runtimeNotifications: asyncio.Queue[SessionNotification] = asyncio.Queue(maxsize=100)
-            runtimeApprovals: asyncio.Queue[ApprovalDecision | ApprovalsClosed] = asyncio.Queue(maxsize=1)
-            done = asyncio.Event()
+            runtime_notifications: asyncio.Queue[SessionNotification] = asyncio.Queue(maxsize=100)
+            runtime_approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed] = asyncio.Queue(maxsize=1)
+            turn_finished = asyncio.Event()
             # The sink is published for the duration of the turn only: :meth:`approve`
             # reads it, so an answer offered outside a turn is refused rather than
             # buffered for a turn that has not started.
-            self._approvalSink = runtimeApprovals
-            notificationBridge = asyncio.create_task(
-                self._bridgeNotifications(ctx, notifications, runtimeNotifications, done)
+            self._approval_queue = runtime_approvals
+            notification_bridge = asyncio.create_task(
+                self._bridge_notifications(ctx, notifications, runtime_notifications, turn_finished)
             )
             error: BaseException | None = None
             try:
-                await self.session.run_turn(ctx, text, runtimeNotifications, runtimeApprovals, input_id)
+                await self.session.run_turn(ctx, text, runtime_notifications, runtime_approvals, input_id)
             except Exception as failure:
                 error = failure
             finally:
-                done.set()
-                self._approvalSink = None
-                self._pendingApproval = ""
+                turn_finished.set()
+                self._approval_queue = None
+                self._pending_approval_id = ""
                 # The notification bridge drains what the turn produced and then
                 # returns, which is what guarantees this turn's events are on the
                 # channel before the next turn's begin.
-                await notificationBridge
+                await notification_bridge
         finally:
             watcher.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await watcher
-        if self.agents is not None:
-            hookCtx = RunContext()
+        if self.agent_controller is not None:
+            hook_context = RunContext()
             if error is not None:
-                error = _join(error, await _hookFailure(self.agents, hookCtx, ("error",)))
-            error = _join(error, await _hookFailure(self.agents, hookCtx, ("turn_complete", "after_turn")))
+                error = _join(error, await _hook_failure(self.agent_controller, hook_context, ("error",)))
+            error = _join(
+                error, await _hook_failure(self.agent_controller, hook_context, ("turn_complete", "after_turn"))
+            )
         return frontend.failure_from(
             error,
             operation="run_turn",
             cancelled=errors_is(error, Cancelled),
         )
 
-    async def _bridgeNotifications(
+    async def _bridge_notifications(
         self,
         ctx: RunContext,
         notifications: frontend.Channel[frontend.ConversationNotification],
-        runtimeNotifications: asyncio.Queue[SessionNotification],
-        done: asyncio.Event,
+        runtime_notifications: asyncio.Queue[SessionNotification],
+        turn_finished: asyncio.Event,
     ) -> None:
         """Forward one turn's runtime notifications onto the interface's channel.
 
@@ -589,25 +593,27 @@ class ConversationAdapter:
         only the pump above decides when the stream is over.
         """
         while True:
-            getter = asyncio.ensure_future(runtimeNotifications.get())
-            stopper = asyncio.ensure_future(done.wait())
-            finished, _pending = await asyncio.wait({getter, stopper}, return_when=asyncio.FIRST_COMPLETED)
-            if getter in finished:
-                notification = getter.result()
-                if not stopper.done():
-                    stopper.cancel()
+            notification_waiter = asyncio.ensure_future(runtime_notifications.get())
+            turn_end_waiter = asyncio.ensure_future(turn_finished.wait())
+            finished, _pending = await asyncio.wait(
+                {notification_waiter, turn_end_waiter}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if notification_waiter in finished:
+                notification = notification_waiter.result()
+                if not turn_end_waiter.done():
+                    turn_end_waiter.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await stopper
+                    await turn_end_waiter
                 if isinstance(notification, NotificationsClosed):
                     return
-                if isinstance(notification, ToolApprovalRequested) and self.agents is not None:
+                if isinstance(notification, ToolApprovalRequested) and self.agent_controller is not None:
                     try:
-                        await self.agents.run_hook(ctx, "approval_requested")
-                    except Exception as hookError:
+                        await self.agent_controller.run_hook(ctx, "approval_requested")
+                    except Exception as hook_error:
                         notifications.put(
                             frontend.ConversationError(
                                 failure=frontend.Failure(
-                                    message=str(hookError) or type(hookError).__name__,
+                                    message=str(hook_error) or type(hook_error).__name__,
                                     code=frontend.FAILED,
                                     operation="approval_requested",
                                 )
@@ -615,9 +621,9 @@ class ConversationAdapter:
                         )
                 notifications.put(self._correlate(to_conversation_notification(notification)))
                 continue
-            getter.cancel()
+            notification_waiter.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await getter
+                await notification_waiter
             return
 
     def _correlate(self, notification: frontend.ConversationNotification) -> frontend.ConversationNotification:
@@ -630,31 +636,31 @@ class ConversationAdapter:
         """
         if isinstance(notification, frontend.ToolApprovalRequested):
             request_id = f"approval-{uuid.uuid4().hex[:12]}"
-            self._pendingApproval = request_id
+            self._pending_approval_id = request_id
             return dataclasses.replace(notification, request_id=request_id)
         if isinstance(notification, frontend.ToolApprovalCleared):
-            request_id, self._pendingApproval = self._pendingApproval, ""
+            request_id, self._pending_approval_id = self._pending_approval_id, ""
             return dataclasses.replace(notification, request_id=request_id)
         return notification
 
 
-def new_conversation_adapter(
-    session: Session, *controllers: object, sandbox_downgraded: bool = False
-) -> ConversationAdapter:
+def new_agent_application(session: Session, *controllers: object, sandbox_downgraded: bool = False) -> AgentApplication:
     """The session, plus whichever controllers apply."""
-    return ConversationAdapter(session, *controllers, sandbox_downgraded=sandbox_downgraded)
+    return AgentApplication(session, *controllers, sandbox_downgraded=sandbox_downgraded)
 
 
-async def _watchCancellation(cancellation: frontend.Cancellation, ctx: RunContext) -> None:
+async def _watch_cancellation(cancellation: frontend.Cancellation, ctx: RunContext) -> None:
     """Cancel the run context when the interface cancels the turn."""
     await cancellation.wait()
     ctx.cancel()
 
 
-async def _hookFailure(agents: AgentController, ctx: RunContext, events: tuple[str, ...]) -> BaseException | None:
+async def _hook_failure(
+    agent_controller: AgentController, ctx: RunContext, events: tuple[str, ...]
+) -> BaseException | None:
     """Run lifecycle hooks, returning their failure instead of raising it."""
     try:
-        await agents.run_hooks(ctx, *events)
+        await agent_controller.run_hooks(ctx, *events)
     except Exception as error:
         return error
     return None

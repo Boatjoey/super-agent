@@ -1,4 +1,4 @@
-"""A conversation port that needs no runtime.
+"""A complete frontend contract that needs no runtime.
 
 The web adapter is a transport: it may only depend on
 ``super_agent.frontend``, so its tests must not build an engine. This double
@@ -14,8 +14,8 @@ from collections.abc import Sequence
 from super_agent import frontend
 
 
-class FakeConversation:
-    """One scripted conversation: fixed view, scripted notifications."""
+class FakeFrontendPorts:
+    """One scripted frontend contract: fixed view, scripted notifications."""
 
     def __init__(
         self,
@@ -251,7 +251,7 @@ class FakeConversation:
         return ["plugin"]
 
 
-class AwaitingConversation(FakeConversation):
+class AwaitingApprovalFrontendPorts(FakeFrontendPorts):
     """A turn that stops on an approval and resumes when it is answered.
 
     A transport that claims to carry an approval has to be tested against a turn
@@ -319,13 +319,19 @@ class AwaitingConversation(FakeConversation):
 
 
 class InteractionOnly:
-    """Expose only interaction capabilities from a scripted conversation."""
+    """Expose only interaction capabilities from a scripted frontend contract."""
 
-    def __init__(self, conversation: FakeConversation) -> None:
-        self._conversation = conversation
+    def __init__(self, frontend_ports: FakeFrontendPorts) -> None:
+        self._frontend_ports = frontend_ports
 
     def snapshot(self) -> frontend.ConversationView:
-        return self._conversation.snapshot()
+        return self._frontend_ports.snapshot()
+
+    async def attach(self, path: str) -> frontend.AttachmentSummary:
+        return await self._frontend_ports.attach(path)
+
+    async def pending_attachments(self) -> tuple[frontend.AttachmentSummary, ...]:
+        return await self._frontend_ports.pending_attachments()
 
     async def run_turn(
         self,
@@ -333,16 +339,16 @@ class InteractionOnly:
         notifications: frontend.Channel[frontend.ConversationNotification],
         cancellation: frontend.Cancellation,
     ) -> frontend.Failure | None:
-        return await self._conversation.run_turn(text, notifications, cancellation)
+        return await self._frontend_ports.run_turn(text, notifications, cancellation)
 
     async def steer(self, text: str) -> frontend.SteeringReceipt:
-        return await self._conversation.steer(text)
+        return await self._frontend_ports.steer(text)
 
     async def queue(self, text: str) -> frontend.QueuedReceipt:
-        return await self._conversation.queue(text)
+        return await self._frontend_ports.queue(text)
 
     async def approve(self, decision: frontend.Decision, request_id: str = "") -> frontend.ApprovalReceipt:
-        return await self._conversation.approve(decision, request_id)
+        return await self._frontend_ports.approve(decision, request_id)
 
     async def cancel(self) -> frontend.Failure | None:
-        return await self._conversation.cancel()
+        return await self._frontend_ports.cancel()

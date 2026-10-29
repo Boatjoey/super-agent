@@ -79,10 +79,10 @@ def error_response(status: int, message: str) -> Response:
 class Router:
     """The route table, over the port and the turn slot."""
 
-    __slots__ = ("_conversation", "_hub", "_runner")
+    __slots__ = ("_frontend_ports", "_hub", "_runner")
 
-    def __init__(self, conversation: frontend.Conversation, runner: TurnRunner, hub: EventHub) -> None:
-        self._conversation = conversation
+    def __init__(self, frontend_ports: frontend.FrontendPorts, runner: TurnRunner, hub: EventHub) -> None:
+        self._frontend_ports = frontend_ports
         self._runner = runner
         self._hub = hub
 
@@ -119,7 +119,7 @@ class Router:
             case ("GET", ["snapshot"]):
                 return json_response(
                     {
-                        "snapshot": wire.view_to_json(self._conversation.snapshot()),
+                        "snapshot": wire.view_to_json(self._frontend_ports.snapshot()),
                         "config": self._config(),
                         "running": self._runner.running,
                     }
@@ -127,7 +127,7 @@ class Router:
             case ("GET", ["config"]):
                 return json_response(self._config())
             case ("GET", ["instructions"]):
-                return json_response({"sources": list(self._conversation.config_view().instruction_sources)})
+                return json_response({"sources": list(self._frontend_ports.config_view().instruction_sources)})
             case ("POST", ["turns"]):
                 text = self._text(request)
                 await self._runner.start_turn(text)
@@ -148,18 +148,18 @@ class Router:
                 )
                 return json_response({"ok": True})
             case ("POST", ["permission-mode"]):
-                await self._conversation.set_permission_mode(str(request.json.get("mode", "")))
+                await self._frontend_ports.set_permission_mode(str(request.json.get("mode", "")))
                 return json_response(self._config())
             case ("GET", ["providers"]):
                 return json_response(
-                    {"providers": [self._provider(item) for item in self._conversation.list_providers()]}
+                    {"providers": [self._provider(item) for item in self._frontend_ports.list_providers()]}
                 )
             case ("POST", ["providers", provider_name]):
                 api_key = str(request.json.get("api_key", ""))
                 model = str(request.json.get("model", ""))
                 if not api_key.strip():
                     raise ValueError("api_key is required")
-                await self._conversation.configure_provider(provider_name, api_key, model)
+                await self._frontend_ports.configure_provider(provider_name, api_key, model)
                 return json_response(self._config())
             case ("GET", ["memory"]):
                 return json_response(await self._memory())
@@ -167,27 +167,27 @@ class Router:
                 enabled = request.json.get("enabled")
                 if not isinstance(enabled, bool):
                     raise ValueError("enabled must be a boolean")
-                await self._conversation.set_memory_enabled(enabled)
+                await self._frontend_ports.set_memory_enabled(enabled)
                 return json_response(await self._memory())
             case ("GET", ["sessions"]):
-                sessions = await self._conversation.list_sessions()
+                sessions = await self._frontend_ports.list_sessions()
                 return json_response({"sessions": [self._session(item) for item in sessions]})
             case ("POST", ["sessions", session_id, "resume"]):
-                await self._conversation.resume(session_id)
+                await self._frontend_ports.resume(session_id)
                 self._hub.publish(self._runner.snapshot_event())
                 return json_response({"ok": True})
             case ("POST", ["sessions", session_id, "rename"]):
-                await self._conversation.rename_session(session_id, str(request.json.get("title", "")))
+                await self._frontend_ports.rename_session(session_id, str(request.json.get("title", "")))
                 return json_response({"ok": True})
             case ("DELETE", ["sessions", session_id]):
-                await self._conversation.delete_session(session_id)
+                await self._frontend_ports.delete_session(session_id)
                 return json_response({"ok": True})
             case ("POST", ["reset"]):
-                await self._conversation.reset()
+                await self._frontend_ports.reset()
                 self._hub.publish(self._runner.snapshot_event())
                 return json_response({"ok": True})
             case ("POST", ["undo"]):
-                await self._conversation.undo()
+                await self._frontend_ports.undo()
                 self._hub.publish(self._runner.snapshot_event())
                 return json_response({"ok": True})
             case ("POST", ["workflows", name]):
@@ -197,7 +197,7 @@ class Router:
                 await self._runner.start_turn(prompt)
                 return json_response({"accepted": True}, status=202)
             case ("GET", ["mcp"]):
-                return json_response({"servers": [self._mcp(item) for item in self._conversation.list_mcp_servers()]})
+                return json_response({"servers": [self._mcp(item) for item in self._frontend_ports.list_mcp_servers()]})
             case ("POST", ["mcp"]):
                 name = str(request.json.get("name", "")).strip()
                 command = str(request.json.get("command", "")).strip()
@@ -206,38 +206,38 @@ class Router:
                     raise ValueError("name and command are required")
                 if args is None:
                     args = []
-                await self._conversation.add_mcp_server(name, command, string_list(cast("object", args)))
+                await self._frontend_ports.add_mcp_server(name, command, string_list(cast("object", args)))
                 return json_response({"ok": True})
             case ("DELETE", ["mcp", name]):
-                await self._conversation.remove_mcp_server(name)
+                await self._frontend_ports.remove_mcp_server(name)
                 return json_response({"ok": True})
             case ("POST", ["mcp", name, "restart"]):
-                await self._conversation.restart_mcp_server(name)
+                await self._frontend_ports.restart_mcp_server(name)
                 return json_response({"ok": True})
             case ("GET", ["attachments"]):
                 return json_response(
-                    {"items": [self._attachment(item) for item in await self._conversation.pending_attachments()]}
+                    {"items": [self._attachment(item) for item in await self._frontend_ports.pending_attachments()]}
                 )
             case ("POST", ["attachments"]):
                 path = str(request.json.get("path", "")).strip()
                 if not path:
                     raise ValueError("path is required")
-                return json_response(self._attachment(await self._conversation.attach(path)))
+                return json_response(self._attachment(await self._frontend_ports.attach(path)))
             case ("GET", ["workspace", "diff"]):
-                return json_response({"diff": await self._conversation.git_diff()})
+                return json_response({"diff": await self._frontend_ports.git_diff()})
             case ("GET", ["workspace", "status"]):
-                return json_response({"status": await self._conversation.git_status()})
+                return json_response({"status": await self._frontend_ports.git_status()})
             case ("GET", ["workspace", "diagnostics"]):
                 path = (request.query.get("path") or [""])[0].strip()
                 if not path:
                     raise ValueError("path is required")
-                return json_response({"diagnostics": await self._conversation.diagnostics(path)})
+                return json_response({"diagnostics": await self._frontend_ports.diagnostics(path)})
             case ("GET", ["extensions"]):
                 return json_response(
                     {
-                        "commands": self._conversation.custom_commands(),
-                        "skills": self._conversation.skills(),
-                        "plugins": self._conversation.plugins(),
+                        "commands": self._frontend_ports.custom_commands(),
+                        "skills": self._frontend_ports.skills(),
+                        "plugins": self._frontend_ports.plugins(),
                     }
                 )
             case ("POST", ["extensions", "expand"]):
@@ -245,38 +245,38 @@ class Router:
                 arguments = str(request.json.get("arguments", ""))
                 if not name:
                     raise ValueError("name is required")
-                return json_response({"text": await self._conversation.expand_custom_command(name, arguments)})
+                return json_response({"text": await self._frontend_ports.expand_custom_command(name, arguments)})
             case ("POST", ["memory", "items"]):
                 text = str(request.json.get("text", "")).strip()
                 if not text:
                     raise ValueError("text is required")
-                await self._conversation.remember(text)
+                await self._frontend_ports.remember(text)
                 return json_response(await self._memory())
             case ("DELETE", ["memory", "items"]):
-                await self._conversation.forget_memories()
+                await self._frontend_ports.forget_memories()
                 return json_response(await self._memory())
             case ("GET", ["agents"]):
                 return json_response(
                     {
-                        "agents": [self._agent(item) for item in self._conversation.list_agents()],
-                        "current": self._agent(self._conversation.current_agent()),
+                        "agents": [self._agent(item) for item in self._frontend_ports.list_agents()],
+                        "current": self._agent(self._frontend_ports.current_agent()),
                     }
                 )
             case ("POST", ["agents", name]):
-                await self._conversation.use_agent(name)
+                await self._frontend_ports.use_agent(name)
                 return json_response(self._config())
             case ("POST", ["sessions", session_id, "compact"]):
                 self._require_current(session_id)
-                await self._conversation.compact(str(request.json.get("summary", "")))
+                await self._frontend_ports.compact(str(request.json.get("summary", "")))
                 self._hub.publish(self._runner.snapshot_event())
                 return json_response({"ok": True})
             case ("POST", ["sessions", session_id, "fork"]):
                 self._require_current(session_id)
-                return json_response({"id": await self._conversation.fork(str(request.json.get("title", "")))})
+                return json_response({"id": await self._frontend_ports.fork(str(request.json.get("title", "")))})
             case ("POST", ["sessions", session_id, "export"]):
                 self._require_current(session_id)
                 export_format = str(request.json.get("format", "markdown")).strip()
-                return json_response({"path": await self._conversation.export(export_format)})
+                return json_response({"path": await self._frontend_ports.export(export_format)})
             case _:
                 return error_response(404, f"no route for {method} {request.path}")
 
@@ -288,7 +288,7 @@ class Router:
         definition, and a transport that re-invented the shape would drift from the
         terminal that shows the same session.
         """
-        return wire.config_to_json(self._conversation.config_view())
+        return wire.config_to_json(self._frontend_ports.config_view())
 
     @staticmethod
     def _provider(item: frontend.ProviderView) -> dict[str, Any]:
@@ -301,9 +301,9 @@ class Router:
         actually get rather than one it hopes for.
         """
         return {
-            "enabled": self._conversation.memory_enabled(),
-            "backend": self._conversation.memory_backend(),
-            "items": await self._conversation.memories(),
+            "enabled": self._frontend_ports.memory_enabled(),
+            "backend": self._frontend_ports.memory_backend(),
+            "items": await self._frontend_ports.memories(),
         }
 
     @staticmethod
@@ -336,7 +336,7 @@ class Router:
 
     def _require_current(self, session_id: str) -> None:
         """Refuse a session-scoped command aimed at a session that is not active."""
-        current = self._conversation.config_view().session_id
+        current = self._frontend_ports.config_view().session_id
         if session_id != current:
             raise ValueError("session id does not match the active session")
 

@@ -21,7 +21,7 @@ from super_agent.tui import (
     update,
     updateConversationNotification,
 )
-from tests.tui.fakes import FakeConversation, new_app
+from tests.tui.fakes import FakeFrontendPorts, new_app
 
 TEXT = "also check the tests"
 
@@ -42,7 +42,7 @@ async def type_and_submit(app: App, text: str) -> tuple[App, tuple[runtime.Comma
 @pytest.mark.asyncio
 async def test_enter_during_a_turn_steers_instead_of_cancelling() -> None:
     """The running turn is left alone; the input goes to it, not to a new one."""
-    fake = FakeConversation()
+    fake = FakeFrontendPorts()
     app = new_app(fake)
 
     app, _commands = await type_and_submit(app, TEXT)
@@ -57,7 +57,7 @@ async def test_enter_during_a_turn_steers_instead_of_cancelling() -> None:
 @pytest.mark.asyncio
 async def test_a_refused_submission_keeps_the_draft_and_shows_the_reason() -> None:
     """Nothing was accepted, so nothing may be cleared or promised."""
-    fake = FakeConversation(receipts=[SteeringReceipt.rejected("steer-1", "no turn is running")])
+    fake = FakeFrontendPorts(receipts=[SteeringReceipt.rejected("steer-1", "no turn is running")])
     app = new_app(fake)
 
     app, _commands = await type_and_submit(app, TEXT)
@@ -69,7 +69,7 @@ async def test_a_refused_submission_keeps_the_draft_and_shows_the_reason() -> No
 
 @pytest.mark.asyncio
 async def test_acceptance_names_the_step_that_took_the_input_up() -> None:
-    fake = FakeConversation(receipts=[SteeringReceipt.held("steer-1")])
+    fake = FakeFrontendPorts(receipts=[SteeringReceipt.held("steer-1")])
     app = new_app(fake)
     app, _commands = await type_and_submit(app, TEXT)
 
@@ -81,7 +81,7 @@ async def test_acceptance_names_the_step_that_took_the_input_up() -> None:
 
 @pytest.mark.asyncio
 async def test_a_withdrawn_input_is_reported_rather_than_left_waiting() -> None:
-    fake = FakeConversation(receipts=[SteeringReceipt.held("steer-1")])
+    fake = FakeFrontendPorts(receipts=[SteeringReceipt.held("steer-1")])
     app = new_app(fake)
     app, _commands = await type_and_submit(app, TEXT)
 

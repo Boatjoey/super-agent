@@ -21,7 +21,7 @@ from super_agent.tui import (
     update,
     updateConversationNotification,
 )
-from tests.tui.fakes import FakeConversation, new_app
+from tests.tui.fakes import FakeFrontendPorts, new_app
 
 TEXT = "then run the tests"
 
@@ -42,7 +42,7 @@ async def type_and_queue(app: App, text: str) -> tuple[App, tuple[runtime.Comman
 @pytest.mark.asyncio
 async def test_tab_during_a_turn_queues_through_the_application() -> None:
     """The queue is the application's; the footer only shows what it accepted."""
-    fake = FakeConversation()
+    fake = FakeFrontendPorts()
     app = new_app(fake)
 
     app, _commands = await type_and_queue(app, TEXT)
@@ -59,7 +59,7 @@ async def test_tab_during_a_turn_queues_through_the_application() -> None:
 @pytest.mark.asyncio
 async def test_a_refused_queue_keeps_the_draft_and_shows_the_reason() -> None:
     """Nothing was accepted, so nothing may be cleared or promised."""
-    fake = FakeConversation(queued=[QueuedReceipt.rejected("queue-1", "no turn is running")])
+    fake = FakeFrontendPorts(queued=[QueuedReceipt.rejected("queue-1", "no turn is running")])
     app = new_app(fake)
 
     app, _commands = await type_and_queue(app, TEXT)
@@ -72,7 +72,7 @@ async def test_a_refused_queue_keeps_the_draft_and_shows_the_reason() -> None:
 
 @pytest.mark.asyncio
 async def test_the_turn_that_takes_the_input_up_clears_the_footer() -> None:
-    fake = FakeConversation()
+    fake = FakeFrontendPorts()
     app = new_app(fake)
     app, _commands = await type_and_queue(app, TEXT)
     input_id = app.composer.queued[0].id
@@ -87,7 +87,7 @@ async def test_the_turn_that_takes_the_input_up_clears_the_footer() -> None:
 @pytest.mark.asyncio
 async def test_a_withdrawn_input_leaves_the_footer_and_says_why() -> None:
     """A cancelled turn takes the queue with it, so the entry cannot keep waiting."""
-    fake = FakeConversation()
+    fake = FakeFrontendPorts()
     app = new_app(fake)
     app, _commands = await type_and_queue(app, TEXT)
     input_id = app.composer.queued[0].id
@@ -101,7 +101,7 @@ async def test_a_withdrawn_input_leaves_the_footer_and_says_why() -> None:
 @pytest.mark.asyncio
 async def test_a_finished_submission_does_not_start_the_queued_input_here() -> None:
     """Sequencing belongs to the application: the footer must not run turn two."""
-    fake = FakeConversation()
+    fake = FakeFrontendPorts()
     app = new_app(fake)
     app, _commands = await type_and_queue(app, TEXT)
 
@@ -116,7 +116,7 @@ async def test_a_finished_submission_does_not_start_the_queued_input_here() -> N
 
 @pytest.mark.asyncio
 async def test_a_command_is_not_queued() -> None:
-    fake = FakeConversation()
+    fake = FakeFrontendPorts()
     app = new_app(fake)
 
     app, _commands = await type_and_queue(app, "/diff")

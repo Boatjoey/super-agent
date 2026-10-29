@@ -10,7 +10,7 @@ Two front ends, one contract:
 * :mod:`super_agent.tui` renders it in a terminal;
 * :mod:`super_agent.web` carries it over HTTP and server-sent events.
 
-Implementation is supplied by :mod:`super_agent.application.conversation`;
+Implementation is supplied by :mod:`super_agent.application.agent_application`;
 :mod:`super_agent.application.presentation` converts runtime values for display.
 """
 
@@ -47,14 +47,15 @@ from super_agent.frontend.notifications import (
 from super_agent.frontend.ports import (
     CAPABILITIES as CAPABILITIES,
     AgentInteractionPort as AgentInteractionPort,
+    AgentManagementPort as AgentManagementPort,
     AgentPort as AgentPort,
     AgentSummary as AgentSummary,
     AttachmentsPort as AttachmentsPort,
     AttachmentSummary as AttachmentSummary,
     ConfigPort as ConfigPort,
     ConfigView as ConfigView,
-    Conversation as Conversation,
     ExtensionPort as ExtensionPort,
+    FrontendPorts as FrontendPorts,
     MCPPort as MCPPort,
     MCPServerSummary as MCPServerSummary,
     MemoryPort as MemoryPort,
@@ -108,6 +109,7 @@ __all__ = [
     "STEERING_HELD",
     "WORKFLOW_PROMPTS",
     "AgentInteractionPort",
+    "AgentManagementPort",
     "AgentPort",
     "AgentStatus",
     "AgentStatusChanged",
@@ -121,13 +123,13 @@ __all__ = [
     "ConfigPort",
     "ConfigView",
     "ContextUsage",
-    "Conversation",
     "ConversationError",
     "ConversationNotification",
     "ConversationView",
     "Decision",
     "ExtensionPort",
     "Failure",
+    "FrontendPorts",
     "MCPPort",
     "MCPServerSummary",
     "MemoryPort",

@@ -231,7 +231,7 @@ def _rule_violations(
 
     # R1: the interactive CLI is an inbound adapter; it talks to its port.
     if in_tui and _within(name, "super_agent.runtime"):
-        found.append(("R1", "interactive CLI must depend on its Conversation port, not runtime"))
+        found.append(("R1", "interactive CLI must depend on its frontend ports, not runtime"))
 
     # R2 and R3: adapters at every depth see runtime ports, never the machine or engine.
     if top in ("llm", "tools") and _within(name, "super_agent.runtime") and not _within(name, PROTOCOL_PACKAGE):
@@ -434,7 +434,7 @@ def test_rules_reject_synthetic_violations(tmp_path: Path) -> None:
 def test_rules_accept_the_corrective_alternative(tmp_path: Path) -> None:
     """Each rejected import has an accepted near-miss, so the rules are not blanket bans."""
     corrections = {
-        "R1": ("super_agent/tui/layout.py", "from super_agent.tui.conversation import ConversationPort"),
+        "R1": ("super_agent/tui/layout.py", "from super_agent.tui.conversation import FrontendPorts"),
         "R2": ("super_agent/llm/factory.py", "from super_agent.runtime.protocol.types import Message"),
         "R3": ("super_agent/store/store.py", "from super_agent.runtime.protocol.types import Message"),
         "R4": ("super_agent/runtime/api_engine.py", "from super_agent.runtime.engine import engine"),

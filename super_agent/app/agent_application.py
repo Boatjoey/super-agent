@@ -1,8 +1,8 @@
 """Compatibility exports for the shared application implementation."""
 
-from super_agent.application.conversation import (
-    ConversationAdapter as ConversationAdapter,
-    new_conversation_adapter as new_conversation_adapter,
+from super_agent.application.agent_application import (
+    AgentApplication as AgentApplication,
+    new_agent_application as new_agent_application,
 )
 from super_agent.application.presentation import (
     to_conversation_notification as to_conversation_notification,

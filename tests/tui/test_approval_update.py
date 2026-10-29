@@ -26,7 +26,7 @@ from super_agent.tui import (
     updateConversationNotification,
 )
 from super_agent.tui.approval import Request
-from tests.tui.fakes import ApprovalConversation, FakeConversation, new_app
+from tests.tui.fakes import ApprovalFrontendPorts, FakeFrontendPorts, new_app
 
 
 def approval_request(request_id: str = "approval-7") -> ToolApprovalRequested:
@@ -60,7 +60,7 @@ async def open_menu(app: App, request_id: str = "approval-7") -> App:
 
 @pytest.mark.asyncio
 async def test_the_menu_records_the_request_it_answers() -> None:
-    app = new_app(ApprovalConversation())
+    app = new_app(ApprovalFrontendPorts())
 
     app = await open_menu(app, "approval-7")
 
@@ -71,7 +71,7 @@ async def test_the_menu_records_the_request_it_answers() -> None:
 @pytest.mark.asyncio
 async def test_a_decision_reaches_the_port_with_the_request_id() -> None:
     """The id is the whole point: without it the answer belongs to no request."""
-    fake = ApprovalConversation()
+    fake = ApprovalFrontendPorts()
     fake.pending_request_id = "approval-7"
     app = new_app(fake)
     app.approvalRequestID = "approval-7"
@@ -85,7 +85,7 @@ async def test_a_decision_reaches_the_port_with_the_request_id() -> None:
 @pytest.mark.asyncio
 async def test_a_refused_decision_is_shown_instead_of_assumed() -> None:
     """The menu closes and the decision was never applied: say which, and why."""
-    fake = FakeConversation()
+    fake = FakeFrontendPorts()
     app = new_app(fake)
     app.approvalRequestID = "approval-gone"
     app.approval.open(menu_request())
@@ -99,7 +99,7 @@ async def test_a_refused_decision_is_shown_instead_of_assumed() -> None:
 
 @pytest.mark.asyncio
 async def test_a_cleared_approval_forgets_the_request() -> None:
-    app = await open_menu(new_app(ApprovalConversation()), "approval-7")
+    app = await open_menu(new_app(ApprovalFrontendPorts()), "approval-7")
 
     app, _commands = updateConversationNotification(app, ToolApprovalCleared(request_id="approval-7"))
 
@@ -110,7 +110,7 @@ async def test_a_cleared_approval_forgets_the_request() -> None:
 @pytest.mark.asyncio
 async def test_a_failure_is_shown_and_a_cancellation_is_not_shouted_about() -> None:
     """The code says whether the input was accepted; the message is display-ready."""
-    app = new_app(FakeConversation())
+    app = new_app(FakeFrontendPorts())
 
     app, _commands = updateConversationNotification(
         app, ConversationError(failure=Failure(message="provider refused", code="failed", operation="run_turn"))

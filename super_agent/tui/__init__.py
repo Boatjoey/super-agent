@@ -6,7 +6,7 @@ stands in for the package namespace so callers keep writing ``tui.new`` and
 
 Three things live here because they read the whole model rather than one feature:
 
-* :func:`new` wires the features to the conversation port, including the one
+* :func:`new` wires the features to the frontend ports, including the one
   translation the root owns — the command palette's entry type into the
   composer's.
 * :func:`welcomeString` composes the cross-feature welcome block: the model, the
@@ -74,12 +74,12 @@ from super_agent.tui.conversation import (
     Channel as Channel,
     ConfigView as ConfigView,
     ContextUsage as ContextUsage,
-    Conversation as Conversation,
     ConversationError as ConversationError,
     ConversationNotification as ConversationNotification,
     ConversationView as ConversationView,
     Decision as Decision,
     Failure as Failure,
+    FrontendPorts as FrontendPorts,
     Message as Message,
     MessageAppended as MessageAppended,
     MessageAttachment as MessageAttachment,
@@ -161,13 +161,13 @@ __all__ = [
     "Command",
     "ConfigView",
     "ContextUsage",
-    "Conversation",
     "ConversationError",
     "ConversationNotification",
     "ConversationNotificationMsg",
     "ConversationView",
     "Decision",
     "Failure",
+    "FrontendPorts",
     "KeyMsg",
     "Listener",
     "MCPServerSummary",
@@ -230,25 +230,25 @@ __all__ = [
 ]
 
 
-def new(conversation: Conversation, info: StartupInfo, *options: Option) -> App:
+def new(frontend_ports: FrontendPorts, info: StartupInfo, *options: Option) -> App:
     """Build the model and wire every feature to the port."""
     styles = default_styles()
     command_model = commands.new(
         commands.Config(cwd=info.cwd, instruction_paths=info.instruction_paths, no_tools=info.no_tools),
         commands.Ports(
-            sessions=conversation,
-            permissions=conversation,
-            mcp=conversation,
-            agents=conversation,
-            memory=conversation,
-            workspace=conversation,
-            extensions=conversation,
-            providers=conversation,
+            sessions=frontend_ports,
+            permissions=frontend_ports,
+            mcp=frontend_ports,
+            agents=frontend_ports,
+            memory=frontend_ports,
+            workspace=frontend_ports,
+            extensions=frontend_ports,
+            providers=frontend_ports,
         ),
     )
     app = App(
-        snapshot_port=conversation,
-        turn_port=conversation,
+        snapshot_port=frontend_ports,
+        turn_port=frontend_ports,
         commands=command_model,
         composer=composer.new(
             composerCommands(command_model.palette()),
@@ -267,7 +267,7 @@ def new(conversation: Conversation, info: StartupInfo, *options: Option) -> App:
                 accent=styles.accent,
             )
         ),
-        attachments=attachments.new(conversation, styles=attachments.Styles(accent=styles.accent)),
+        attachments=attachments.new(frontend_ports, styles=attachments.Styles(accent=styles.accent)),
         transcript=transcript.Model(welcome=""),
         styles=styles,
         info=info,

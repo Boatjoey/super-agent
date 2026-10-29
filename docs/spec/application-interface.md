@@ -95,13 +95,13 @@
 | 附件与工作区查询 | `AttachmentsPort`、`WorkspacePort` | 附件验证、待提交附件及只读仓库、诊断查询 |
 | 记忆与扩展管理 | `MemoryPort`、`ExtensionPort`、`MCPPort` | 记忆读写与开关见[跨会话记忆](#跨会话记忆)；扩展与 MCP 按各自契约处理 |
 
-端口集合声明于[前端契约](../../super_agent/frontend/ports.py)及各功能端口；`tui` 只按终端既有名称重新导出契约，不再拥有独立的应用端口。应用实现为 [ConversationAdapter](../../super_agent/application/conversation.py)，`TerminalConversation` 是其历史名称。
+完整端口集合命名为 `FrontendPorts`，声明于[前端契约](../../super_agent/frontend/ports.py)及各功能端口；`tui` 只按终端既有名称重新导出契约，不再拥有独立的应用端口。应用实现为 [AgentApplication](../../super_agent/application/agent_application.py)，`TerminalConversation` 是其历史名称。
 
 该集合按用例拆分，前端功能只使用自己需要的窄端口。不能因存在统一组合入口，就让每个界面模块直接调用整个运行时。
 
 ## 交互端口兼容性
 
-交互组合端口的声明与使用见[端口组合](packages.md#前端端口的组合与使用)。组合只收窄调用方依赖，保持本规范定义的已有操作、通知、审批关联及流结束协议，包括 `run_turn` 的执行和收尾、`steer`／`queue`／`cancel` 的受理规则，以及审批 `request_id` 的关联和重复提交保护。
+交互组合端口的声明与使用见[端口组合](packages.md#前端端口的组合与使用)。按交互与管理分组只调整能力组织，保持本规范定义的已有操作、通知、审批关联及流结束协议，包括 `run_turn` 的执行和收尾、`steer`／`queue`／`cancel` 的受理规则，以及审批 `request_id` 的关联和重复提交保护。
 
 Web 的现有 HTTP 路由、请求与响应 JSON、SSE 事件协议均保持兼容；[会话规范](session.md)的持久化格式和[运行时规范](runtime.md)的核心运行规则不变。两个前端仍可通过应用接口提交消息、接收通知、审批和取消；轮次执行及审批语义由应用侧统一实现。
 

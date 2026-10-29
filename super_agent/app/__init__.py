@@ -7,6 +7,16 @@ flows live in super_agent.application.
 
 from __future__ import annotations
 
+# --- shared agent application service ---------------------------
+#
+# Imported under both names: ``AgentApplication`` is what the entry points
+# build, and ``TerminalConversation`` is the spelling the terminal and its tests
+# have always used. They are one class.
+from super_agent.app.agent_application import (
+    AgentApplication as AgentApplication,
+    new_agent_application as new_agent_application,
+)
+
 # --- agents, workflows, and servers -----------------------------------------
 from super_agent.app.agents import (
     AgentController as AgentController,
@@ -30,16 +40,6 @@ from super_agent.app.config import (
     load_settings_file as load_settings_file,
     save_settings_file as save_settings_file,
     settings_path as settings_path,
-)
-
-# --- the front-end adapters' shared implementation ---------------------------
-#
-# Imported under both names: ``ConversationAdapter`` is what the entry points
-# build, and ``TerminalConversation`` is the spelling the terminal and its tests
-# have always used. They are one class.
-from super_agent.app.conversation_adapter import (
-    ConversationAdapter as ConversationAdapter,
-    new_conversation_adapter as new_conversation_adapter,
 )
 from super_agent.app.extensions import (
     Extensions as Extensions,
@@ -76,11 +76,11 @@ from super_agent.app.workflows import WorkflowController as WorkflowController
 
 __all__ = [
     "SYSTEM_PROMPT",
+    "AgentApplication",
     "AgentController",
     "AgentProfile",
     "AgentSettings",
     "Config",
-    "ConversationAdapter",
     "ExtensionSettings",
     "Extensions",
     "Flags",
@@ -103,7 +103,7 @@ __all__ = [
     "load_project_instructions",
     "load_settings",
     "load_settings_file",
-    "new_conversation_adapter",
+    "new_agent_application",
     "new_mcp_controller",
     "new_session",
     "new_session_with_extensions",

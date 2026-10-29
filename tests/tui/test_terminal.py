@@ -17,7 +17,7 @@ from rich.console import Console
 
 from super_agent.tui import APPROVE_ONCE, ROLE_ASSISTANT, Message, MessageAppended, StreamChunkReceived
 from super_agent.tui.terminal import TerminalApplication, _read_line  # pyright: ignore[reportPrivateUsage]
-from tests.tui.fakes import ApprovalConversation, FakeConversation, new_app
+from tests.tui.fakes import ApprovalFrontendPorts, FakeFrontendPorts, new_app
 
 
 def reader(values: Sequence[str]) -> Callable[[str], Awaitable[str]]:
@@ -72,7 +72,7 @@ def test_terminal_input_accepts_chinese_and_replaces_invalid_utf8(monkeypatch: p
 @pytest.mark.asyncio
 async def test_terminal_appends_reply_to_normal_output() -> None:
     output = io.StringIO()
-    fake = FakeConversation([MessageAppended(message=Message(role=ROLE_ASSISTANT, content="native reply"))])
+    fake = FakeFrontendPorts([MessageAppended(message=Message(role=ROLE_ASSISTANT, content="native reply"))])
     program = TerminalApplication(
         new_app(fake),
         reader=reader(("hello", "/quit")),
@@ -89,7 +89,7 @@ async def test_terminal_appends_reply_to_normal_output() -> None:
 @pytest.mark.asyncio
 async def test_terminal_streams_reply_once() -> None:
     output = io.StringIO()
-    fake = FakeConversation(
+    fake = FakeFrontendPorts(
         [
             StreamChunkReceived(message=Message(role=ROLE_ASSISTANT, content="你好")),
             StreamChunkReceived(message=Message(role=ROLE_ASSISTANT, content="你好，世界")),
@@ -111,7 +111,7 @@ async def test_terminal_streams_reply_once() -> None:
 @pytest.mark.asyncio
 async def test_terminal_reads_inline_approval() -> None:
     output = io.StringIO()
-    fake = ApprovalConversation()
+    fake = ApprovalFrontendPorts()
     program = TerminalApplication(
         new_app(fake),
         reader=reader(("run it", "1", "/quit")),
@@ -128,7 +128,7 @@ async def test_terminal_reads_inline_approval() -> None:
 async def test_terminal_writes_slash_command_output_to_scrollback() -> None:
     output = io.StringIO()
     program = TerminalApplication(
-        new_app(FakeConversation()),
+        new_app(FakeFrontendPorts()),
         reader=reader(("/diff", "/quit")),
         console=Console(file=output, force_terminal=False, width=80),
     )
@@ -144,7 +144,7 @@ async def test_terminal_writes_slash_command_output_to_scrollback() -> None:
 async def test_terminal_help_is_inline() -> None:
     output = io.StringIO()
     program = TerminalApplication(
-        new_app(FakeConversation()),
+        new_app(FakeFrontendPorts()),
         reader=reader(("/help", "/quit")),
         console=Console(file=output, force_terminal=False, width=80),
     )
@@ -167,7 +167,7 @@ async def test_terminal_restores_the_prompt_after_command_output(monkeypatch: py
     monkeypatch.setattr(sys, "stdout", stdout)
     keys = [*"/clear", "enter", *"/quit", "enter"]
     program = TerminalApplication(
-        new_app(FakeConversation()),
+        new_app(FakeFrontendPorts()),
         console=Console(file=stdout, force_terminal=False, width=80),
         key_reader=_ScriptedKeyReader(keys),
     )
@@ -198,7 +198,7 @@ async def test_resize_signal_relayouts_the_live_prompt(monkeypatch: pytest.Monke
 
     monkeypatch.setattr(shutil, "get_terminal_size", terminal_size)
     program = TerminalApplication(
-        new_app(FakeConversation()),
+        new_app(FakeFrontendPorts()),
         console=Console(file=stdout, force_terminal=False, width=80),
         key_reader=_ScriptedKeyReader([""] * 50 + ["ctrl+c"]),
     )

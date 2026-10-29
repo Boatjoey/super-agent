@@ -1,7 +1,7 @@
-"""The web transport against the real adapter.
+"""The web transport against the real application service.
 
 The web route tests use a fake port, which proves the transport; this one proves
-the other half — that :class:`ConversationAdapter` actually satisfies the
+the other half — that :class:`AgentApplication` actually satisfies the
 contract that transport calls, with a real engine underneath.
 """
 
@@ -15,27 +15,27 @@ from typing import Any
 import pytest
 
 from super_agent import frontend, runtime, workspace
-from super_agent.app import new_conversation_adapter
-from super_agent.app.conversation_adapter import to_frontend_message
+from super_agent.app import new_agent_application
+from super_agent.app.agent_application import to_frontend_message
 from super_agent.web import EventHub, Request, Router, TurnRunner
 from tests.fakes.execution import FakeToolRunner
 from tests.fakes.model import GateModel, ScriptedModel
 
 
-async def build_conversation() -> tuple[frontend.Conversation, str]:
+async def build_frontend_ports() -> tuple[frontend.FrontendPorts, str]:
     model = ScriptedModel([runtime.ModelResponse(content="hello from the engine")])
     engine = runtime.new_engine(model, None, None)
     await engine.ready()
     session = runtime.new_session(engine)
-    return new_conversation_adapter(session), str(session.metaID())
+    return new_agent_application(session), str(session.metaID())
 
 
 @pytest.mark.asyncio
-async def test_the_web_transport_drives_the_real_adapter_for_one_turn() -> None:
-    conversation, _session_id = await build_conversation()
+async def test_the_web_transport_drives_the_real_application_for_one_turn() -> None:
+    frontend_ports, _session_id = await build_frontend_ports()
     hub = EventHub()
-    runner = TurnRunner(conversation, hub)
-    router = Router(conversation, runner, hub)
+    runner = TurnRunner(frontend_ports, hub)
+    router = Router(frontend_ports, runner, hub)
     subscription = router.subscribe()
 
     response = await router.handle(
@@ -73,12 +73,12 @@ async def test_the_adapter_runs_a_queued_input_as_the_next_turn() -> None:
     )
     engine = runtime.new_engine(model, None, None)
     await engine.ready()
-    conversation = new_conversation_adapter(runtime.new_session(engine))
+    frontend_ports = new_agent_application(runtime.new_session(engine))
     notifications: frontend.Channel[frontend.ConversationNotification] = frontend.Channel()
 
-    turn = asyncio.create_task(conversation.run_turn("hi", notifications, frontend.Cancellation()))
+    turn = asyncio.create_task(frontend_ports.run_turn("hi", notifications, frontend.Cancellation()))
     await asyncio.wait_for(model.started.wait(), timeout=5)
-    receipt = await conversation.queue("then run the tests")
+    receipt = await frontend_ports.queue("then run the tests")
     assert receipt.status == frontend.QUEUED
     release.set()
     error = await asyncio.wait_for(turn, timeout=5)
@@ -98,9 +98,9 @@ async def test_the_adapter_runs_a_queued_input_as_the_next_turn() -> None:
 @pytest.mark.asyncio
 async def test_queueing_with_nothing_running_is_refused_as_a_value() -> None:
     """The common race — the turn ended first — is answered, not raised."""
-    conversation, _session_id = await build_conversation()
+    frontend_ports, _session_id = await build_frontend_ports()
 
-    receipt = await conversation.queue("too late")
+    receipt = await frontend_ports.queue("too late")
 
     assert receipt.status == frontend.REJECTED
     assert receipt.reason == "no turn is running"
@@ -117,7 +117,7 @@ async def next_approval(notifications: frontend.Channel[frontend.ConversationNot
             return notification
 
 
-async def build_approval_conversation() -> frontend.Conversation:
+async def build_approval_frontend_ports() -> frontend.FrontendPorts:
     """One risky tool call, so the turn has to stop and ask."""
     model = ScriptedModel(
         [
@@ -128,7 +128,7 @@ async def build_approval_conversation() -> frontend.Conversation:
     tools = FakeToolRunner(results={"bash": "ok"}, specs=(runtime.ToolSpec(name="bash", risky=True),))
     engine = runtime.new_engine(model, tools, None)
     await engine.ready()
-    return new_conversation_adapter(runtime.new_session(engine))
+    return new_agent_application(runtime.new_session(engine))
 
 
 @pytest.mark.asyncio
@@ -138,16 +138,16 @@ async def test_an_approval_request_is_named_and_is_the_one_in_the_snapshot() -> 
     An event carries it, and a snapshot taken while the turn waits carries the
     same one — otherwise a tab that reconnected mid-approval could not answer.
     """
-    conversation = await build_approval_conversation()
+    frontend_ports = await build_approval_frontend_ports()
     notifications: frontend.Channel[frontend.ConversationNotification] = frontend.Channel()
-    turn = asyncio.create_task(conversation.run_turn("run it", notifications, frontend.Cancellation()))
+    turn = asyncio.create_task(frontend_ports.run_turn("run it", notifications, frontend.Cancellation()))
 
     request = await next_approval(notifications)
 
     assert request.request_id.startswith("approval-")
-    assert conversation.snapshot().pending_approval_id == request.request_id
+    assert frontend_ports.snapshot().pending_approval_id == request.request_id
 
-    receipt = await conversation.approve(frontend.APPROVE_ONCE, request.request_id)
+    receipt = await frontend_ports.approve(frontend.APPROVE_ONCE, request.request_id)
     assert receipt.status == frontend.ACCEPTED
     assert await asyncio.wait_for(turn, timeout=5) is None
 
@@ -155,17 +155,17 @@ async def test_an_approval_request_is_named_and_is_the_one_in_the_snapshot() -> 
 @pytest.mark.asyncio
 async def test_an_answer_to_another_request_is_refused_and_leaves_the_turn_waiting() -> None:
     """A stale click must not run the tool: the refusal says which request it named."""
-    conversation = await build_approval_conversation()
+    frontend_ports = await build_approval_frontend_ports()
     notifications: frontend.Channel[frontend.ConversationNotification] = frontend.Channel()
-    turn = asyncio.create_task(conversation.run_turn("run it", notifications, frontend.Cancellation()))
+    turn = asyncio.create_task(frontend_ports.run_turn("run it", notifications, frontend.Cancellation()))
     request = await next_approval(notifications)
 
-    refused = await conversation.approve(frontend.APPROVE_ONCE, "approval-somewhere-else")
+    refused = await frontend_ports.approve(frontend.APPROVE_ONCE, "approval-somewhere-else")
     assert refused.status == frontend.REJECTED
     assert refused.reason == "that request is no longer pending"
-    assert conversation.snapshot().pending_approval_id == request.request_id
+    assert frontend_ports.snapshot().pending_approval_id == request.request_id
 
-    accepted = await conversation.approve(frontend.DENY, request.request_id)
+    accepted = await frontend_ports.approve(frontend.DENY, request.request_id)
     assert accepted.status == frontend.ACCEPTED
     assert await asyncio.wait_for(turn, timeout=5) is None
 
@@ -173,13 +173,13 @@ async def test_an_answer_to_another_request_is_refused_and_leaves_the_turn_waiti
 @pytest.mark.asyncio
 async def test_the_same_answer_twice_only_counts_once() -> None:
     """A second click on the same prompt is the ordinary way a decision repeats."""
-    conversation = await build_approval_conversation()
+    frontend_ports = await build_approval_frontend_ports()
     notifications: frontend.Channel[frontend.ConversationNotification] = frontend.Channel()
-    turn = asyncio.create_task(conversation.run_turn("run it", notifications, frontend.Cancellation()))
+    turn = asyncio.create_task(frontend_ports.run_turn("run it", notifications, frontend.Cancellation()))
     request = await next_approval(notifications)
 
-    first = await conversation.approve(frontend.DENY, request.request_id)
-    second = await conversation.approve(frontend.APPROVE_ONCE, request.request_id)
+    first = await frontend_ports.approve(frontend.DENY, request.request_id)
+    second = await frontend_ports.approve(frontend.APPROVE_ONCE, request.request_id)
 
     assert first.status == frontend.ACCEPTED
     assert second.status == frontend.REJECTED
@@ -188,9 +188,9 @@ async def test_the_same_answer_twice_only_counts_once() -> None:
 
 @pytest.mark.asyncio
 async def test_an_answer_with_no_turn_running_is_refused_by_value() -> None:
-    conversation, _session_id = await build_conversation()
+    frontend_ports, _session_id = await build_frontend_ports()
 
-    receipt = await conversation.approve(frontend.APPROVE_ONCE, "approval-1")
+    receipt = await frontend_ports.approve(frontend.APPROVE_ONCE, "approval-1")
 
     assert receipt.status == frontend.REJECTED
     assert receipt.reason == "no turn is running"
@@ -205,10 +205,10 @@ async def test_a_failed_turn_comes_back_as_a_value_a_front_end_can_show() -> Non
     model = ScriptedModel([])  # exhausting the script raises inside the turn
     engine = runtime.new_engine(model, None, None)
     await engine.ready()
-    conversation = new_conversation_adapter(runtime.new_session(engine))
+    frontend_ports = new_agent_application(runtime.new_session(engine))
     notifications: frontend.Channel[frontend.ConversationNotification] = frontend.Channel()
 
-    failure = await conversation.run_turn("hi", notifications, frontend.Cancellation())
+    failure = await frontend_ports.run_turn("hi", notifications, frontend.Cancellation())
 
     assert failure is not None
     assert failure.code == frontend.FAILED
@@ -218,9 +218,9 @@ async def test_a_failed_turn_comes_back_as_a_value_a_front_end_can_show() -> Non
 
 @pytest.mark.asyncio
 async def test_the_configuration_view_describes_this_application() -> None:
-    conversation, session_id = await build_conversation()
+    frontend_ports, session_id = await build_frontend_ports()
 
-    config = conversation.config_view()
+    config = frontend_ports.config_view()
 
     assert config.session_id == session_id
     assert "turn" in config.capabilities
@@ -256,7 +256,7 @@ async def test_the_configuration_view_reads_the_workspace_it_belongs_to(tmp_path
         ),
     )
 
-    config = new_conversation_adapter(session).config_view()
+    config = new_agent_application(session).config_view()
 
     assert Path(config.workspace) == tmp_path.resolve()
     assert tuple(Path(item) for item in config.roots) == (tmp_path.resolve(),)

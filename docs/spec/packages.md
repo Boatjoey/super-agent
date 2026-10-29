@@ -43,7 +43,7 @@
 
 | 方向 | 端口 | 契约位置 | 内侧 | 外侧 |
 |---|---|---|---|---|
-| 入站 | 快照、配置、轮次、会话、权限、Agent、记忆、服务商、MCP、附件、工作区查询、扩展 | `frontend/ports.py` | `application/conversation.py` | `tui`、`web` |
+| 入站 | 快照、配置、轮次、会话、权限、Agent、记忆、服务商、MCP、附件、工作区查询、扩展 | `frontend/ports.py` | `application/agent_application.py` | `tui`、`web` |
 | 出站 | 模型 | `runtime/protocol/types.py` | `runtime/execution` | `llm` |
 | 出站 | 工具 | `runtime/protocol/types.py` | `runtime/execution` | `tools` |
 | 出站 | 会话持久化 | `runtime/session/repository.py` | `runtime/session` | `store` |
@@ -76,11 +76,18 @@
 
 `frontend/ports.py` 保留细粒度端口，以 `typing.Protocol` 声明组合接口；公开端口由 `frontend/__init__.py` 重新导出，不另建平行契约。
 
-`AgentInteractionPort` 组合 `SnapshotPort` 与 `TurnPort`，不重新声明方法。`Conversation` 组合该接口与其余现有细粒度端口，继续提供完整前端契约；`SnapshotPort`、`TurnPort` 仍可独立使用，记忆、附件与工作区端口保持独立。
+前端能力按用户意图分为两组，组合接口只继承细粒度端口，不重新声明方法：
 
-`web/turns.py` 的 `TurnRunner` 仅依赖 `AgentInteractionPort`，参数及成员命名为 `interaction`、`_interaction`，表达其交互能力范围。完整前端组合入口仍可持有 `Conversation`。`tui/app.py` 的 `App` 分别持有 `snapshot_port` 与 `turn_port`，区别端口对象和读取的快照值；终端构造入口中的完整契约对象命名为 `conversation`，避免与核心 Session 混淆。
+| 组合端口 | 用户意图 | 细粒度端口 |
+|---|---|---|
+| `AgentInteractionPort` | 查看会话、发送消息与附件、干预执行、审批和取消 | `SnapshotPort`、`TurnPort`、`AttachmentsPort` |
+| `AgentManagementPort` | 管理会话、Agent 配置与工作环境 | `SessionPort`、`ConfigPort`、`PermissionPort`、`AgentPort`、`ProviderPort`、`MemoryPort`、`MCPPort`、`ExtensionPort`、`WorkspacePort` |
 
-`application/conversation.py` 的 `ConversationAdapter` 通过结构化类型实现这些端口，无须显式继承，也不为组合端口拆分实现。应用职责仍按[六边形边界的代码约束](#六边形边界的代码约束)维护；兼容要求见[交互端口兼容性](application-interface.md#交互端口兼容性)。
+`FrontendPorts` 仅组合 `AgentInteractionPort` 与 `AgentManagementPort`，作为完整前端入口。所有细粒度端口保持公开，功能模块仍可单独依赖实际需要的能力；两组接口不要求独立实现类。TUI 直接重新导出同一个 `FrontendPorts` 类型，不声明同义组合协议。
+
+`web/turns.py` 的 `TurnRunner` 仅依赖 `AgentInteractionPort`，参数及成员命名为 `interaction`、`_interaction`，表达其交互能力范围。完整前端组合入口仍可持有 `FrontendPorts`，参数及成员使用 `frontend_ports`／`_frontend_ports`。`tui/app.py` 的 `App` 分别持有 `snapshot_port` 与 `turn_port`，区别端口对象和读取的快照值；终端构造入口中的完整契约对象命名为 `frontend_ports`，避免与核心 Session 混淆。
+
+`application/agent_application.py` 的 `AgentApplication` 是应用服务，通过结构化类型实现这些端口；Web 与 TUI 是调用端口的入站适配器，该应用服务不属于前端适配器。无须显式继承，也不为组合端口拆分实现。应用职责仍按[六边形边界的代码约束](#六边形边界的代码约束)维护；构造入口命名为 `new_agent_application`。该实现持有的控制器命名为 `agent_controller`、`mcp_controller` 和 `memory_controller`；审批队列与待决标识分别命名为 `_approval_queue`、`_pending_approval_id`，局部名称区分运行时队列和前端通知通道。相关标识符使用 `snake_case`，测试中的完整契约替身使用 `FakeFrontendPorts`，审批等待替身名称明确表示其场景。历史终端入口仍只重新导出同一个实现。兼容要求见[交互端口兼容性](application-interface.md#交互端口兼容性)。
 
 ## 六边形边界的代码约束
 
@@ -98,7 +105,7 @@
 
 `application` 和整个 `runtime` 不得导入 `app`、`llm`、`tools`、`store`、`workspace`、`project`、`tui` 或 `web`。应用控制器不得直接导入文件系统、网络或进程模块；资源通过构造参数注入。适配器的运行时依赖限制递归覆盖子目录；终端所有目录均不得回调组合根。
 
-`application/conversation.py` 实现前端入站契约，拥有流生命周期、排队轮次推进及审批关联；`application/presentation.py` 只执行运行值到展示值的转换。`app/conversation_adapter.py` 只保留历史导入名，不承载用例实现。
+`application/agent_application.py` 实现前端入站契约，拥有流生命周期、排队轮次推进及审批关联；`application/presentation.py` 只执行运行值到展示值的转换。`app/agent_application.py` 只保留历史导入名，不承载用例实现。
 
 `application/agents.py`、`memory.py`、`mcp.py`、`workflows.py`、`delegation.py` 分别拥有档案切换、记忆开关、MCP 变更补偿、扩展工作流和委派用例。模型创建、指令读取、设置写入、MCP 连接与工具安装、子会话和工作树构造位于 `app` 的对应设施实现；这些设施通过 `application/ports.py` 契约注入。
 
@@ -112,7 +119,7 @@
 | `config.py`、`extensions.py`、`instructions/` | 启动配置与文件适配器 | 加载、解析、校验与保存本地配置、指令及扩展，把结果转换成内侧值 |
 | `agents.py`、`memory.py`、`mcp.py` | 出站设施及兼容构造入口 | 实现上表出站端口；历史控制器构造函数只注入设施，不复制用例 |
 | `subagents.py` | 委派设施与工具接入 | 将工具调用交给委派用例，构造子会话依赖、工作树与工具目录 |
-| `workflows.py`、`conversation_adapter.py`、`tui_adapter.py` | 兼容导出 | 重新导出同一个实现，不另设业务流程 |
+| `workflows.py`、`agent_application.py`、`tui_adapter.py` | 兼容导出 | 重新导出同一个实现，不另设业务流程 |
 | `system_prompt.py` | 启动上下文素材 | 内置提示词常量 |
 
 `application/agents.py` 的模型路由与工具筛选、`application/workflows.py` 的钩子包装，是内部业务协作对象，不能仅因实现了 `Model` 或 `ToolRunner` 就认定为外侧适配器；具体模型和工具 I/O 仍由注入的出站实现承担。`runtime/execution/policy.py` 中的 `os.path` 只用于路径字符串计算，不读取文件；它不代表核心可以访问工作环境。
@@ -174,7 +181,7 @@ Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归
 - `frontend/transport.py`：`Channel` 与 `Cancellation`；`frontend/approval.py`：审批决定值。
 - `frontend/failure.py`：可展示的失败值 `Failure` 与 `CANCELLED`/`FAILED` 分类，含从异常转换的入口。
 - `frontend/wire.py`：契约的 JSON 投影，供 Web 事件使用。
-- 前端入站契约的应用实现和展示转换见[六边形边界的代码约束](#六边形边界的代码约束)；`app/conversation_adapter.py` 和 `app/tui_adapter.py` 仅重新导出兼容名称。
+- 前端入站契约的应用实现和展示转换见[六边形边界的代码约束](#六边形边界的代码约束)；`app/agent_application.py` 和 `app/tui_adapter.py` 仅重新导出兼容名称。
 - `web/hub.py` 事件分发、`web/turns.py` 单轮槽位、`web/routes.py` 路由表、`web/server.py` HTTP 与事件流、`web/assets.py` 随包静态文件。
 - `web/static/index.html` 页面语义结构与可访问性容器、`web/static/style.css` 设计令牌、组件和响应式布局、`web/static/favicon.svg` 站点图标、`web/static/app.ts` 快照重建、事件消费、视图渲染与用户操作的 TypeScript 源码；`web/static/app.js` 是其随包发布的浏览器构建产物。静态前端不拥有业务规则，也不引入运行时或模型依赖。
 
