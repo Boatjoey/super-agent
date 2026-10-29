@@ -17,7 +17,7 @@ from super_agent.runtime.execution import PermissionMode, PermissionRules, Polic
 
 @runtime_checkable
 class PolicySetter(Protocol):
-    """A resolver that can be handed a new policy mid-session."""
+    """A runner that can be handed a new policy mid-session."""
 
     def set_policy(self, policy: Policy) -> None: ...
 
@@ -33,7 +33,7 @@ class PolicyStore(Protocol):
 class PolicySnapshot(Protocol):
     """A policy that can report the mode and rules it was built from.
 
-    The engine seeds its approval store from this when it constructs a resolver
+    The engine seeds its approval store from this when it constructs a runner
     with a caller-supplied policy, so the two copies of the policy cannot start
     out disagreeing.
     """

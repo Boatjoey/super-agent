@@ -8,18 +8,20 @@ from collections.abc import Callable
 from typing import Final, Protocol
 
 from super_agent.errors import Cancelled
+from super_agent.runtime.execution.approval_store import ApprovalStore, new_approval_key
+from super_agent.runtime.execution.policy import Policy, ToolDecision, ToolPolicyInput
 from super_agent.runtime.execution.scheduled_action_result import (
     ApprovalReceived,
     ModelReplied,
+    PermissionChecked,
     ScheduledActionResult,
     ToolFinished,
-    ToolQueueChecked,
 )
 from super_agent.runtime.machine.approval import ApprovalDecision
 from super_agent.runtime.machine.scheduled_action import (
     AwaitApproval,
     CallModel,
-    CheckToolQueue,
+    CheckToolPermission,
     RunTool,
     ScheduledAction,
 )
@@ -70,6 +72,8 @@ class ScheduledActionInput:
     messages: tuple[Message, ...] = ()
     tool_specs: tuple[ToolSpec, ...] = ()
     approval_waiter: ApprovalWaiter | None = None
+    policy: Policy | None = None
+    approvals: ApprovalStore | None = None
 
 
 class DefaultScheduledActionExecutor:
@@ -97,11 +101,26 @@ class DefaultScheduledActionExecutor:
             return await self._call_model(ctx, env, chunk_func)
         if isinstance(action, RunTool):
             return await self._run_tool(ctx, action)
-        if isinstance(action, CheckToolQueue):
-            return ToolQueueChecked()
+        if isinstance(action, CheckToolPermission):
+            return self._check_tool_permission(action, env)
         if isinstance(action, AwaitApproval):
             return await self._await_approval(ctx, action, env)
         raise ValueError(f"unknown action {type(action).__name__}")
+
+    def _check_tool_permission(self, action: CheckToolPermission, env: ScheduledActionInput) -> PermissionChecked:
+        if env.policy is None or env.approvals is None:
+            raise ValueError("permission policy and approval store are not configured")
+        call = action.call
+        if env.approvals.is_always_allowed(new_approval_key(call)):
+            return PermissionChecked(call=call, decision=ToolDecision.DECISION_RUN_DIRECTLY)
+        policy_input = ToolPolicyInput(tool_specs=env.tool_specs)
+        decision = env.policy.classify_tool_call(call, policy_input)
+        request = (
+            PermissionRequest()
+            if decision == ToolDecision.DECISION_RUN_DIRECTLY
+            else env.policy.permission_request(call, policy_input)
+        )
+        return PermissionChecked(call=call, decision=decision, request=request)
 
     async def _call_model(
         self, ctx: RunContext, env: ScheduledActionInput, chunk_func: Callable[[StreamChunk], None]

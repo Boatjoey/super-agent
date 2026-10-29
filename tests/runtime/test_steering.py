@@ -135,13 +135,6 @@ def test_a_tool_batch_accepts_the_waiting_input_before_the_next_request() -> Non
     data = apply(data, machine.ToolCallReadyToRun(call=call))
     data = apply(data, machine.ToolResultReceived(call=call, result="ok"))
 
-    # The batch belongs to step one, so the input stays out of the conversation
-    # until the batch is settled.
-    assert data.step == machine.Step(index=1)
-    assert STEERING_TEXT not in contents(data)
-
-    data = apply(data, machine.ToolBatchFinished())
-
     assert data.state == machine.STATE_WAITING_LLM
     assert data.step == machine.Step(index=2)
     assert data.messages[-1].role == machine.ROLE_USER

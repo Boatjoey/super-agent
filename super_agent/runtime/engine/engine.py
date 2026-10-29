@@ -122,8 +122,8 @@ def new_engine_with_executor(executor: ScheduledActionExecutor, initial: list[Me
     policy = new_default_policy()
     approvals.set_permission_policy(policy.mode(), policy.rules())
     return new_engine_with_components(
-        DefaultScheduledActionRunner(executor),
-        DefaultActionResultResolver(policy, approvals),
+        DefaultScheduledActionRunner(executor, policy, approvals),
+        DefaultActionResultResolver(),
         DefaultRuntimeDataChangeApplier(),
         DefaultRunController(),
         approvals,
@@ -144,8 +144,8 @@ def new_engine_with_executor_and_policy(
     if isinstance(policy, PolicySnapshot):
         approvals.set_permission_policy(policy.mode(), policy.rules())
     return new_engine_with_components(
-        DefaultScheduledActionRunner(executor),
-        DefaultActionResultResolver(policy, approvals),
+        DefaultScheduledActionRunner(executor, policy, approvals),
+        DefaultActionResultResolver(),
         DefaultRuntimeDataChangeApplier(),
         DefaultRunController(),
         approvals,

@@ -31,7 +31,7 @@ from super_agent.runtime.execution.aliases import (
     AssistantMessageReceived as AssistantMessageReceived,
     AwaitApproval as AwaitApproval,
     CallModel as CallModel,
-    CheckToolQueue as CheckToolQueue,
+    CheckToolPermission as CheckToolPermission,
     CommandClass as CommandClass,
     Event as Event,
     Message as Message,
@@ -41,7 +41,6 @@ from super_agent.runtime.execution.aliases import (
     RunTool as RunTool,
     ScheduledAction as ScheduledAction,
     StreamChunk as StreamChunk,
-    ToolBatchFinished as ToolBatchFinished,
     ToolBatchReceived as ToolBatchReceived,
     ToolCall as ToolCall,
     ToolCallBatch as ToolCallBatch,
@@ -106,9 +105,9 @@ from super_agent.runtime.execution.scheduled_action_result import (
     ALL_SCHEDULED_ACTION_RESULTS as ALL_SCHEDULED_ACTION_RESULTS,
     ApprovalReceived as ApprovalReceived,
     ModelReplied as ModelReplied,
+    PermissionChecked as PermissionChecked,
     ScheduledActionResult as ScheduledActionResult,
     ToolFinished as ToolFinished,
-    ToolQueueChecked as ToolQueueChecked,
 )
 from super_agent.runtime.execution.scheduled_action_runner import (
     ActionCompletion as ActionCompletion,

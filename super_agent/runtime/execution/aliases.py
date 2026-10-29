@@ -19,7 +19,6 @@ from super_agent.runtime.machine.event import (
     ApprovalGranted as ApprovalGranted,
     AssistantMessageReceived as AssistantMessageReceived,
     Event as Event,
-    ToolBatchFinished as ToolBatchFinished,
     ToolBatchReceived as ToolBatchReceived,
     ToolCallDenied as ToolCallDenied,
     ToolCallNeedsApproval as ToolCallNeedsApproval,
@@ -32,7 +31,7 @@ from super_agent.runtime.machine.runtime_data_change import (
 from super_agent.runtime.machine.scheduled_action import (
     AwaitApproval as AwaitApproval,
     CallModel as CallModel,
-    CheckToolQueue as CheckToolQueue,
+    CheckToolPermission as CheckToolPermission,
     RunTool as RunTool,
     ScheduledAction as ScheduledAction,
 )
@@ -73,7 +72,7 @@ __all__ = [
     "AssistantMessageReceived",
     "AwaitApproval",
     "CallModel",
-    "CheckToolQueue",
+    "CheckToolPermission",
     "CommandClass",
     "Event",
     "Message",
@@ -83,7 +82,6 @@ __all__ = [
     "RunTool",
     "ScheduledAction",
     "StreamChunk",
-    "ToolBatchFinished",
     "ToolBatchReceived",
     "ToolCall",
     "ToolCallBatch",

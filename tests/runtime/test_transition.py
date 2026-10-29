@@ -40,8 +40,6 @@ def transition_snapshot(
         data.steering = tuple(machine.SteeringInput(content=f"steer-{index}") for index in range(pending_steering))
     if state == machine.STATE_ADVANCING_QUEUE:
         data.tool_batch = machine.ToolCallBatch(calls=[call])
-        if isinstance(event, machine.ToolBatchFinished):
-            data.tool_batch.index = 1
     elif state == machine.STATE_WAITING_APPROVAL:
         data.pending_tool = call
         data.pending_permission = machine.PermissionRequest()
@@ -206,27 +204,11 @@ def _cases() -> list[TransitionCase]:
             runtime_data_change_count=2,  # AppendAssistantMessage + SetToolCallBatch
             scheduled_action_count=1,
             runtime_data_change_types=(machine.AppendAssistantMessage, machine.SetToolCallBatch),
-            scheduled_action_types=(machine.CheckToolQueue,),
+            scheduled_action_types=(machine.CheckToolPermission,),
         ),
         TransitionCase(
             state=machine.STATE_IDLE,
             event=machine.ToolBatchReceived(calls=sample_tool_calls()),
-            want_state=machine.STATE_IDLE,
-            want_error=True,
-        ),
-        # --- ToolBatchFinished ---
-        TransitionCase(
-            state=machine.STATE_ADVANCING_QUEUE,
-            event=machine.ToolBatchFinished(),
-            want_state=machine.STATE_WAITING_LLM,
-            runtime_data_change_count=3,
-            scheduled_action_count=1,
-            runtime_data_change_types=(machine.ClearToolCallBatch, machine.AdvanceStep, machine.AcceptSteering),
-            scheduled_action_types=(machine.CallModel,),
-        ),
-        TransitionCase(
-            state=machine.STATE_IDLE,
-            event=machine.ToolBatchFinished(),
             want_state=machine.STATE_IDLE,
             want_error=True,
         ),
@@ -266,11 +248,17 @@ def _cases() -> list[TransitionCase]:
         TransitionCase(
             state=machine.STATE_WAITING_APPROVAL,
             event=machine.ApprovalDenied(call=call),
-            want_state=machine.STATE_ADVANCING_QUEUE,
-            runtime_data_change_count=2,  # ClearPendingTool + AppendToolResult
+            want_state=machine.STATE_WAITING_LLM,
+            runtime_data_change_count=5,  # ClearPendingTool + AppendToolResult
             scheduled_action_count=1,
-            runtime_data_change_types=(machine.ClearPendingTool, machine.AppendToolResult),
-            scheduled_action_types=(machine.CheckToolQueue,),
+            runtime_data_change_types=(
+                machine.ClearPendingTool,
+                machine.AppendToolResult,
+                machine.ClearToolCallBatch,
+                machine.AdvanceStep,
+                machine.AcceptSteering,
+            ),
+            scheduled_action_types=(machine.CallModel,),
         ),
         TransitionCase(
             state=machine.STATE_IDLE,
@@ -282,11 +270,17 @@ def _cases() -> list[TransitionCase]:
         TransitionCase(
             state=machine.STATE_RUNNING_TOOL,
             event=machine.ToolResultReceived(call=call, result="ok"),
-            want_state=machine.STATE_ADVANCING_QUEUE,
-            runtime_data_change_count=2,
+            want_state=machine.STATE_WAITING_LLM,
+            runtime_data_change_count=5,
             scheduled_action_count=1,
-            runtime_data_change_types=(machine.AppendToolResult, machine.ClearCurrentTool),
-            scheduled_action_types=(machine.CheckToolQueue,),
+            runtime_data_change_types=(
+                machine.AppendToolResult,
+                machine.ClearCurrentTool,
+                machine.ClearToolCallBatch,
+                machine.AdvanceStep,
+                machine.AcceptSteering,
+            ),
+            scheduled_action_types=(machine.CallModel,),
         ),
         TransitionCase(
             state=machine.STATE_IDLE,
@@ -330,11 +324,17 @@ def _cases() -> list[TransitionCase]:
         TransitionCase(
             state=machine.STATE_ADVANCING_QUEUE,
             event=machine.ToolCallDenied(call=call, reason="plan mode"),
-            want_state=machine.STATE_ADVANCING_QUEUE,
-            runtime_data_change_count=2,
+            want_state=machine.STATE_WAITING_LLM,
+            runtime_data_change_count=5,
             scheduled_action_count=1,
-            runtime_data_change_types=(machine.AdvanceToolCallBatch, machine.AppendToolResult),
-            scheduled_action_types=(machine.CheckToolQueue,),
+            runtime_data_change_types=(
+                machine.AdvanceToolCallBatch,
+                machine.AppendToolResult,
+                machine.ClearToolCallBatch,
+                machine.AdvanceStep,
+                machine.AcceptSteering,
+            ),
+            scheduled_action_types=(machine.CallModel,),
         ),
         TransitionCase(
             state=machine.STATE_IDLE,
@@ -510,11 +510,11 @@ def test_transition_table(case: TransitionCase) -> None:
 
 def test_transition_rejects_an_event_with_no_registered_rule() -> None:
     """Every state rejects an event it has no rule for, with the right error."""
-    snapshot = transition_snapshot(machine.STATE_INITIALIZING, machine.EngineReady())
+    snapshot = transition_snapshot(machine.STATE_IDLE, machine.EngineReady())
     with pytest.raises(machine.UnexpectedEventError) as raised:
-        machine.transition(snapshot, machine.ToolBatchFinished())
-    assert raised.value.state == machine.STATE_INITIALIZING
-    assert str(raised.value) == "state Initializing does not accept event ToolBatchFinished"
+        machine.transition(snapshot, machine.EngineReady())
+    assert raised.value.state == machine.STATE_IDLE
+    assert str(raised.value) == "state Idle does not accept event EngineReady"
 
 
 def test_registry_refuses_a_duplicate_key() -> None:

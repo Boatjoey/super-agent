@@ -22,13 +22,12 @@ from super_agent.runtime.execution import (
     DefaultActionResultResolver,
     MemoryApprovalStore,
     ModelReplied,
+    PermissionChecked,
     PermissionRules,
     Policy,
     ScheduledActionResult,
     ToolDecision,
     ToolPolicyInput,
-    ToolQueueChecked,
-    new_approval_key,
     new_default_policy,
     new_policy,
 )
@@ -46,8 +45,8 @@ def classify(policy: Policy, call: machine.ToolCall, specs: tuple[ToolSpec, ...]
     return policy.classify_tool_call(call, ToolPolicyInput(tool_specs=specs))
 
 
-def resolver(policy: Policy | None = None, store: MemoryApprovalStore | None = None) -> DefaultActionResultResolver:
-    return DefaultActionResultResolver(policy or new_default_policy(), store or MemoryApprovalStore())
+def resolver() -> DefaultActionResultResolver:
+    return DefaultActionResultResolver()
 
 
 def test_default_action_result_resolver_turns_model_tool_calls_into_batch_event() -> None:
@@ -62,29 +61,25 @@ def test_default_action_result_resolver_turns_model_tool_calls_into_batch_event(
     assert isinstance(event, machine.ToolBatchReceived)
 
 
-def test_default_action_result_resolver_turns_risky_queued_tool_into_approval_event() -> None:
-    event = resolver().resolve(
-        ToolQueueChecked(),
-        ActionResultInput(
-            tool_batch=machine.ToolCallBatch(calls=[bash("touch build.txt")]),
-            tool_specs=BASH_SPEC,
-        ),
-    )
-    assert isinstance(event, machine.ToolCallNeedsApproval)
-
-
-def test_default_action_result_resolver_turns_policy_denial_into_tool_event() -> None:
-    subject = resolver(new_policy(PERMISSION_MODE_PLAN, PermissionRules()))
-    call = machine.ToolCall(id="call-1", name="write_file", input='{"path":"main.py","content":"x"}')
-
-    event = subject.resolve(
-        ToolQueueChecked(),
-        ActionResultInput(tool_batch=machine.ToolCallBatch(calls=[call]), tool_specs=WRITE_SPEC),
-    )
-
-    assert isinstance(event, machine.ToolCallDenied)
-    assert event.call.id == call.id
-    assert event.reason != ""
+@pytest.mark.parametrize(
+    ("decision", "expected"),
+    [
+        (ToolDecision.DECISION_NEEDS_APPROVAL, machine.ToolCallNeedsApproval),
+        (ToolDecision.DECISION_RUN_DIRECTLY, machine.ToolCallReadyToRun),
+        (ToolDecision.DECISION_DENIED, machine.ToolCallDenied),
+    ],
+)
+def test_permission_result_maps_without_queue_or_policy(decision: ToolDecision, expected: type[machine.Event]) -> None:
+    call = bash("touch build.txt")
+    request = machine.PermissionRequest(reason="policy reason")
+    event = resolver().resolve(PermissionChecked(call=call, decision=decision, request=request), ActionResultInput())
+    assert type(event) is expected
+    assert isinstance(event, (machine.ToolCallNeedsApproval, machine.ToolCallReadyToRun, machine.ToolCallDenied))
+    assert event.call == call
+    if isinstance(event, machine.ToolCallDenied):
+        assert event.reason == request.reason
+    if isinstance(event, machine.ToolCallNeedsApproval):
+        assert event.request == request
 
 
 @pytest.mark.parametrize(
@@ -114,50 +109,12 @@ def test_default_action_result_resolver_rejects_tool_calls_when_no_tools_are_con
         )
 
 
-def test_default_action_result_resolver_uses_tool_batch_input() -> None:
-    event = resolver().resolve(
-        ToolQueueChecked(),
-        ActionResultInput(
-            tool_batch=machine.ToolCallBatch(
-                id="batch-1", calls=[machine.ToolCall(id="call-1", name="bash", input="pwd")]
-            ),
-            tool_specs=(ToolSpec(name="bash"),),
-        ),
-    )
-    assert isinstance(event, machine.ToolCallReadyToRun)
-    assert event.call.id == "call-1"
-
-
-def test_always_allowed_call_skips_classification() -> None:
-    """A remembered decision outranks the policy; that is the point of "always"."""
-    store = MemoryApprovalStore()
-    store.allow_always(new_approval_key(bash("rm -rf build")))
-    subject = resolver(new_policy(PERMISSION_MODE_PLAN, PermissionRules()), store)
-
-    event = subject.resolve(
-        ToolQueueChecked(),
-        ActionResultInput(tool_batch=machine.ToolCallBatch(calls=[bash("rm -rf build")]), tool_specs=BASH_SPEC),
-    )
-
-    assert isinstance(event, machine.ToolCallReadyToRun)
-
-
-def test_an_empty_or_drained_batch_finishes() -> None:
-    subject = resolver()
-    assert isinstance(subject.resolve(ToolQueueChecked(), ActionResultInput()), machine.ToolBatchFinished)
-    assert isinstance(
-        subject.resolve(
-            ToolQueueChecked(),
-            ActionResultInput(tool_batch=machine.ToolCallBatch(calls=[bash("pwd")], index=1), tool_specs=BASH_SPEC),
-        ),
-        machine.ToolBatchFinished,
-    )
-
-
 def test_unknown_result_and_decision_are_rejected() -> None:
     subject = resolver()
     with pytest.raises(ValueError, match="unknown action result type"):
         subject.resolve(cast("ScheduledActionResult", _RogueResult()), ActionResultInput())
+    with pytest.raises(ValueError, match="unknown permission decision"):
+        subject.resolve(PermissionChecked(decision=cast("ToolDecision", 999)), ActionResultInput())
     with pytest.raises(ValueError, match="unknown approval decision"):
         subject.resolve(
             ApprovalReceived(call=machine.ToolCall(id="c"), decision="maybe"),  # type: ignore[arg-type]
@@ -168,26 +125,6 @@ def test_unknown_result_and_decision_are_rejected() -> None:
 class _RogueResult:
     """A result the resolver does not know; the sealed set makes this impossible
     for real implementations, and the guard is what keeps that true."""
-
-
-def test_resolver_policy_can_be_swapped() -> None:
-    """Changing the permission mode mid-session must take effect immediately."""
-    store = MemoryApprovalStore()
-    subject = resolver(new_policy(PERMISSION_MODE_PLAN, PermissionRules()), store)
-    call = bash("pwd")
-
-    denied = subject.resolve(
-        ToolQueueChecked(),
-        ActionResultInput(tool_batch=machine.ToolCallBatch(calls=[call]), tool_specs=BASH_SPEC),
-    )
-    assert isinstance(denied, machine.ToolCallDenied)
-
-    subject.set_policy(new_policy(PERMISSION_MODE_BYPASS, PermissionRules()))
-    allowed = subject.resolve(
-        ToolQueueChecked(),
-        ActionResultInput(tool_batch=machine.ToolCallBatch(calls=[call]), tool_specs=BASH_SPEC),
-    )
-    assert isinstance(allowed, machine.ToolCallReadyToRun)
 
 
 # --- Policy precedence -------------------------------------------------------

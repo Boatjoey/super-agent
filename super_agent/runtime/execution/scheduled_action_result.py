@@ -5,7 +5,9 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, ClassVar
 
+from super_agent.runtime.execution.policy import ToolDecision
 from super_agent.runtime.machine.approval import ApprovalDecision
+from super_agent.runtime.permission.types import Request as PermissionRequest
 from super_agent.runtime.protocol.types import ModelResponse, ToolCall
 
 
@@ -38,8 +40,12 @@ class ToolFinished(ScheduledActionResult):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class ToolQueueChecked(ScheduledActionResult):
-    kind: ClassVar[str] = "ToolQueueChecked"
+class PermissionChecked(ScheduledActionResult):
+    kind: ClassVar[str] = "PermissionChecked"
+
+    call: ToolCall = dataclasses.field(default_factory=ToolCall)
+    decision: ToolDecision = ToolDecision.DECISION_NEEDS_APPROVAL
+    request: PermissionRequest = dataclasses.field(default_factory=PermissionRequest)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -54,6 +60,6 @@ class ApprovalReceived(ScheduledActionResult):
 ALL_SCHEDULED_ACTION_RESULTS: tuple[ScheduledActionResult, ...] = (
     ModelReplied(),
     ToolFinished(),
-    ToolQueueChecked(),
+    PermissionChecked(),
     ApprovalReceived(),
 )

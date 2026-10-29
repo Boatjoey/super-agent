@@ -55,7 +55,7 @@ class DocumentedEdge:
 
     @property
     def key(self) -> str:
-        return f"{self.state} + {self.event}"
+        return f"{self.state} + {self.event} -> {self.next}"
 
 
 def repository_root() -> Path:
@@ -170,11 +170,11 @@ def well_formed_event(prototype: machine.Event) -> machine.Event:
         return machine.ApprovalDenied(call=call)
     if isinstance(prototype, machine.ErrorOccurred):
         return machine.ErrorOccurred(err=RuntimeError("boom"))
-    # EngineReady, ToolBatchFinished, CancelRequested, ResetRequested carry no fields.
+    # EngineReady, CancelRequested, ResetRequested carry no fields.
     return prototype
 
 
-def state_snapshot(state_name: str, event: machine.Event) -> machine.MachineSnapshot:
+def state_snapshot(state_name: str, event: machine.Event, *, has_remaining: bool = True) -> machine.MachineSnapshot:
     """Build runtime data satisfying the invariants of ``state_name`` and the
     preconditions of ``event``, so calling ``transition`` measures the edge
     registry rather than guard setup.
@@ -193,9 +193,8 @@ def state_snapshot(state_name: str, event: machine.Event) -> machine.MachineSnap
         data.step = machine.Step(index=1)
     if data.state == machine.STATE_ADVANCING_QUEUE:
         data.tool_batch = machine.ToolCallBatch(calls=[call])
-        if isinstance(event, machine.ToolBatchFinished):
-            # ToolBatchFinished requires an exhausted queue.
-            data.tool_batch.index = 1
+        if has_remaining:
+            data.tool_batch.calls.append(machine.ToolCall(id="call-2", name="next"))
     elif data.state == machine.STATE_WAITING_APPROVAL:
         data.pending_tool = call
         data.pending_permission = machine.PermissionRequest()
@@ -203,6 +202,10 @@ def state_snapshot(state_name: str, event: machine.Event) -> machine.MachineSnap
     elif data.state == machine.STATE_RUNNING_TOOL:
         data.current_tool = call
         data.tool_batch = machine.ToolCallBatch(calls=[call], index=1)
+
+    if has_remaining and data.state in (machine.STATE_WAITING_APPROVAL, machine.STATE_RUNNING_TOOL):
+        assert data.tool_batch is not None
+        data.tool_batch.calls.append(machine.ToolCall(id="call-2", name="next"))
 
     try:
         return machine.snapshot_from(data)
@@ -216,11 +219,14 @@ def observed_edges() -> dict[str, str]:
     for state_name in machine_states():
         for prototype in machine.ALL_EVENTS:
             event = well_formed_event(prototype)
-            try:
-                result = machine.transition(state_snapshot(state_name, event), event)
-            except (machine.UnexpectedEventError, machine.ProtocolViolationError):
-                continue
-            observed[DocumentedEdge(state=state_name, event=type(event).__name__, next="").key] = str(result.next_state)
+            for has_remaining in (False, True):
+                try:
+                    result = machine.transition(state_snapshot(state_name, event, has_remaining=has_remaining), event)
+                except (machine.UnexpectedEventError, machine.ProtocolViolationError):
+                    continue
+                observed[
+                    DocumentedEdge(state=state_name, event=type(event).__name__, next=str(result.next_state)).key
+                ] = str(result.next_state)
     return observed
 
 
@@ -231,7 +237,7 @@ def documented_edges(rows: list[DocumentedEdge]) -> tuple[dict[str, str], dict[s
     for row in rows:
         if row.state == ANY_STATE:
             for state_name in machine_states():
-                expanded[DocumentedEdge(state=state_name, event=row.event, next="").key] = row.next
+                expanded[DocumentedEdge(state=state_name, event=row.event, next=row.next).key] = row.next
             continue
         expanded[row.key] = row.next
         state_specific[row.key] = True
@@ -243,9 +249,9 @@ def describe(edges: dict[str, str]) -> str:
 
 
 def test_event_and_state_counts_are_pinned() -> None:
-    """The table documents 6 states x 17 events; a silent change would shrink the sweep."""
+    """The table documents 6 states x 16 events; a silent change would shrink the sweep."""
     assert len(machine_states()) == 6
-    assert len(machine.ALL_EVENTS) == 17, [type(event).__name__ for event in machine.ALL_EVENTS]
+    assert len(machine.ALL_EVENTS) == 16, [type(event).__name__ for event in machine.ALL_EVENTS]
 
 
 def test_documented_transition_table_matches_machine() -> None:

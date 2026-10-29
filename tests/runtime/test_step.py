@@ -59,10 +59,8 @@ def test_a_tool_batch_ends_one_step_and_opens_the_next() -> None:
     # The batch belongs to the step that requested it, so the step is unchanged
     # while the calls are approved and executed.
     data = apply(data, machine.ToolCallReadyToRun(call=call))
-    data = apply(data, machine.ToolResultReceived(call=call, result="ok"))
     assert data.step == machine.Step(index=1)
-
-    data = apply(data, machine.ToolBatchFinished())
+    data = apply(data, machine.ToolResultReceived(call=call, result="ok"))
 
     assert data.state == machine.STATE_WAITING_LLM
     assert data.step == machine.Step(index=2)
@@ -73,13 +71,11 @@ def test_two_tool_round_trips_number_the_steps_in_order() -> None:
     data = apply(idle_turn_started(), machine.ToolBatchReceived(calls=(call,)))
     data = apply(data, machine.ToolCallReadyToRun(call=call))
     data = apply(data, machine.ToolResultReceived(call=call, result="ok"))
-    data = apply(data, machine.ToolBatchFinished())
 
     data = apply(data, machine.ToolBatchReceived(calls=(call,)))
     assert data.step == machine.Step(index=2)
     data = apply(data, machine.ToolCallReadyToRun(call=call))
     data = apply(data, machine.ToolResultReceived(call=call, result="ok"))
-    data = apply(data, machine.ToolBatchFinished())
 
     assert data.step == machine.Step(index=3)
 

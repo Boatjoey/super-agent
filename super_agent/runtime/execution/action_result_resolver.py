@@ -1,23 +1,17 @@
-"""Map a scheduled action's result onto the event the machine should receive.
-
-This is the only place where "what happened" becomes "what the state machine
-learns", which is why every decision about a tool call — deny, run, or ask —
-lands here as exactly one of three events.
-"""
+"""Map completed action facts to machine events without consulting machine state."""
 
 from __future__ import annotations
 
 import dataclasses
 from typing import Protocol
 
-from super_agent.runtime.execution.approval_store import ApprovalStore, new_approval_key
-from super_agent.runtime.execution.policy import Policy, ToolDecision, ToolPolicyInput
+from super_agent.runtime.execution.policy import ToolDecision
 from super_agent.runtime.execution.scheduled_action_result import (
     ApprovalReceived,
     ModelReplied,
+    PermissionChecked,
     ScheduledActionResult,
     ToolFinished,
-    ToolQueueChecked,
 )
 from super_agent.runtime.machine.approval import (
     APPROVE_ALWAYS,
@@ -31,22 +25,19 @@ from super_agent.runtime.machine.event import (
     ApprovalGranted,
     AssistantMessageReceived,
     Event,
-    ToolBatchFinished,
     ToolBatchReceived,
     ToolCallDenied,
     ToolCallNeedsApproval,
     ToolCallReadyToRun,
     ToolResultReceived,
 )
-from super_agent.runtime.machine.tool_batch import ToolCallBatch
-from super_agent.runtime.protocol.types import ToolCall, ToolSpec
+from super_agent.runtime.protocol.types import ToolSpec
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ActionResultInput:
-    """Machine state the resolver needs to interpret a result."""
+    """Model capabilities needed to validate a model reply."""
 
-    tool_batch: ToolCallBatch | None = None
     tool_specs: tuple[ToolSpec, ...] = ()
 
 
@@ -59,47 +50,24 @@ class ActionResultResolver(Protocol):
 class DefaultActionResultResolver:
     """The only resolver; the port exists so tests can substitute one."""
 
-    __slots__ = ("_approvals", "_policy")
-
-    def __init__(self, policy: Policy, approvals: ApprovalStore) -> None:
-        self._policy = policy
-        self._approvals = approvals
-
-    def set_policy(self, policy: Policy) -> None:
-        """Swap the policy when the permission mode changes mid-session."""
-        self._policy = policy
+    __slots__ = ()
 
     def resolve(self, result: ScheduledActionResult, input: ActionResultInput) -> Event:
         if isinstance(result, ModelReplied):
             return self._resolve_model_reply(result, input)
         if isinstance(result, ToolFinished):
             return ToolResultReceived(call=result.call, result=result.result)
-        if isinstance(result, ToolQueueChecked):
-            if input.tool_batch is None or input.tool_batch.index >= len(input.tool_batch.calls):
-                return ToolBatchFinished()
-            return self.resolveToolCall(input.tool_batch.calls[input.tool_batch.index], input.tool_specs)
+        if isinstance(result, PermissionChecked):
+            if result.decision == ToolDecision.DECISION_DENIED:
+                return ToolCallDenied(call=result.call, reason=result.request.reason)
+            if result.decision == ToolDecision.DECISION_RUN_DIRECTLY:
+                return ToolCallReadyToRun(call=result.call)
+            if result.decision == ToolDecision.DECISION_NEEDS_APPROVAL:
+                return ToolCallNeedsApproval(call=result.call, request=result.request)
+            raise ValueError("unknown permission decision")
         if isinstance(result, ApprovalReceived):
             return self._resolve_approval(result)
         raise ValueError(f"unknown action result type: {type(result).__name__}")
-
-    def resolveToolCall(self, call: ToolCall, specs: tuple[ToolSpec, ...]) -> Event:
-        """Classify the next batch call into exactly one of three events."""
-        decision = self.decision(call, specs)
-        if decision == ToolDecision.DECISION_DENIED:
-            request = self._policy.permission_request(call, ToolPolicyInput(tool_specs=specs))
-            return ToolCallDenied(call=call, reason=request.reason)
-        if decision == ToolDecision.DECISION_RUN_DIRECTLY:
-            return ToolCallReadyToRun(call=call)
-        return ToolCallNeedsApproval(
-            call=call,
-            request=self._policy.permission_request(call, ToolPolicyInput(tool_specs=specs)),
-        )
-
-    def decision(self, call: ToolCall, specs: tuple[ToolSpec, ...]) -> ToolDecision:
-        """An always-allow decision short-circuits classification."""
-        if self._approvals.is_always_allowed(new_approval_key(call)):
-            return ToolDecision.DECISION_RUN_DIRECTLY
-        return self._policy.classify_tool_call(call, ToolPolicyInput(tool_specs=specs))
 
     def _resolve_model_reply(self, result: ModelReplied, input: ActionResultInput) -> Event:
         if not result.response.tool_calls:

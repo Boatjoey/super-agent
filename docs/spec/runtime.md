@@ -97,13 +97,15 @@ while True:
 
 ## 调度动作
 
-共有四种动作，由 `machine.ALL_SCHEDULED_ACTIONS` 枚举，并在 `machine.md` 中定义：`CallModel`、`RunTool`、`CheckToolQueue` 和 `AwaitApproval`。
+共有四种动作，由 `machine.ALL_SCHEDULED_ACTIONS` 枚举，并在 `machine.md` 中定义：`CallModel`、`RunTool`、`CheckToolPermission` 和 `AwaitApproval`。
 
 模型调用、工具执行和人工审批都经过同一条“动作 → 结果 → 事件”路径。因此审批不需要第二个循环：`AwaitApproval` 等待 Session 注入的审批决定，但调度权仍属于 engine。
 
 ## 动作结果
 
-`ActionResultResolver` 将模型与工具结果直接映射为转移表接受的事件。它启动工具批次，并将每个排队调用分类为 `ToolCallNeedsApproval`、`ToolCallReadyToRun` 或 `ToolCallDenied`。
+`ActionResultResolver` 将模型与工具结果直接映射为转移表接受的事件。它将模型请求映射为工具批次事件，将 `PermissionChecked(call, decision, request)` 机械映射为 `ToolCallNeedsApproval`、`ToolCallReadyToRun` 或 `ToolCallDenied`。
+
+Machine 选择批次中的具体调用并调度 `CheckToolPermission(call)`。Executor 使用执行输入中的权限策略与审批记录完成检查，返回携带原调用、决定和请求说明的 `PermissionChecked`；始终允许记录仍优先于策略分类。Resolver 不读取批次或索引，不调用权限策略。策略热更新由执行侧 Runner 接收并用于后续动作。批次耗尽时 Machine 直接形成下一模型动作，见[状态机调度动作](machine.md#调度动作)。
 
 工具执行失败转换为以 `Error:` 开头的工具结果，交回模型继续处理。
 
@@ -150,7 +152,7 @@ while True:
 
 - `Engine`：统一外部事件分发、唯一 Agent 循环、动作队列、状态锁、运行生命周期、调度动作的队列排空，以及过期结果丢弃。
 - `ActionQueue`：存放提交后的调度动作。
-- `ActionResultResolver`：将调度动作结果转换为可供转移处理的事件，并应用工具策略。
+- `ActionResultResolver`：将调度动作结果转换为可供转移处理的事件，不选择工具或应用权限策略。
 - `ScheduledActionRunner`：执行调度动作并返回 `ActionCompletion`。
 - `RunController`：负责运行 ID、取消函数和过期结果检查。
 - `ApprovalStore`：保存始终允许和自动审批状态。

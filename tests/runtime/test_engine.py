@@ -345,8 +345,8 @@ async def test_waiting_approval_keeps_run_context() -> None:
     runs = DefaultRunController()
     approvals = MemoryApprovalStore()
     engine = new_engine_with_components(
-        DefaultScheduledActionRunner(DefaultScheduledActionExecutor(model, tools)),
-        DefaultActionResultResolver(new_default_policy(), approvals),
+        DefaultScheduledActionRunner(DefaultScheduledActionExecutor(model, tools), new_default_policy(), approvals),
+        DefaultActionResultResolver(),
         machine.DefaultRuntimeDataChangeApplier(),
         runs,
         approvals,
@@ -367,8 +367,10 @@ async def test_final_assistant_response_finishes_run() -> None:
     runs = DefaultRunController()
     approvals = MemoryApprovalStore()
     engine = new_engine_with_components(
-        DefaultScheduledActionRunner(DefaultScheduledActionExecutor(model, FakeToolRunner())),
-        DefaultActionResultResolver(new_default_policy(), approvals),
+        DefaultScheduledActionRunner(
+            DefaultScheduledActionExecutor(model, FakeToolRunner()), new_default_policy(), approvals
+        ),
+        DefaultActionResultResolver(),
         machine.DefaultRuntimeDataChangeApplier(),
         runs,
         approvals,
@@ -406,8 +408,8 @@ async def test_approve_always_writes_store_without_holding_engine_lock() -> None
     tools = FakeToolRunner(results={"bash": "ok"}, specs=(ToolSpec(name="bash", risky=True),))
     store = LockProbeApprovalStore()
     engine = new_engine_with_components(
-        DefaultScheduledActionRunner(DefaultScheduledActionExecutor(model, tools)),
-        DefaultActionResultResolver(new_default_policy(), store),
+        DefaultScheduledActionRunner(DefaultScheduledActionExecutor(model, tools), new_default_policy(), store),
+        DefaultActionResultResolver(),
         machine.DefaultRuntimeDataChangeApplier(),
         DefaultRunController(),
         store,
@@ -754,7 +756,7 @@ async def test_classifier_tool_specs_are_fetched_without_holding_engine_lock() -
     store = MemoryApprovalStore()
     engine = new_engine_with_components(
         runner,
-        DefaultActionResultResolver(new_default_policy(), store),
+        DefaultActionResultResolver(),
         machine.DefaultRuntimeDataChangeApplier(),
         DefaultRunController(),
         store,
@@ -818,9 +820,9 @@ def test_tool_result_advances_queue_through_engine() -> None:
     event = machine.ToolResultReceived(call=call, result="ok")
     decision = machine.transition(transition_snapshot(machine.STATE_RUNNING_TOOL, event), event)
 
-    assert decision.next_state == machine.STATE_ADVANCING_QUEUE
+    assert decision.next_state == machine.STATE_WAITING_LLM
     assert len(decision.action_plan.schedule) == 1
-    assert isinstance(decision.action_plan.schedule[0], machine.CheckToolQueue)
+    assert isinstance(decision.action_plan.schedule[0], machine.CallModel)
 
 
 def test_denial_advances_queue_through_engine() -> None:
@@ -828,9 +830,9 @@ def test_denial_advances_queue_through_engine() -> None:
     event = machine.ApprovalDenied(call=call)
     decision = machine.transition(transition_snapshot(machine.STATE_WAITING_APPROVAL, event), event)
 
-    assert decision.next_state == machine.STATE_ADVANCING_QUEUE
+    assert decision.next_state == machine.STATE_WAITING_LLM
     assert len(decision.action_plan.schedule) == 1
-    assert isinstance(decision.action_plan.schedule[0], machine.CheckToolQueue)
+    assert isinstance(decision.action_plan.schedule[0], machine.CallModel)
 
 
 def test_cancel_requested_returns_runtime_to_idle() -> None:
@@ -849,8 +851,8 @@ async def test_engine_does_not_commit_invalid_custom_runtime_data_change_result(
     approvals = MemoryApprovalStore()
     runs = DefaultRunController()
     engine = new_engine_with_components(
-        DefaultScheduledActionRunner(DefaultScheduledActionExecutor(None, None)),
-        DefaultActionResultResolver(new_default_policy(), approvals),
+        DefaultScheduledActionRunner(DefaultScheduledActionExecutor(None, None), new_default_policy(), approvals),
+        DefaultActionResultResolver(),
         _InvalidRuntimeDataChangeApplier(),
         runs,
         approvals,
@@ -869,7 +871,7 @@ async def test_engine_does_not_commit_invalid_custom_runtime_data_change_result(
 async def test_engine_rejects_invalid_permission_mode() -> None:
     engine = new_engine_with_components(
         DefaultScheduledActionRunner(DefaultScheduledActionExecutor(None, None)),
-        DefaultActionResultResolver(new_default_policy(), MemoryApprovalStore()),
+        DefaultActionResultResolver(),
         machine.DefaultRuntimeDataChangeApplier(),
         DefaultRunController(),
         MemoryApprovalStore(),
@@ -936,7 +938,7 @@ async def test_cancelled_run_cannot_write_into_the_next_run() -> None:
 async def test_empty_action_queue_in_non_idle_state_raises_invariant_violation() -> None:
     engine = new_engine_with_components(
         DefaultScheduledActionRunner(DefaultScheduledActionExecutor(None, None)),
-        DefaultActionResultResolver(new_default_policy(), MemoryApprovalStore()),
+        DefaultActionResultResolver(),
         _IdleAsWaitingLLMApplier(),
         DefaultRunController(),
         MemoryApprovalStore(),

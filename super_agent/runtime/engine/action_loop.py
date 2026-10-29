@@ -50,7 +50,6 @@ from super_agent.runtime.machine import (
     RunTool,
     State,
     SteeringSubmitted,
-    ToolCallBatch,
     TransitionResult,
     UserMessageSubmitted,
     snapshot_from,
@@ -84,13 +83,6 @@ def estimateTokens(value: str) -> int:
 
 def estimateMessageTokens(messages: tuple[Message, ...] | list[Message]) -> int:
     return sum((len(message.content) + len(message.reasoning_content) + 3) // 4 for message in messages)
-
-
-def cloneToolBatch(batch: ToolCallBatch | None) -> ToolCallBatch | None:
-    """A copy the resolver may read while the queue keeps advancing."""
-    if batch is None:
-        return None
-    return ToolCallBatch(id=batch.id, calls=list(batch.calls), index=batch.index)
 
 
 def millis_since(started: float) -> int:
@@ -412,14 +404,13 @@ class ActionLoopMixin:
         # Specs are fetched outside the engine lock on purpose: a registry change
         # (an MCP reconnect, say) can block Specs for seconds, and the lock must
         # stay free for queries and dispatch. The cost is that this one resolution
-        # may classify against a spec set that just changed — benign, since the
+        # may validate against a spec set that just changed — benign, since the
         # next action re-fetches.
         tool_specs = self._tool_specs()
         async with self.lock:
-            batch = cloneToolBatch(self._runtime_data.tool_batch)
             event = self._resolver.resolve(
                 completion.result,  # type: ignore[arg-type]
-                ActionResultInput(tool_batch=batch, tool_specs=tuple(tool_specs)),
+                ActionResultInput(tool_specs=tuple(tool_specs)),
             )
             decision = self._calculate_transition_locked(event)
             self._commit_transition_locked(decision)
@@ -465,7 +456,6 @@ def _usage_fields(usage: Usage | None) -> dict[str, Any]:
 # Re-exported so callers of the engine do not import the context module twice.
 __all__ = [
     "ActionLoopMixin",
-    "cloneToolBatch",
     "errorString",
     "estimateMessageTokens",
     "estimateTokens",

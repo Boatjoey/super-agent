@@ -126,9 +126,9 @@ class CommandsMixin:
         async with self.lock:
             if not valid_permission_mode(mode):
                 raise ValueError("invalid permission mode: " + str(mode))
-            if not isinstance(self._resolver, PolicySetter):
-                raise ValueError("action result resolver does not support policy updates")
-            self._resolver.set_policy(new_policy(mode, rules))
+            if not isinstance(self._runner, PolicySetter):
+                raise ValueError("scheduled action runner does not support policy updates")
+            self._runner.set_policy(new_policy(mode, rules))
             if isinstance(self._approvals, PolicyStore):
                 self._approvals.set_permission_policy(mode, rules)
 

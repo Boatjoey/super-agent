@@ -16,7 +16,9 @@ from super_agent.runtime.execution import (
     ERR_APPROVAL_DISMISSED,
     ActionCompletion,
     ApprovalKey,
+    DefaultScheduledActionExecutor,
     ModelReplied,
+    PermissionChecked,
     PermissionRequest,
     QueuedAction,
     ScheduledActionInput,
@@ -24,17 +26,24 @@ from super_agent.runtime.execution import (
     ToolDecision,
     ToolFinished,
     ToolPolicyInput,
-    ToolQueueChecked,
 )
 from super_agent.runtime.machine import (
     ApprovalDecision,
     CallModel,
-    CheckToolQueue,
+    CheckToolPermission,
     RunTool,
     ScheduledAction,
 )
 from super_agent.runtime.protocol.run_context import RunContext
-from super_agent.runtime.protocol.types import Message, ModelResponse, StreamChunk, ToolCall, ToolSpec
+from super_agent.runtime.protocol.types import (
+    Message,
+    Model,
+    ModelResponse,
+    StreamChunk,
+    ToolCall,
+    ToolRunner,
+    ToolSpec,
+)
 
 __all__ = [
     "DenyNthPolicy",
@@ -266,6 +275,30 @@ class SpecProbeRunner:
             return ModelReplied(response=ModelResponse(content="done"))
         if isinstance(current, RunTool):
             return ToolFinished(call=current.call, result="ok")
-        if isinstance(current, CheckToolQueue):
-            return ToolQueueChecked()
+        if isinstance(current, CheckToolPermission):
+            return PermissionChecked(call=current.call, decision=ToolDecision.DECISION_RUN_DIRECTLY)
         return ModelReplied(response=ModelResponse(content="done"))
+
+
+class PermissionGateExecutor(DefaultScheduledActionExecutor):
+    """Hold a computed permission result so cancellation can make it stale."""
+
+    def __init__(self, model: Model, tools: ToolRunner) -> None:
+        super().__init__(model, tools)
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.actions: list[ScheduledAction] = []
+
+    async def execute(
+        self,
+        ctx: RunContext,
+        action: ScheduledAction,
+        env: ScheduledActionInput,
+        chunk_func: Callable[[StreamChunk], None],
+    ) -> ScheduledActionResult:
+        self.actions.append(action)
+        result = await super().execute(ctx, action, env, chunk_func)
+        if isinstance(action, CheckToolPermission):
+            self.started.set()
+            await self.release.wait()
+        return result

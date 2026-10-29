@@ -33,7 +33,6 @@ from super_agent.runtime.machine.event import (
     InputQueued,
     ResetRequested,
     SteeringSubmitted,
-    ToolBatchFinished,
     ToolBatchReceived,
     ToolCallDenied,
     ToolCallNeedsApproval,
@@ -70,7 +69,7 @@ from super_agent.runtime.machine.runtime_data_change import (
 from super_agent.runtime.machine.scheduled_action import (
     AwaitApproval,
     CallModel,
-    CheckToolQueue,
+    CheckToolPermission,
     RunTool,
 )
 from super_agent.runtime.machine.snapshot import MachineSnapshot, same_tool_call
@@ -218,10 +217,6 @@ def _new_transition_registry() -> dict[TransitionKey, TransitionHandler]:
             adapt_transition(handle_tool_result_received),
         ),
         (
-            TransitionKey(STATE_ADVANCING_QUEUE, ToolBatchFinished.kind),
-            adapt_transition(handle_tool_batch_finished),
-        ),
-        (
             TransitionKey(STATE_ADVANCING_QUEUE, ToolCallNeedsApproval.kind),
             adapt_transition(handle_tool_call_needs_approval),
         ),
@@ -350,7 +345,7 @@ def handle_tool_batch_received(snapshot: MachineSnapshot, event: ToolBatchReceiv
             ),
             SetToolCallBatch(id=_tool_batch_id(event.calls), calls=event.calls),
         ),
-        action_plan=ActionPlan(schedule=(CheckToolQueue(),)),
+        action_plan=ActionPlan(schedule=(CheckToolPermission(call=event.calls[0]),)),
     )
 
 
@@ -379,13 +374,12 @@ def handle_approval_denied(snapshot: MachineSnapshot, event: ApprovalDenied) -> 
         raise ProtocolViolationError(snapshot.state, event, "denial has no pending tool")
     if not same_tool_call(event.call, snapshot.pending_tool):
         raise ProtocolViolationError(snapshot.state, event, "denied call does not match pending tool")
-    return TransitionResult(
-        next_state=STATE_ADVANCING_QUEUE,
-        runtime_data_changes=(
+    return _continue_tool_batch(
+        snapshot.queue.remaining,
+        (
             ClearPendingTool(),
             AppendToolResult(call=event.call, result="denied: " + event.call.name),
         ),
-        action_plan=ActionPlan(schedule=(CheckToolQueue(),)),
     )
 
 
@@ -394,22 +388,25 @@ def handle_tool_result_received(snapshot: MachineSnapshot, event: ToolResultRece
         raise ProtocolViolationError(snapshot.state, event, "tool result has no current tool")
     if not same_tool_call(event.call, snapshot.current_tool):
         raise ProtocolViolationError(snapshot.state, event, "result call does not match current tool")
-    return TransitionResult(
-        next_state=STATE_ADVANCING_QUEUE,
-        runtime_data_changes=(
+    return _continue_tool_batch(
+        snapshot.queue.remaining,
+        (
             AppendToolResult(call=event.call, result=event.result),
             ClearCurrentTool(),
         ),
-        action_plan=ActionPlan(schedule=(CheckToolQueue(),)),
     )
 
 
-def handle_tool_batch_finished(snapshot: MachineSnapshot, event: ToolBatchFinished) -> TransitionResult:
-    if not snapshot.queue.empty():
-        raise ProtocolViolationError(snapshot.state, event, "tool batch finished before the queue was empty")
+def _continue_tool_batch(remaining: tuple[ToolCall, ...], changes: tuple[RuntimeDataChange, ...]) -> TransitionResult:
+    if remaining:
+        return TransitionResult(
+            next_state=STATE_ADVANCING_QUEUE,
+            runtime_data_changes=changes,
+            action_plan=ActionPlan(schedule=(CheckToolPermission(call=remaining[0]),)),
+        )
     return TransitionResult(
         next_state=STATE_WAITING_LLM,
-        runtime_data_changes=(ClearToolCallBatch(), AdvanceStep(), AcceptSteering()),
+        runtime_data_changes=(*changes, ClearToolCallBatch(), AdvanceStep(), AcceptSteering()),
         action_plan=ActionPlan(schedule=(CallModel(),)),
     )
 
@@ -446,13 +443,12 @@ def handle_tool_call_denied(snapshot: MachineSnapshot, event: ToolCallDenied) ->
         raise ProtocolViolationError(snapshot.state, event, "denied call has no next tool")
     if not same_tool_call(event.call, snapshot.queue.next):
         raise ProtocolViolationError(snapshot.state, event, "denied call does not match next tool")
-    return TransitionResult(
-        next_state=STATE_ADVANCING_QUEUE,
-        runtime_data_changes=(
+    return _continue_tool_batch(
+        snapshot.queue.remaining[1:],
+        (
             AdvanceToolCallBatch(),
             AppendToolResult(call=event.call, result="denied by permission policy: " + event.reason),
         ),
-        action_plan=ActionPlan(schedule=(CheckToolQueue(),)),
     )
 
 

@@ -1,6 +1,6 @@
 """The four kinds of work a transition can ask the engine to perform.
 
-Model calls, tool execution, queue processing, and human approval all travel the
+Model calls, tool execution, permission checks, and human approval all travel the
 same action → result → event path, which is why approval needs no second loop and
 no scheduling authority in ``runtime/session``.
 """
@@ -40,8 +40,10 @@ class RunTool(ScheduledAction):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class CheckToolQueue(ScheduledAction):
-    kind: ClassVar[str] = "CheckToolQueue"
+class CheckToolPermission(ScheduledAction):
+    kind: ClassVar[str] = "CheckToolPermission"
+
+    call: ToolCall = dataclasses.field(default_factory=ToolCall)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -56,6 +58,6 @@ class AwaitApproval(ScheduledAction):
 ALL_SCHEDULED_ACTIONS: Final[tuple[ScheduledAction, ...]] = (
     CallModel(),
     RunTool(),
-    CheckToolQueue(),
+    CheckToolPermission(),
     AwaitApproval(),
 )

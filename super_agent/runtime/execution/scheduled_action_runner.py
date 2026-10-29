@@ -6,6 +6,8 @@ import dataclasses
 from collections.abc import Callable
 from typing import Protocol
 
+from super_agent.runtime.execution.approval_store import ApprovalStore, MemoryApprovalStore
+from super_agent.runtime.execution.policy import Policy, new_default_policy
 from super_agent.runtime.execution.run_controller import ActionID, RunID
 from super_agent.runtime.execution.scheduled_action_executor import (
     ScheduledActionExecutor,
@@ -52,10 +54,17 @@ class ScheduledActionRunner(Protocol):
 class DefaultScheduledActionRunner:
     """The only runner; the port exists so tests can substitute one."""
 
-    __slots__ = ("_executor",)
+    __slots__ = ("_approvals", "_executor", "_policy")
 
-    def __init__(self, executor: ScheduledActionExecutor) -> None:
+    def __init__(
+        self, executor: ScheduledActionExecutor, policy: Policy | None = None, approvals: ApprovalStore | None = None
+    ) -> None:
         self._executor = executor
+        self._policy = policy if policy is not None else new_default_policy()
+        self._approvals = approvals if approvals is not None else MemoryApprovalStore()
+
+    def set_policy(self, policy: Policy) -> None:
+        self._policy = policy
 
     def tool_specs(self) -> list[ToolSpec]:
         """The specs the executor advertises, if it advertises any."""
@@ -74,5 +83,7 @@ class DefaultScheduledActionRunner:
     ) -> ActionCompletion:
         if action.action is None:
             raise ValueError("queued action carries no action")
-        result = await self._executor.execute(ctx, action.action, input, chunk_func)
+        result = await self._executor.execute(
+            ctx, action.action, dataclasses.replace(input, policy=self._policy, approvals=self._approvals), chunk_func
+        )
         return ActionCompletion(run_id=action.run_id, action_id=action.action_id, result=result)

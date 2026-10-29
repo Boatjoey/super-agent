@@ -15,7 +15,7 @@ Turn 与 Step 的概念边界见[核心概念](../design/concepts.md)，目标�
 | `Initializing` | engine 已构造，尚未启动 | engine 构造 | `EngineReady` |
 | `Idle` | 没有正在进行的模型请求、工具调用或审批 | 初始化、普通回复、取消、重置、错误 | `UserMessageSubmitted` |
 | `WaitingLLM` | 模型调用进行中，包括流式输出 | `UserMessageSubmitted`、工具批次完成 | 回复、工具批次、取消、错误 |
-| `AdvancingQueue` | 分发工具批次中的下一个调用 | 收到工具批次、工具结果、审批被拒绝 | 需要审批、调用可执行、批次完成 |
+| `AdvancingQueue` | 分发工具批次中的下一个调用 | 收到工具批次、工具结果、审批被拒绝 | 需要审批、调用可执行、策略拒绝、取消、错误 |
 | `WaitingApproval` | 等待用户决定是否允许高风险调用 | 下一个调用需要审批 | 允许、始终允许、拒绝、取消、错误 |
 | `RunningTool` | 正在执行一个工具调用 | 调用不需要审批或已获批准 | 工具结果、取消、错误 |
 
@@ -40,14 +40,16 @@ stateDiagram
     WaitingApproval --> WaitingApproval: SteeringSubmitted / InputQueued
     RunningTool --> AdvancingQueue: ToolResultReceived
     RunningTool --> RunningTool: SteeringSubmitted / InputQueued
-    AdvancingQueue --> WaitingLLM: ToolBatchFinished
+    AdvancingQueue --> WaitingLLM: ToolCallDenied
+    WaitingApproval --> WaitingLLM: ApprovalDenied
+    RunningTool --> WaitingLLM: ToolResultReceived
 ```
 
 图中有意**只绘制状态专属的边**。下方的全局事件可从任何状态接收，只在表格中定义；绘制它们的全部 18 条边只会增加噪声，不会增加信息。
 
 ## 转移表
 
-这是权威边列表。`tests/architecture/test_spec.py` 枚举全部 6 个状态 × `machine.ALL_EVENTS`（17 个事件，共 102 个组合），并断言接受的组合及其 `next_state` 与本表完全一致。检查是双向的，因此未记录在文档中的边也会导致失败。
+这是权威边列表。`tests/architecture/test_spec.py` 枚举全部 6 个状态 × `machine.ALL_EVENTS`（16 个事件，共 96 个组合），并断言接受的组合及其 `next_state` 与本表完全一致。检查是双向的，因此未记录在文档中的边也会导致失败。
 
 | 状态 | 事件 | 下一状态 | 运行数据变更 | 动作计划 |
 |---|---|---|---|---|
@@ -62,22 +64,26 @@ stateDiagram
 | WaitingApproval | InputQueued | WaitingApproval | QueueInput | - |
 | RunningTool | InputQueued | RunningTool | QueueInput | - |
 | WaitingLLM | AssistantMessageReceived | Idle | AppendAssistantMessage, CloseStep | - |
-| WaitingLLM | ToolBatchReceived | AdvancingQueue | AppendAssistantMessage, SetToolCallBatch | 调度 CheckToolQueue |
+| WaitingLLM | ToolBatchReceived | AdvancingQueue | AppendAssistantMessage, SetToolCallBatch | 调度 CheckToolPermission |
 | WaitingApproval | ApprovalGranted | RunningTool | SetCurrentTool, ClearPendingTool | 调度 RunTool |
 | WaitingApproval | ApprovalAlwaysGranted | RunningTool | SetCurrentTool, ClearPendingTool | 调度 RunTool |
-| WaitingApproval | ApprovalDenied | AdvancingQueue | ClearPendingTool, AppendToolResult | 调度 CheckToolQueue |
-| RunningTool | ToolResultReceived | AdvancingQueue | AppendToolResult, ClearCurrentTool | 调度 CheckToolQueue |
-| AdvancingQueue | ToolBatchFinished | WaitingLLM | ClearToolCallBatch, AdvanceStep, AcceptSteering | 调度 CallModel |
+| WaitingApproval | ApprovalDenied | AdvancingQueue | ClearPendingTool, AppendToolResult | 调度 CheckToolPermission |
+| RunningTool | ToolResultReceived | AdvancingQueue | AppendToolResult, ClearCurrentTool | 调度 CheckToolPermission |
 | AdvancingQueue | ToolCallNeedsApproval | WaitingApproval | SetPendingTool, AdvanceToolCallBatch | 调度 AwaitApproval |
 | AdvancingQueue | ToolCallReadyToRun | RunningTool | AdvanceToolCallBatch, SetCurrentTool | 调度 RunTool |
-| AdvancingQueue | ToolCallDenied | AdvancingQueue | AdvanceToolCallBatch, AppendToolResult | 调度 CheckToolQueue |
+| AdvancingQueue | ToolCallDenied | AdvancingQueue | AdvanceToolCallBatch, AppendToolResult | 调度 CheckToolPermission |
+| WaitingApproval | ApprovalDenied | WaitingLLM | ClearPendingTool, AppendToolResult, ClearToolCallBatch, AdvanceStep, AcceptSteering | 调度 CallModel |
+| RunningTool | ToolResultReceived | WaitingLLM | AppendToolResult, ClearCurrentTool, ClearToolCallBatch, AdvanceStep, AcceptSteering | 调度 CallModel |
+| AdvancingQueue | ToolCallDenied | WaitingLLM | AdvanceToolCallBatch, AppendToolResult, ClearToolCallBatch, AdvanceStep, AcceptSteering | 调度 CallModel |
 | any | ErrorOccurred | Idle | FlushStreamingAssistant, AppendToolResult, ClearPendingTool, ClearCurrentTool, ClearToolCallBatch, ClearSteering, CloseStep | 清空已有动作 |
 | any | CancelRequested | Idle | FlushStreamingAssistant, AppendToolResult, ClearPendingTool, ClearCurrentTool, ClearToolCallBatch, ClearSteering, ClearQueued, CloseStep | 清空已有动作 |
 | any | ResetRequested | Idle | ResetConversation | 清空已有动作 |
 
 `any` 表示所有状态，包括 `Initializing` 和 `Idle`。`any` 行的运行数据变更列只是可能变更的概览，不是精确列表：`handle_error_occurred` 和 `handle_cancel_requested` 为每个尚未结算的调用追加一个 `AppendToolResult`，因此数量随起始状态变化（错误从 `WaitingLLM` 开始是 6 项，取消是 7 项；从 `WaitingApproval`、`RunningTool` 或仅含一次调用的 `AdvancingQueue` 批次开始时分别为 7 项和 8 项）。所以一致性测试只固定边集合和 `next_state`，各起始状态的精确变更列表由 `tests/runtime/test_transition.py` 固定。
 
-`AssistantMessageReceived` 是表中唯一目标状态依赖运行数据的边：没有待接纳输入时结束 Turn 并回到 `Idle`，表中记录的就是这个目标状态；存在待接纳输入时，当前 Step 结束、下一个 Step 开始并继续调度 `CallModel`。表只能记录一个目标状态，因此带引导的分支由 `tests/runtime/test_transition.py` 与 `tests/runtime/test_steering.py` 固定。
+`ApprovalDenied`、`ToolResultReceived` 和 `ToolCallDenied` 在仍有调用时进入 `AdvancingQueue`，调度携带下一调用的 `CheckToolPermission(call)`；批次耗尽时直接清理批次、推进 Step、接纳引导并调度 `CallModel`，进入 `WaitingLLM`。两种分支均在表和图中列出。
+
+`AssistantMessageReceived` 的目标状态也依赖运行数据：没有待接纳输入时结束 Turn 并回到 `Idle`，表和图列出此分支；存在待接纳输入时，当前 Step 结束、下一个 Step 开始并继续调度 `CallModel`。带引导的分支由 `tests/runtime/test_transition.py` 与 `tests/runtime/test_steering.py` 固定。
 
 两条拒绝路径具有不同含义：
 
@@ -122,7 +128,7 @@ class RuntimeData:
 接纳分两步，这是本节的核心：
 
 1. **受理**：事件到达时只执行 `QueueSteering`，把输入放进 `steering` 队列。状态不变，也不调度动作，因此正在流式返回的请求不会被改写，正在执行的工具不会被打断，等待中的审批不会被打断。
-2. **接纳**：下一个 Step 开始时执行 `AcceptSteering`，按提交顺序把队列中的每一项作为 `user` 消息追加到会话，并清空队列。接纳点只有两个：`ToolBatchFinished`（工具批次结算后开始下一个 Step）和 `AssistantMessageReceived`（存在待接纳输入时继续 Turn 而不是结束）。
+2. **接纳**：下一个 Step 开始时执行 `AcceptSteering`，按提交顺序把队列中的每一项作为 `user` 消息追加到会话，并清空队列。接纳点包括工具批次最后一次调用结算（工具结果、用户拒绝或策略拒绝）和 `AssistantMessageReceived`（存在待接纳输入时继续 Turn 而不是结束）。
 
 `AcceptSteering` 与 `CloseStep` 一样容忍空队列：到达 Step 边界就请求接纳，没有等待中的输入时什么也不做。
 
@@ -199,7 +205,7 @@ class ActionPlan:
 |---|---|
 | `CallModel` | 请求模型，并通过流式分片返回输出 |
 | `RunTool` | 执行一个工具调用 |
-| `CheckToolQueue` | 对批次中的下一个调用分类 |
+| `CheckToolPermission(call)` | 对 Machine 已选择的具体调用执行权限检查 |
 | `AwaitApproval` | 等待 Session 提供的审批决定 |
 
 模型调用、工具执行和人工审批都经过同一条“动作 → 结果 → 事件”路径，因此审批不需要第二个循环，也不需要让 `runtime/session` 拥有调度权。
@@ -235,7 +241,7 @@ global_rules = ((TransitionKey(ZeroState, ErrorOccurred.kind), adapt_transition(
 2. **决策**：处理函数返回 `next_state=STATE_WAITING_LLM`、`runtime_data_changes=(AppendUserMessage(...),)` 和 `ActionPlan(schedule=(CallModel(),))`。由于不需要撤回任何动作，`clear_existing` 保持 `False`。
 3. **应用**：`snapshot_from` 校验当前数据，`transition` 产生决策，应用器克隆并修改数据，`validate_runtime_data` 检查候选数据，engine 将数据与计划一起提交。
 4. **分发**：此时 `CallModel` 才开始运行，经过 `ScheduledActionRunner` → `ScheduledActionExecutor` → `Model.next`。engine 已处于 `WaitingLLM`，交互式命令行可以展示模型正在工作。
-5. **继续**：`ActionResultResolver` 将模型结果转换为下一事件：普通回复成为 `AssistantMessageReceived`（→ `Idle`），工具请求成为 `ToolBatchReceived`（→ `AdvancingQueue` → `CheckToolQueue`）。
+5. **继续**：`ActionResultResolver` 将模型结果转换为下一事件：普通回复成为 `AssistantMessageReceived`（→ `Idle`），工具请求成为 `ToolBatchReceived`（→ `AdvancingQueue` → `CheckToolPermission`）。
 
 因此，一条用户消息不只是触发一次状态变更，而是启动一个由事件驱动的循环。完整循环见 `runtime.md`。
 

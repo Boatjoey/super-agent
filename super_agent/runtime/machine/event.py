@@ -1,4 +1,4 @@
-"""The seventeen events the machine accepts.
+"""The sixteen events the machine accepts.
 
 The set is closed by construction:
 :meth:`Event.__init_subclass__` refuses a subclass declared anywhere but this
@@ -119,11 +119,6 @@ class ToolCallDenied(Event):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class ToolBatchFinished(Event):
-    kind: ClassVar[str] = "ToolBatchFinished"
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
 class ToolResultReceived(Event):
     kind: ClassVar[str] = "ToolResultReceived"
 
@@ -185,7 +180,6 @@ ALL_EVENTS: Final[tuple[Event, ...]] = (
     ToolCallNeedsApproval(),
     ToolCallReadyToRun(),
     ToolCallDenied(),
-    ToolBatchFinished(),
     ToolResultReceived(),
     ApprovalGranted(),
     ApprovalAlwaysGranted(),

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from super_agent.runtime.engine.action_loop import (
     ActionLoopMixin as ActionLoopMixin,
-    cloneToolBatch as cloneToolBatch,
     errorString as errorString,
     estimateMessageTokens as estimateMessageTokens,
     estimateTokens as estimateTokens,
@@ -55,7 +54,6 @@ __all__ = [
     "PolicyStore",
     "QueryMixin",
     "StateObserver",
-    "cloneToolBatch",
     "discard_chunk",
     "errorString",
     "estimateMessageTokens",

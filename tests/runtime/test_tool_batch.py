@@ -6,6 +6,8 @@ The other case asserts on ``EngineView`` batch progress and lives in
 
 from __future__ import annotations
 
+import pytest
+
 from super_agent.runtime import machine
 from tests.runtime.test_transition import transition_snapshot
 
@@ -20,7 +22,7 @@ def test_tool_batch_received_advances_through_unified_approval_events() -> None:
     start = machine.transition(transition_snapshot(machine.STATE_WAITING_LLM, start_event), start_event)
     assert start.next_state == machine.STATE_ADVANCING_QUEUE
     assert len(start.action_plan.schedule) == 1
-    assert isinstance(start.action_plan.schedule[0], machine.CheckToolQueue)
+    assert start.action_plan.schedule == (machine.CheckToolPermission(call=CALLS[0]),)
 
     first_event = machine.ToolCallNeedsApproval(call=CALLS[0])
     first = machine.transition(transition_snapshot(machine.STATE_ADVANCING_QUEUE, first_event), first_event)
@@ -87,3 +89,61 @@ def test_batch_id_is_derived_from_the_first_call() -> None:
     batch_change = result.runtime_data_changes[1]
     assert isinstance(batch_change, machine.SetToolCallBatch)
     assert batch_change.id == "batch"
+
+
+@pytest.mark.parametrize("settlement", ["result", "approval_denied", "policy_denied"])
+@pytest.mark.parametrize("has_next", [False, True])
+def test_machine_selects_next_call_or_finishes_batch(settlement: str, has_next: bool) -> None:
+    first, second = CALLS
+    calls = [first, second] if has_next else [first]
+    data = machine.RuntimeData(
+        state=machine.STATE_ADVANCING_QUEUE,
+        tool_batch=machine.ToolCallBatch(calls=calls),
+        step=machine.Step(index=1),
+        steering=(machine.SteeringInput(content="next step"),),
+    )
+    event: machine.Event
+    expected_changes: tuple[type[machine.RuntimeDataChange], ...]
+    if settlement == "result":
+        data.state = machine.STATE_RUNNING_TOOL
+        data.current_tool = first
+        assert data.tool_batch is not None
+        data.tool_batch.index = 1
+        event = machine.ToolResultReceived(call=first, result="ok")
+        expected_changes = (machine.AppendToolResult, machine.ClearCurrentTool)
+    elif settlement == "approval_denied":
+        data.state = machine.STATE_WAITING_APPROVAL
+        data.pending_tool = first
+        data.pending_permission = machine.PermissionRequest()
+        assert data.tool_batch is not None
+        data.tool_batch.index = 1
+        event = machine.ApprovalDenied(call=first)
+        expected_changes = (machine.ClearPendingTool, machine.AppendToolResult)
+    else:
+        event = machine.ToolCallDenied(call=first, reason="plan mode")
+        expected_changes = (machine.AdvanceToolCallBatch, machine.AppendToolResult)
+
+    decision = machine.transition(machine.snapshot_from(data), event)
+    assert not decision.action_plan.clear_existing
+    if has_next:
+        assert decision.next_state == machine.STATE_ADVANCING_QUEUE
+        assert decision.action_plan.schedule == (machine.CheckToolPermission(call=second),)
+    else:
+        assert decision.next_state == machine.STATE_WAITING_LLM
+        assert decision.action_plan.schedule == (machine.CallModel(),)
+        expected_changes += (machine.ClearToolCallBatch, machine.AdvanceStep, machine.AcceptSteering)
+    assert tuple(type(change) for change in decision.runtime_data_changes) == expected_changes
+
+    committed = machine.DefaultRuntimeDataChangeApplier().apply_runtime_data_changes(data, decision).runtime_data
+    assert committed.current_tool is None
+    assert committed.pending_tool is None
+    if has_next:
+        assert committed.tool_batch is not None
+        assert committed.tool_batch.index == 1
+        assert committed.step == machine.Step(index=1)
+        assert committed.steering == data.steering
+    else:
+        assert committed.tool_batch is None
+        assert committed.step == machine.Step(index=2)
+        assert committed.steering == ()
+        assert committed.messages[-1].content == "next step"

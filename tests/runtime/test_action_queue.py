@@ -10,7 +10,7 @@ def test_action_queue_queues_scheduled_actions_with_run_and_incrementing_ids() -
     queue = ActionQueue()
 
     first = queue.queue(RunID("run-1"), machine.CallModel())
-    second = queue.queue(RunID("run-1"), machine.CheckToolQueue())
+    second = queue.queue(RunID("run-1"), machine.CheckToolPermission())
 
     assert first.run_id == "run-1"
     assert first.action_id == "action-1"
@@ -21,7 +21,7 @@ def test_action_queue_queues_scheduled_actions_with_run_and_incrementing_ids() -
 def test_action_queue_pops_in_fifo_order() -> None:
     queue = ActionQueue()
     first = queue.queue(RunID("run-1"), machine.CallModel())
-    second = queue.queue(RunID("run-1"), machine.CheckToolQueue())
+    second = queue.queue(RunID("run-1"), machine.CheckToolPermission())
 
     assert queue.pop() == first
     assert queue.pop() == second
@@ -31,7 +31,7 @@ def test_action_queue_pops_in_fifo_order() -> None:
 def test_action_queue_clear_drops_pending_scheduled_actions() -> None:
     queue = ActionQueue()
     queue.queue(RunID("run-1"), machine.CallModel())
-    queue.queue(RunID("run-1"), machine.CheckToolQueue())
+    queue.queue(RunID("run-1"), machine.CheckToolPermission())
 
     queue.clear()
 

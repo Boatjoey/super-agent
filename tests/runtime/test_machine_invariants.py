@@ -64,19 +64,6 @@ def test_transition_rejects_result_for_different_current_call() -> None:
     assert raised.value.reason == "result call does not match current tool"
 
 
-def test_transition_rejects_batch_finished_before_queue_empty() -> None:
-    call = machine.ToolCall(id="call-1")
-    data = machine.RuntimeData(
-        state=machine.STATE_ADVANCING_QUEUE,
-        tool_batch=machine.ToolCallBatch(calls=[call]),
-        step=machine.Step(index=1),
-    )
-    snapshot = machine.snapshot_from(data)
-    with pytest.raises(machine.ProtocolViolationError) as raised:
-        machine.transition(snapshot, machine.ToolBatchFinished())
-    assert raised.value.reason == "tool batch finished before the queue was empty"
-
-
 def test_transition_rejects_an_empty_tool_batch() -> None:
     """An empty batch is a protocol violation, not a batch nobody queued."""
     snapshot = transition_snapshot(machine.STATE_WAITING_LLM, machine.EngineReady())
@@ -187,13 +174,11 @@ def test_tool_flow_preserves_machine_invariants() -> None:
         machine.ToolCallNeedsApproval(call=call, request=machine.PermissionRequest(tool_name="bash")),
         machine.ApprovalGranted(call=call),
         machine.ToolResultReceived(call=call, result="ok"),
-        machine.ToolBatchFinished(),
     )
     want_states = (
         machine.STATE_ADVANCING_QUEUE,
         machine.STATE_WAITING_APPROVAL,
         machine.STATE_RUNNING_TOOL,
-        machine.STATE_ADVANCING_QUEUE,
         machine.STATE_WAITING_LLM,
     )
 
