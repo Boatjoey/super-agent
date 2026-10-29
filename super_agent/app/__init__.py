@@ -1,17 +1,8 @@
-"""The composition root's public surface.
+"""Public composition entry points and compatibility exports.
 
-The app package surface: configuration and settings, the session and agent
-constructors, the MCP and workflow controllers, and the terminal adapter. Callers
-write ``app.load_config``; the re-exports here keep that spelling.
-
-``app`` is the only place the concrete adapters meet. It may import ``llm``,
-``tools``, ``store``, ``workspace``, ``project``, ``runtime``, and ``tui``; none
-of them may import it back, and ``tui`` must never see ``runtime`` directly —
-the conversion between the two happens in :mod:`super_agent.app.tui_adapter`.
-
-``load_project_instructions`` is re-exported here even though its driver lives in
-:mod:`super_agent.app.instructions`, so callers can keep writing
-``app.load_project_instructions``.
+app.session assembles application use cases and concrete adapters. Local
+configuration and infrastructure bridges live alongside it; application business
+flows live in super_agent.application.
 """
 
 from __future__ import annotations

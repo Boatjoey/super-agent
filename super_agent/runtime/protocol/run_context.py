@@ -46,13 +46,15 @@ class RunContext:
         """A context derived from this one that also carries ``key``.
 
         The derived context *shares* the cancellation event rather than
-        registering as a child. A parent chain would be safe because it is
+        registering as a child. They also share the child list, so cancelling
+        either view still reaches children adopted through the other. A parent chain would be safe because it is
         collected with the value; here the parent holds its children, so
         registering a per-action context would leak one entry per action for the
         life of the run.
         """
         derived = RunContext()
         derived.cancelled = self.cancelled
+        derived._children = self._children
         derived._values = {**self._values, key: value}
         return derived
 

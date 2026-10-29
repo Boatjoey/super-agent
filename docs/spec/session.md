@@ -114,7 +114,7 @@ assistant(tool_calls)
 | `StoreMemory` | `store/memory.py` | 后端：会话存储自己的 `_memory.json` |
 | `FileMemory` | `store/memory.py` | 后端：用户指定路径的 JSON 数组 |
 | `openMemory` | `app/memory.py` | 按设置挑选后端，未知后端是启动失败 |
-| `MemoryController` | `app/memory.py` | 开关的运行时一面：改状态、写入设置、重建上下文 |
+| `MemoryController` | `application/memory.py`（构造兼容入口见模块职责） | 开关的运行时一面：改状态、写入设置、重建上下文 |
 
 设置在 `~/.superagent/settings.json` 的 `memory` 块：
 

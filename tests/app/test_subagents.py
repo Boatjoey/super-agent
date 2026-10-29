@@ -23,9 +23,12 @@ from super_agent import llm
 from super_agent.app.agents import AgentProfile
 from super_agent.app.subagents import subagentTool
 from super_agent.runtime import PermissionRules, ToolCall
+from super_agent.runtime.engine import new_engine_with_executor
 from super_agent.runtime.protocol.run_context import live_context
+from super_agent.runtime.session import Session, new_session
 from super_agent.tools.sandbox import SANDBOX_MODE_OFF, default_sandbox_config
 from super_agent.workspace import new as newWorkspace, new_default_context
+from tests.fakes.execution import StaticReplyExecutor
 
 
 def git(repo: str, *arguments: str) -> None:
@@ -64,22 +67,16 @@ class ScriptedDelegation(subagentTool):
         self.outcome = outcome
         self.childCwd = ""
 
-    async def runChild(
-        self,
-        ctx: Any,
-        profile: AgentProfile,
-        prompt: str,
-        cwd: str,
-        model: Any,
-        depth: int,
-    ) -> str:
-        del ctx, profile, prompt, model, depth
+    async def child(self, profile: AgentProfile, prompt: str, cwd: str, model: Any) -> Session:
+        del profile, prompt, model
         self.childCwd = cwd
         if self.outcome == "failed":
             raise RuntimeError("the child could not finish")
         if self.outcome == "cancelled":
             raise asyncio.CancelledError()
-        return f"Child session: child-1\nWorkspace: {cwd}\n\ndone"
+        engine = new_engine_with_executor(StaticReplyExecutor("done"), None)
+        await engine.ready()
+        return new_session(engine)
 
 
 def delegation(repo: str, outcome: str) -> ScriptedDelegation:

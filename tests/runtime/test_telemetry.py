@@ -13,7 +13,7 @@ import pytest
 from super_agent.runtime import machine
 from super_agent.runtime.engine import new_engine_with_executor
 from super_agent.runtime.protocol.run_context import live_context
-from super_agent.runtime.telemetry import telemetry
+from super_agent.store import telemetry
 from tests.fakes.execution import StaticReplyExecutor
 
 

@@ -144,7 +144,7 @@ while True:
 
 ## 遥测
 
-`runtime/telemetry` 以同步方式写入转移、动作和运行的 JSON Lines 记录。记录携带运行与动作的关联 ID、工具组件名、耗时、错误及估算的模型 token 数。`telemetry.log_path` 选择输出位置。token 数只是估算值，项目不执行分词；限制见 `session.md`。
+运行时通过遥测出站契约以同步方式记录转移、动作和运行的 JSON Lines 记录。记录携带运行与动作的关联 ID、工具组件名、耗时、错误及估算的模型 token 数。具体文件后端与路由的映射见[模块职责](packages.md#端口与适配器映射)，输出位置配置见[配置规范](config.md)。token 数只是估算值，项目不执行分词；限制见 `session.md`。
 
 ## 术语
 

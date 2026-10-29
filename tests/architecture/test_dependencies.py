@@ -8,10 +8,10 @@ Rules. ``super_agent`` is the import root, so ``super-agent/tui`` becomes
 ``super_agent.tui``.
 
 R1  ``tui/**``                       must not import ``super_agent.runtime*``
-R2  ``llm/``, ``tools/`` (top level) ``super_agent.runtime*`` may only be ``...protocol``
+R2  ``llm/**``, ``tools/**`` ``super_agent.runtime*`` may only be ``...protocol``
 R3  ``store/``, ``workspace/``,      ``super_agent.runtime*`` may only be ``...protocol``
     ``project/``                     or ``...session``
-R4  ``runtime/`` facade (top level)  must not import store, workspace, llm, tools, tui
+R4  ``runtime/**``  must not import store, workspace, llm, tools, tui
 R5  ``runtime/session/**``           must not import store, tui, ``os``, ``pathlib``
 R6  ``tui/<feature>/**``             must not import a sibling feature
 R7  ``runtime/machine/**`` (new)     must not import I/O modules or anything outside the pure core
@@ -19,6 +19,8 @@ R8  ``tui/<feature>/**`` (new)       must not import the root ``super_agent.tui`
 R9  ``tui/<feature>/**`` (new)       must not import the composition root ``super_agent.app``
 R10 ``web/**`` (new)                 must not import runtime, tui, app, or a concrete adapter
 R11 ``frontend/**`` (new)            must not import anything but itself
+R12 ``application/**``              must use inward contracts, not adapters or direct external I/O
+R13 ``tui/**``                      must use the frontend contract, not application internals
 
 Two Python-shaped adjustments, both narrowing a hole rather than widening a
 permission:
@@ -65,7 +67,7 @@ PURE_CORE_ALLOWLIST = frozenset(
 )
 
 #: Adapters the ``runtime`` facade must not know about (R4).
-CONCRETE_ADAPTERS = ("store", "workspace", "llm", "tools", "tui")
+CONCRETE_ADAPTERS = ("store", "workspace", "llm", "tools", "tui", "web", "project", "app", "application", "frontend")
 
 #: Standard-library modules that would give the pure core an imperative shell (R7).
 IO_MODULES = (
@@ -226,31 +228,21 @@ def _rule_violations(
 ) -> list[tuple[str, str]]:
     """Apply every rule to one imported module name for one file."""
     found: list[tuple[str, str]] = []
-    top_level_file = not nested
 
     # R1: the interactive CLI is an inbound adapter; it talks to its port.
     if in_tui and _within(name, "super_agent.runtime"):
         found.append(("R1", "interactive CLI must depend on its Conversation port, not runtime"))
 
-    # R2 and R3: top-level adapters see runtime ports, never the machine or engine.
-    if (
-        top_level_file
-        and top in ("llm", "tools")
-        and _within(name, "super_agent.runtime")
-        and not _within(name, PROTOCOL_PACKAGE)
-    ):
+    # R2 and R3: adapters at every depth see runtime ports, never the machine or engine.
+    if top in ("llm", "tools") and _within(name, "super_agent.runtime") and not _within(name, PROTOCOL_PACKAGE):
         found.append(("R2", f"{top} may depend only on runtime ports"))
-    if top_level_file and top in ("store", "workspace", "project"):
+    if top in ("store", "workspace", "project"):
         ports = (_within(name, PROTOCOL_PACKAGE), _within(name, SESSION_PACKAGE))
         if _within(name, "super_agent.runtime") and not any(ports):
             found.append(("R3", f"{top} may depend only on runtime ports"))
 
-    # R4: the runtime facade must not know the adapters that wrap it.
-    if (
-        top == "runtime"
-        and top_level_file
-        and any(_within(name, f"super_agent.{adapter}") for adapter in CONCRETE_ADAPTERS)
-    ):
+    # R4: the entire runtime must not know the adapters that wrap it.
+    if top == "runtime" and any(_within(name, f"super_agent.{adapter}") for adapter in CONCRETE_ADAPTERS):
         found.append(("R4", "runtime facade must not depend on concrete adapters"))
 
     # R5: the session use-case layer reaches storage and the filesystem through ports.
@@ -280,7 +272,7 @@ def _rule_violations(
 
     # R9: the composition root wires the TUI, so a feature never reaches back for
     # it. ``app`` imports ``tui``, never the other way round.
-    if feature is not None and _within(name, "super_agent.app"):
+    if in_tui and _within(name, "super_agent.app"):
         found.append(("R9", "CLI features must not import the composition root"))
 
     # R10: the web adapter is a transport over the front-end contract. It may not
@@ -296,6 +288,25 @@ def _rule_violations(
     # would be an adapter, and every front end would be talking to the machine.
     if top == "frontend" and name.startswith("super_agent.") and not _within(name, "super_agent.frontend"):
         found.append(("R11", "the front-end contract may depend only on itself"))
+
+    # R12: application controllers see only inside contracts and values.
+    if top == "application":
+        allowed = ("application", "runtime", "frontend", "errors", "jsonutil", "timeutil")
+        if name.startswith("super_agent.") and not any(_within(name, f"super_agent.{item}") for item in allowed):
+            found.append(("R12", "application use cases must depend on inward contracts"))
+        if any(
+            _within(name, module)
+            for module in ("os", "pathlib", "subprocess", "socket", "http", "urllib", "shutil", "io")
+        ):
+            found.append(("R12", "application external operations must use outbound ports"))
+        if name == "super_agent.runtime":
+            found.append(("R12", "application must use narrow runtime modules"))
+
+    # R13: the terminal cannot reach application internals or other adapters.
+    if in_tui and name.startswith("super_agent."):
+        allowed = ("tui", "frontend", "errors", "jsonutil", "timeutil")
+        if not any(_within(name, f"super_agent.{item}") for item in allowed):
+            found.append(("R13", "terminal must depend on the frontend contract"))
 
     return found
 
@@ -388,6 +399,14 @@ _VIOLATION_CASES: dict[str, tuple[str, str]] = {
     "R9": ("super_agent/tui/commands/model.py", "from super_agent.app import tui_adapter"),
     "R10": ("super_agent/web/routes.py", "from super_agent.runtime.session import Session"),
     "R11": ("super_agent/frontend/wire.py", "from super_agent.runtime.protocol import types"),
+    "R2-nested": ("super_agent/tools/mcp/client.py", "from super_agent.runtime.engine import engine"),
+    "R3-nested": ("super_agent/store/backend/file.py", "from super_agent.runtime.machine import state"),
+    "R4-nested": ("super_agent/runtime/engine/loop.py", "from super_agent.app import session"),
+    "R9-root": ("super_agent/tui/actions.py", "from super_agent.app import session"),
+    "R12-adapter": ("super_agent/application/agents.py", "from super_agent.llm import factory"),
+    "R12-io": ("super_agent/application/agents.py", "from pathlib import Path"),
+    "R13": ("super_agent/tui/actions.py", "from super_agent.application import agents"),
+    "R12-facade": ("super_agent/application/agents.py", "from super_agent import runtime"),
 }
 
 
@@ -426,6 +445,8 @@ def test_rules_accept_the_corrective_alternative(tmp_path: Path) -> None:
         "R9": ("super_agent/tui/commands/model.py", "from super_agent.tui.commands import ports"),
         "R10": ("super_agent/web/routes.py", "from super_agent.frontend import wire"),
         "R11": ("super_agent/frontend/wire.py", "from super_agent.frontend.view import Message"),
+        "R12": ("super_agent/application/agents.py", "from super_agent.runtime.protocol.types import Model"),
+        "R13": ("super_agent/tui/actions.py", "from super_agent.frontend import ports"),
     }
     for label, (relative, body) in corrections.items():
         case_root = tmp_path / f"ok-{label}"

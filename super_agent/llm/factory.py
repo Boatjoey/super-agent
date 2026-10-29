@@ -8,30 +8,17 @@ a model do not import an SDK before the first request.
 
 from __future__ import annotations
 
-import dataclasses
 import functools
 import importlib
 from collections.abc import Callable
 from typing import Final, cast
 
-from super_agent.jsonutil import json_field
+from super_agent.runtime.protocol.provider import ProviderConfig
 from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import Message, Model, ModelResponse, StreamChunk, ToolSpec
 
 #: The provider used when a caller names none.
 DEFAULT_PROVIDER: Final[str] = "deepseek"
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class ProviderConfig:
-    """How one provider is configured.
-
-    Field names and JSON keys are fixed by the settings file.
-    """
-
-    base_url: str = dataclasses.field(default="", metadata=json_field(name="base_url"))
-    api_key: str = dataclasses.field(default="", metadata=json_field(name="api_key"))
-    model: str = dataclasses.field(default="", metadata=json_field(name="model"))
 
 
 #: Builds the model for one provider.

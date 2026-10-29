@@ -21,14 +21,15 @@
 - `frontend` 是前端契约：驱动端端口（含 MCP、附件、工作区查询、扩展、记忆）、展示 DTO、通知集合、通道与取消值，以及契约的 JSON 投影。两个前端使用同一份契约；它不导入运行时、不导入任何适配器，只依赖自身。
 - `tui` 负责 `TerminalApplication` 及其不依赖框架的交互模型。Rich 仅限于此适配器；视图保持纯函数；它只通过 `Conversation` 端口和展示 DTO 依赖应用，并按终端既有名称重新导出契约中的展示值。
 - `web` 是另一个前端适配器，只依赖 `frontend`，把端口承载为本机 HTTP 与服务器推送事件；不得导入运行时、`tui` 或组合根。
-- `app` 是组合根，负责创建依赖，并在唯一一处把运行时值转换为前端契约的值。
+- `application` 承载跨运行用例的应用控制器及前端契约实现；具体落点见[六边形边界的代码约束](#六边形边界的代码约束)。
+- `app` 包含组合根、启动配置适配与设施桥接；不能把整个包都视作组合根，逐文件归属见下表。
 - `llm`、`tools`、`store`、`project` 和 `workspace` 是顶层适配器。`llm` 和 `tools` 可以导入 `runtime/protocol`，不得导入根 `runtime` 门面；`store` 和 `workspace` 还可以导入声明其端口的 `runtime/session`。
 
 适配器在边界将第三方 SDK 值转换为 `runtime/protocol` 类型，SDK 对象不得进入状态机。
 
 导入 `llm` 或构造内建模型时，不得导入模型服务商 SDK。选中的服务商适配器及 SDK 在首次模型请求时加载，避免无关服务商拖慢终端启动。
 
-`tui` 不得导入 `runtime`，运行时也不得导入 `tui`。在 app 边界的 `app/conversation_adapter.py` 中，运行时状态被转换为仅用于展示的 `frontend.AgentStatus`；两个前端都不拥有运行时状态枚举。`app/tui_adapter.py` 只保留历史名称的重新导出，不含实现。
+`tui` 不得导入 `runtime`，运行时也不得导入 `tui`。在应用边界的 `application/presentation.py` 中，运行时状态被转换为仅用于展示的 `frontend.AgentStatus`；两个前端都不拥有运行时状态枚举。`app/tui_adapter.py` 只保留历史名称的重新导出，不含实现。
 
 根 `runtime` 包是兼容门面，按 `api_model.py`、`api_machine.py`、`api_execution.py`、`api_engine.py` 和 `api_session.py` 组织。它公开会话持久化端口和元数据，不导入具体适配器。内部包必须依赖拥有该类型的窄接口包，而不是这个门面。
 
@@ -42,7 +43,7 @@
 
 | 方向 | 端口 | 契约位置 | 内侧 | 外侧 |
 |---|---|---|---|---|
-| 入站 | 快照、配置、轮次、会话、权限、Agent、记忆、服务商、MCP、附件、工作区查询、扩展 | `frontend/ports.py` | `app/conversation_adapter.py` | `tui`、`web` |
+| 入站 | 快照、配置、轮次、会话、权限、Agent、记忆、服务商、MCP、附件、工作区查询、扩展 | `frontend/ports.py` | `application/conversation.py` | `tui`、`web` |
 | 出站 | 模型 | `runtime/protocol/types.py` | `runtime/execution` | `llm` |
 | 出站 | 工具 | `runtime/protocol/types.py` | `runtime/execution` | `tools` |
 | 出站 | 会话持久化 | `runtime/session/repository.py` | `runtime/session` | `store` |
@@ -50,9 +51,63 @@
 | 出站 | 跨会话记忆 | `runtime/session/memory.py` | `runtime/session` | `store/memory.py` |
 | 出站 | 附件读取与导出（可选） | `runtime/session/attachments.py`、`export.py` | `runtime/session` | `workspace` |
 
+应用设施的端口映射如下；方法组可共用一个设施对象，不要求每行单独创建服务。
+
+| 方向 | 契约 | 调用侧 | 适配器实现 |
+|---|---|---|---|
+| 出站 | `application/ports.ModelResolver` | `application/agents.py` | `app/agents.AgentResourcesAdapter` |
+| 出站 | `application/ports.InstructionSource` | `application/agents.py` | 同上 |
+| 出站 | `application/ports.ProviderPreferences` | `application/agents.py` | 同上 |
+| 出站 | `application/ports.MemoryPreferences` | `application/memory.py` | `app/memory.MemoryPreferencesAdapter` |
+| 出站 | `application/ports.MCPBackend` | `application/mcp.py` | `app/mcp.MCPBackendAdapter` |
+| 出站 | `application/ports.DelegationEnvironment` | `application/delegation.py` | `app/subagents.subagentTool`，同时将 `delegate` 工具调用转交应用用例 |
+| 出站 | `application/workflows.Runner`（工具端口的扩展：支持绕过钩子的直接调用） | `application/workflows.py` | 工具注册表与钩子包装 |
+| 出站 | `runtime/protocol/telemetry.Recorder` | `runtime/engine` 经遥测路由 | `store/telemetry.py` 的 JSONL 后端 |
+
+`ModelResolver`、`InstructionSource` 和 `ProviderPreferences` 是三个独立契约，由同一个设施对象实现；模型与指令返回内侧值，不返回服务商 SDK 或磁盘文件对象。档案提示词的上下文组装由 `application/agents.withAgentProfile` 拥有；指令适配器返回基础指令消息。MCP 事务编排归 `application/mcp.py`，连接、目录更新与配置文件 I/O 归其后端。`DelegationEnvironment.child` 是可在运行期间调用的组合工厂，返回已构造的内侧会话服务；委派执行规则归应用层。遥测使用进程级路由，组合根安装后端。
+
+业务行为分别见[运行时配置](config.md#运行时配置)、[MCP](tools.md#mcp)、[委派](session.md#委派)与[遥测](runtime.md#遥测)。
+
 终端不再单独声明 `MemoryPort`；两个前端使用前端契约里的同一个端口。
 
 人工审批不在此表：请求由应用发起，回答经 `TurnPort.approve` 入站，因此横跨两侧。`ApprovalWaiter`、`Closer`、`WorkspaceContext` 与适配器内部的 `Tool`、`command_sandbox`、`KeyReader` 等接口不满足边界判据，不算端口。
+
+## 六边形边界的代码约束
+
+职责判据与拆分原则由[软件架构](../design/software-architecture.md#职责的严格判据)定义。本节规定实现落点：
+
+| 层次 | 代码落点 | 允许的依赖 |
+|---|---|---|
+| 领域与运行用例 | `runtime/machine`、`runtime/execution`、`runtime/engine`、`runtime/session` | 内侧运行模块、端口与纯值辅助模块 |
+| 应用控制器 | `application` | 本包、`runtime` 的窄接口、`frontend` 契约与纯值辅助模块 |
+| 入站契约 | `frontend` | 本包 |
+| 出站契约 | `runtime/protocol`、`runtime/session` 的端口声明、`application/ports.py` | 内侧值类型与标准库 |
+| 前端适配器 | `tui`、`web` | `frontend` 与各自包内模块；终端还可使用纯值辅助模块 |
+| 基础设施适配器 | `llm`、`tools`、`store`、`workspace`、`project`，以及 `app` 中的配置与设施桥接模块 | 所实现的内侧契约与值、必要的其他基础设施 |
+| 组合根与兼容入口 | `app/session.py`、`app/__init__.py`、`__main__.py` 及 `app` 的控制器构造入口 | 应用控制器与具体适配器 |
+
+`application` 和整个 `runtime` 不得导入 `app`、`llm`、`tools`、`store`、`workspace`、`project`、`tui` 或 `web`。应用控制器不得直接导入文件系统、网络或进程模块；资源通过构造参数注入。适配器的运行时依赖限制递归覆盖子目录；终端所有目录均不得回调组合根。
+
+`application/conversation.py` 实现前端入站契约，拥有流生命周期、排队轮次推进及审批关联；`application/presentation.py` 只执行运行值到展示值的转换。`app/conversation_adapter.py` 只保留历史导入名，不承载用例实现。
+
+`application/agents.py`、`memory.py`、`mcp.py`、`workflows.py`、`delegation.py` 分别拥有档案切换、记忆开关、MCP 变更补偿、扩展工作流和委派用例。模型创建、指令读取、设置写入、MCP 连接与工具安装、子会话和工作树构造位于 `app` 的对应设施实现；这些设施通过 `application/ports.py` 契约注入。
+
+`application/values.py` 拥有应用档案、有效扩展集合和 MCP 配置值；`runtime/protocol/provider.py` 拥有服务商配置值。原位置可重新导出同一个类型，不能再声明副本。遥测记录由内侧记录契约接收，JSONL 文件 I/O 位于 `store` 适配器。
+
+`app` 中保留代码的归属如下：
+
+| 文件 | 角色 | 允许保留的职责 |
+|---|---|---|
+| `session.py`、`__init__.py` | 组合根与公共启动入口 | 创建并注入模型、工具、存储、控制器与关闭函数；转发公共构造函数 |
+| `config.py`、`extensions.py`、`instructions/` | 启动配置与文件适配器 | 加载、解析、校验与保存本地配置、指令及扩展，把结果转换成内侧值 |
+| `agents.py`、`memory.py`、`mcp.py` | 出站设施及兼容构造入口 | 实现上表出站端口；历史控制器构造函数只注入设施，不复制用例 |
+| `subagents.py` | 委派设施与工具接入 | 将工具调用交给委派用例，构造子会话依赖、工作树与工具目录 |
+| `workflows.py`、`conversation_adapter.py`、`tui_adapter.py` | 兼容导出 | 重新导出同一个实现，不另设业务流程 |
+| `system_prompt.py` | 启动上下文素材 | 内置提示词常量 |
+
+`application/agents.py` 的模型路由与工具筛选、`application/workflows.py` 的钩子包装，是内部业务协作对象，不能仅因实现了 `Model` 或 `ToolRunner` 就认定为外侧适配器；具体模型和工具 I/O 仍由注入的出站实现承担。`runtime/execution/policy.py` 中的 `os.path` 只用于路径字符串计算，不读取文件；它不代表核心可以访问工作环境。
+
+依赖检查同时保留合法依赖的正例和越界导入的反例，覆盖嵌套适配器、应用层与整个运行时，防止检查只扫描到顶层文件。
 
 ## 文件分工
 
@@ -109,11 +164,11 @@ Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归
 - `frontend/transport.py`：`Channel` 与 `Cancellation`；`frontend/approval.py`：审批决定值。
 - `frontend/failure.py`：可展示的失败值 `Failure` 与 `CANCELLED`/`FAILED` 分类，含从异常转换的入口。
 - `frontend/wire.py`：契约的 JSON 投影，供 Web 事件使用。
-- `app/conversation_adapter.py`：唯一实现，负责运行时到展示值的映射与一轮的通道桥接。
+- 前端入站契约的应用实现和展示转换见[六边形边界的代码约束](#六边形边界的代码约束)；`app/conversation_adapter.py` 和 `app/tui_adapter.py` 仅重新导出兼容名称。
 - `web/hub.py` 事件分发、`web/turns.py` 单轮槽位、`web/routes.py` 路由表、`web/server.py` HTTP 与事件流、`web/assets.py` 随包静态文件。
 - `web/static/index.html` 页面语义结构与可访问性容器、`web/static/style.css` 设计令牌、组件和响应式布局、`web/static/favicon.svg` 站点图标、`web/static/app.ts` 快照重建、事件消费、视图渲染与用户操作的 TypeScript 源码；`web/static/app.js` 是其随包发布的浏览器构建产物。静态前端不拥有业务规则，也不引入运行时或模型依赖。
 
-`project` 解析选中的项目，与文件系统访问策略相互独立。`workspace.Context` 是工作区根目录和 cwd 的、独立于进程的唯一权威来源；`workspace.Workspace` 将其适配到会话检查点、附件、导出和工作区恢复端口，包括对旧版保存路径的一次性规范化升级。`store/store.py` 写入和回放持久化会话记录；其保证的持久化顺序见 `session.md`。`store/memory.py` 提供跨会话记忆的两个文件后端（会话存储自己的文件、用户指定路径的文件），实现 `runtime/session/memory.py` 声明的端口。`app/mcp.py` 协调 MCP 生命周期、动态工具注册、回滚和配置的原子持久化。`app/memory.py` 按设置挑选记忆后端，并把开关的变化写回设置。
+`project` 解析选中的项目，与文件系统访问策略相互独立。`workspace.Context` 是工作区根目录和 cwd 的、独立于进程的唯一权威来源；`workspace.Workspace` 将其适配到会话检查点、附件、导出和工作区恢复端口，包括对旧版保存路径的一次性规范化升级。`store/store.py` 写入和回放持久化会话记录；其保证的持久化顺序见 `session.md`。`store/memory.py` 提供跨会话记忆的两个文件后端（会话存储自己的文件、用户指定路径的文件），实现 `runtime/session/memory.py` 声明的端口。`app/mcp.py` 连接 MCP 管理器、工具注册表与设置文件；`app/memory.py` 挑选记忆后端并写入记忆设置。事务补偿和开关用例位于应用层，见[六边形边界的代码约束](#六边形边界的代码约束)。
 
 
 ## 工作区类型映射

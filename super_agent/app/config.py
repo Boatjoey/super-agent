@@ -31,6 +31,7 @@ from typing import Any, Final, cast
 from super_agent import jsonutil, project
 from super_agent.app.extensions import Extensions, ExtensionSettings, loadExtensions
 from super_agent.app.instructions import Bundle, load as loadInstructions
+from super_agent.application.values import MCPServerSettings as MCPServerSettings
 from super_agent.jsonutil import json_field
 from super_agent.llm import ProviderConfig
 from super_agent.runtime import (
@@ -144,18 +145,6 @@ class LSPServerSettings:
     args: tuple[str, ...] = dataclasses.field(default=(), metadata=json_field(name="args"))
     extensions: tuple[str, ...] = dataclasses.field(default=(), metadata=json_field(name="extensions"))
     language_id: str = dataclasses.field(default="", metadata=json_field(name="language_id"))
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class MCPServerSettings:
-    """One entry of ``mcp_servers``."""
-
-    command: str = dataclasses.field(default="", metadata=json_field(name="command"))
-    args: tuple[str, ...] = dataclasses.field(default=(), metadata=json_field(name="args"))
-    env: dict[str, str] = dataclasses.field(default_factory=dict[str, str], metadata=json_field(name="env"))
-    cwd: str = dataclasses.field(default="", metadata=json_field(name="cwd"))
-    connect_timeout_seconds: int = dataclasses.field(default=0, metadata=json_field(name="connect_timeout_seconds"))
-    call_timeout_seconds: int = dataclasses.field(default=0, metadata=json_field(name="call_timeout_seconds"))
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

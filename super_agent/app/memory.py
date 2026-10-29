@@ -19,7 +19,8 @@ from super_agent.app.config import (
     load_settings_file,
     save_settings_file,
 )
-from super_agent.runtime import Session
+from super_agent.application.memory import MemoryController as ApplicationMemoryController
+from super_agent.runtime.session import Session
 from super_agent.runtime.session.memory import Memory, Switch
 from super_agent.store.memory import FileMemory, StoreMemory
 from super_agent.store.store import Store
@@ -69,40 +70,16 @@ def setMemoryEnabled(enabled: bool, path: str) -> None:
     save_settings_file(path, dataclasses.replace(settings, memory=memory))
 
 
-class MemoryController:
-    """The memory switch as the application sees it: state, persistence, effect.
+class MemoryPreferencesAdapter:
+    def __init__(self, path: str) -> None:
+        self.path = path
 
-    The controller holds the same switch the session holds, so turning memory
-    off is one write and one rebuild of the conversation context — the stored
-    lines are left alone, and turning it back on brings them back.
-    """
+    def set_enabled(self, enabled: bool) -> None:
+        setMemoryEnabled(enabled, self.path)
 
-    __slots__ = ("_path", "_session", "switch")
+
+class MemoryController(ApplicationMemoryController):
+    """Compatibility constructor that injects settings persistence."""
 
     def __init__(self, switch: Switch, session: Session | None = None, path: str = "") -> None:
-        self.switch = switch
-        self._session = session
-        self._path = path
-
-    @property
-    def enabled(self) -> bool:
-        """Whether the memory is in use right now."""
-        return self.switch.enabled
-
-    @property
-    def backend(self) -> str:
-        """Where the lines live, by name."""
-        return self.switch.name
-
-    def items(self) -> list[str]:
-        """The stored lines, empty while the memory is off."""
-        return self.switch.load()
-
-    async def setEnabled(self, enabled: bool) -> None:
-        """Turn the memory on or off, persist it, and rebuild the context."""
-        self.switch.setEnabled(enabled)
-        if self._path != "":
-            setMemoryEnabled(enabled, self._path)
-        session = self._session
-        if session is not None:
-            await session.refresh_memory()
+        super().__init__(switch, session, MemoryPreferencesAdapter(path) if path else None)

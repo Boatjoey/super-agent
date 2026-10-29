@@ -33,7 +33,7 @@
 
 ## 运行时配置
 
-服务商凭据与模型可在运行中修改，由终端 `/config` 与 Web 的 `GET/POST /api/providers` 提供。修改写入 `settings.json`（重启后仍生效）并立即重建当前模型，使新凭据在下一轮生效。凭据缺失与沙箱降级作为启动状态暴露在 `ConfigView` 的 `credential_missing` 与 `sandbox_downgraded`，前端据此提示而非静默。
+服务商凭据与模型可在运行中修改，由终端 `/config` 与 Web 的 `GET/POST /api/providers` 提供。修改先写入 `settings.json`（重启后仍生效），成功后更新内存配置并立即重建当前模型，使新凭据在下一轮生效；保存失败时向调用方报告错误，内存中的服务商配置保持原值。凭据缺失与沙箱降级作为启动状态暴露在 `ConfigView` 的 `credential_missing` 与 `sandbox_downgraded`，前端据此提示而非静默。
 
 ## Agent 配置
 

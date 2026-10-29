@@ -43,21 +43,20 @@ from super_agent.app.mcp import MCPController, new_mcp_controller
 from super_agent.app.memory import MemoryController, openMemory
 from super_agent.app.subagents import subagentTool
 from super_agent.app.workflows import WorkflowController
+from super_agent.application.workflows import toolHooks as toolHooks
 from super_agent.errors import JoinedError
 from super_agent.runtime import (
     DefaultScheduledActionExecutor,
     Metadata,
     Session,
-    ToolCall,
-    ToolSpec,
     create_persistent_session,
     new_engine_with_executor_and_policy,
     new_policy,
-    telemetry,
 )
-from super_agent.runtime.protocol.run_context import RunContext, live_context
+from super_agent.runtime.protocol.run_context import live_context
 from super_agent.runtime.protocol.types import ToolRunner
 from super_agent.runtime.session.memory import withMemoryContext
+from super_agent.store import telemetry
 from super_agent.tools import lsp as lsptools, mcp as mcptools
 from super_agent.workspace import Context, new as newWorkspace
 
@@ -249,61 +248,6 @@ async def new_session_with_extensions(
         if telemetryOwned:
             telemetry.close()
         raise
-
-
-class toolHooks:
-    """Runs the ``pre_tool`` and ``post_tool`` extension hooks around a call.
-
-    The observer port is a synchronous callable while a hook runs a command, which
-    is asynchronous, so the ordering the observer exists to guarantee is kept by
-    wrapping the runner instead: the pre-hook finishes before the tool starts, a
-    pre-hook failure
-    aborts the call, and a post-hook failure is appended to the output rather than
-    turning a finished call into a failed one. Hooks run through ``run_direct``, so
-    a hook cannot re-enter the hooks that invoked it.
-    """
-
-    __slots__ = ("_registry", "_workflows")
-
-    def __init__(self, registry: tools.Registry) -> None:
-        self._registry = registry
-        self._workflows: WorkflowController | None = None
-
-    def set_workflows(self, workflows: WorkflowController) -> None:
-        """Install the controller the hooks run through.
-
-        Set after construction because the controller reaches these hooks back for
-        its own queries, so the pair is a cycle.
-        """
-        self._workflows = workflows
-
-    def specs(self) -> list[ToolSpec]:
-        return self._registry.specs()
-
-    async def run(self, ctx: RunContext, call: ToolCall) -> str:
-        """Run ``call`` between the pre-tool and post-tool hooks."""
-        workflows = self._workflows
-        if workflows is not None:
-            await workflows.run_hook(ctx, "pre_tool")
-        result = ""
-        error: BaseException | None = None
-        try:
-            result = await self._registry.run_direct(ctx, call)
-        except BaseException as failure:
-            error = failure
-        if workflows is not None:
-            try:
-                await workflows.run_hook(ctx, "post_tool")
-            except Exception as hookError:
-                if error is None:
-                    result += "\n[post_tool hook failed: " + str(hookError) + "]"
-        if error is not None:
-            raise error
-        return result
-
-    async def run_direct(self, ctx: RunContext, call: ToolCall) -> str:
-        """Run ``call`` without hooks; hooks use this to avoid recursing."""
-        return await self._registry.run_direct(ctx, call)
 
 
 def contextForConfig(cfg: Config) -> Context:

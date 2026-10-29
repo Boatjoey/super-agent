@@ -1,24 +1,20 @@
-"""MCP server lifecycle, dynamic tool registration, and settings persistence.
+"""MCP process, tool catalog and settings infrastructure.
 
-Every mutation is a three-step transaction — change the runtime, change the
-registry, persist — and a failure at any step restores the ones before it, so the
-running session and ``settings.json`` never disagree about which servers exist.
-
-Persistence re-reads the settings file before writing it, so a concurrent edit
-outside the app is not silently overwritten.
+Application transactions live in application.mcp; this module implements their
+individual outbound operations and the compatibility constructor.
 """
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import os
 from collections.abc import Mapping, Sequence
 
 from super_agent import tools
 from super_agent.app.config import MCPServerSettings, load_settings_file, save_settings_file
-from super_agent.errors import JoinedError
-from super_agent.runtime.protocol.run_context import RunContext, live_context
+from super_agent.application.mcp import MCPController as ApplicationMCPController, MCPServerSummary as MCPServerSummary
+from super_agent.runtime.protocol.run_context import RunContext
+from super_agent.runtime.protocol.types import ToolRunner
 from super_agent.tools import mcp as mcptools
 
 __all__ = [
@@ -30,96 +26,33 @@ __all__ = [
 ]
 
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class MCPServerSummary:
-    """One configured server and the tools it contributed."""
-
-    name: str = ""
-    tools: tuple[str, ...] = ()
-
-
-class MCPController:
-    """The application-facing MCP manager.
-
-    The lock is an :class:`asyncio.Lock` and is held across the whole operation:
-    connecting, registering, and persisting have to be atomic together or a
-    rollback could undo somebody else's change.
-    """
-
-    __slots__ = ("_lock", "configs", "manager", "registry", "settingsPath", "workspace")
-
-    def __init__(
-        self,
-        manager: mcptools.Manager,
-        registry: tools.Registry,
-        settingsPath: str,
-        workspace: str,
-        configs: Mapping[str, MCPServerSettings] | None,
-    ) -> None:
+class MCPBackendAdapter:
+    def __init__(self, manager: mcptools.Manager, registry: tools.Registry, settingsPath: str, workspace: str) -> None:
         self.manager = manager
         self.registry = registry
         self.settingsPath = settingsPath
         self.workspace = workspace
-        self.configs = cloneMCPSettings(configs)
-        self._lock = asyncio.Lock()
 
-    def list(self) -> list[MCPServerSummary]:
-        """Every connected server, ordered by name."""
+    def servers(self) -> list[MCPServerSummary]:
         return [MCPServerSummary(name=server.name, tools=tuple(server.tools)) for server in self.manager.servers()]
 
-    async def add(self, ctx: RunContext, name: str, command: str, args: Sequence[str]) -> None:
-        """Connect a server, install its tools, and persist it."""
-        async with self._lock:
-            if name == "" or command == "":
-                raise ValueError("MCP server name and command are required")
-            settings = MCPServerSettings(command=command, args=tuple(args))
-            config = self.serverConfig(name, settings)
-            added = await self.manager.add(ctx, config)
-            try:
-                self.registry.add(*added)
-            except BaseException:
-                await self.manager.remove(name)
-                raise
-            try:
-                self.persist(name, settings)
-            except BaseException:
-                self.registry.remove(*toolNames(added))
-                await self.manager.remove(name)
-                raise
-            self.configs[name] = settings
+    async def connect(self, ctx: RunContext, name: str, settings: MCPServerSettings) -> Sequence[ToolRunner]:
+        return await self.manager.add(ctx, self.serverConfig(name, settings))
 
-    async def remove(self, name: str) -> None:
-        """Disconnect a server, drop its tools, and forget it in settings.
+    async def disconnect(self, name: str) -> Sequence[str]:
+        return await self.manager.remove(name)
 
-        A persistence failure reconnects the server rather than leaving the
-        session without one settings.json says it has.
-        """
-        async with self._lock:
-            settings = self.configs.get(name)
-            if settings is None:
-                raise ValueError("MCP server not found: " + name)
-            names = await self.manager.remove(name)
-            self.registry.remove(*names)
-            try:
-                self.persist(name, None)
-            except BaseException as error:
-                reconnectError: BaseException | None = None
-                try:
-                    added = await self.manager.add(live_context(), self.serverConfig(name, settings))
-                    self.registry.add(*added)
-                except BaseException as failure:
-                    reconnectError = failure
-                raise JoinedError(error, reconnectError) from None
-            del self.configs[name]
+    def install(self, items: Sequence[ToolRunner]) -> None:
+        self.registry.add(*items)
+
+    def uninstall(self, names: Sequence[str]) -> None:
+        self.registry.remove(*names)
 
     async def restart(self, ctx: RunContext, name: str) -> None:
-        """Reconnect a server, replacing its tools in the registry."""
-        async with self._lock:
-            await self.manager.restart(
-                ctx,
-                name,
-                lambda oldNames, replacement: self.registry.replace(oldNames, *replacement),
-            )
+        await self.manager.restart(ctx, name, lambda old, replacement: self.registry.replace(old, *replacement))
+
+    def save(self, name: str, server: MCPServerSettings | None) -> None:
+        self.persist(name, server)
 
     def persist(self, name: str, server: MCPServerSettings | None) -> None:
         """Write one server's settings, or forget it, without touching the rest."""
@@ -147,6 +80,20 @@ class MCPController:
             connect_timeout=float(settings.connect_timeout_seconds),
             call_timeout=float(settings.call_timeout_seconds),
         )
+
+
+class MCPController(ApplicationMCPController):
+    """Compatibility constructor that injects MCP and settings infrastructure."""
+
+    def __init__(
+        self,
+        manager: mcptools.Manager,
+        registry: tools.Registry,
+        settingsPath: str,
+        workspace: str,
+        configs: Mapping[str, MCPServerSettings] | None,
+    ) -> None:
+        super().__init__(MCPBackendAdapter(manager, registry, settingsPath, workspace), configs)
 
 
 def new_mcp_controller(

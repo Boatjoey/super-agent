@@ -17,6 +17,7 @@ import os
 from typing import Final
 
 from super_agent import jsonutil
+from super_agent.application.values import Extensions as Extensions
 from super_agent.jsonutil import json_field
 
 #: The largest extension file that is read, in bytes.
@@ -104,17 +105,6 @@ class PluginManifest:
         default_factory=dict[str, tuple[str, ...]], metadata=json_field(name="hooks")
     )
     skills: tuple[str, ...] = dataclasses.field(default=(), metadata=json_field(name="skills"))
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class Extensions:
-    """Everything the extension roots and settings together provide."""
-
-    commands: dict[str, str] = dataclasses.field(default_factory=dict[str, str])
-    hooks: dict[str, tuple[str, ...]] = dataclasses.field(default_factory=dict[str, tuple[str, ...]])
-    skill_prompt: str = ""
-    skills: tuple[str, ...] = ()
-    plugins: tuple[str, ...] = ()
 
 
 def loadExtensions(settings: ExtensionSettings, cwd: str) -> Extensions:
