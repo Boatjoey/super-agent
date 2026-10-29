@@ -230,25 +230,25 @@ __all__ = [
 ]
 
 
-def new(session: Conversation, info: StartupInfo, *options: Option) -> App:
+def new(conversation: Conversation, info: StartupInfo, *options: Option) -> App:
     """Build the model and wire every feature to the port."""
     styles = default_styles()
     command_model = commands.new(
         commands.Config(cwd=info.cwd, instruction_paths=info.instruction_paths, no_tools=info.no_tools),
         commands.Ports(
-            sessions=session,
-            permissions=session,
-            mcp=session,
-            agents=session,
-            memory=session,
-            workspace=session,
-            extensions=session,
-            providers=session,
+            sessions=conversation,
+            permissions=conversation,
+            mcp=conversation,
+            agents=conversation,
+            memory=conversation,
+            workspace=conversation,
+            extensions=conversation,
+            providers=conversation,
         ),
     )
     app = App(
-        snapshot=session,
-        turnPort=session,
+        snapshot_port=conversation,
+        turn_port=conversation,
         commands=command_model,
         composer=composer.new(
             composerCommands(command_model.palette()),
@@ -267,7 +267,7 @@ def new(session: Conversation, info: StartupInfo, *options: Option) -> App:
                 accent=styles.accent,
             )
         ),
-        attachments=attachments.new(session, styles=attachments.Styles(accent=styles.accent)),
+        attachments=attachments.new(conversation, styles=attachments.Styles(accent=styles.accent)),
         transcript=transcript.Model(welcome=""),
         styles=styles,
         info=info,
@@ -307,7 +307,7 @@ def welcomeString(app: App) -> str:
 
 def refreshSnapshot(app: App) -> None:
     """Re-read conversation state after a command replaced or shrank the transcript."""
-    snapshot = app.snapshot.snapshot()
+    snapshot = app.snapshot_port.snapshot()
     app.agentStatus = snapshot.agent_status
     app.transcript.replace(snapshot.messages)
     app.transcript.set_busy(snapshot.agent_status.busy)

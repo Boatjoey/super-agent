@@ -16,7 +16,7 @@ import dataclasses
 
 from super_agent import frontend
 from super_agent.frontend import (
-    Conversation,
+    AgentInteractionPort,
     ConversationNotification,
     Decision,
     QueuedReceipt,
@@ -50,10 +50,10 @@ class _Pending:
 class TurnRunner:
     """The single turn slot of one session, as a browser sees it."""
 
-    __slots__ = ("_conversation", "_hub", "_pending", "_task")
+    __slots__ = ("_hub", "_interaction", "_pending", "_task")
 
-    def __init__(self, conversation: Conversation, hub: EventHub) -> None:
-        self._conversation = conversation
+    def __init__(self, interaction: AgentInteractionPort, hub: EventHub) -> None:
+        self._interaction = interaction
         self._hub = hub
         self._task: asyncio.Task[None] | None = None
         self._pending: _Pending | None = None
@@ -71,7 +71,7 @@ class TurnRunner:
 
     async def steer(self, text: str) -> SteeringReceipt:
         """Submit an in-turn input, answering with what became of it."""
-        return await self._conversation.steer(text)
+        return await self._interaction.steer(text)
 
     async def queue(self, text: str) -> QueuedReceipt:
         """Queue an input for the next turn, answering with what became of it.
@@ -80,7 +80,7 @@ class TurnRunner:
         a turn running: the port decides, and refuses with a reason when there is
         nothing to queue behind.
         """
-        return await self._conversation.queue(text)
+        return await self._interaction.queue(text)
 
     async def approve(self, decision: str, request_id: str) -> None:
         """Answer the approval ``request_id`` names. A stale answer is refused.
@@ -93,7 +93,7 @@ class TurnRunner:
             raise ValueError(f"unknown approval decision: {decision}")
         if self._pending is None:
             raise NoPendingApproval("no tool call is waiting for a decision")
-        receipt = await self._conversation.approve(Decision(decision), request_id)
+        receipt = await self._interaction.approve(Decision(decision), request_id)
         if receipt.status != frontend.ACCEPTED:
             raise NoPendingApproval(receipt.reason or "the decision answered no pending request")
 
@@ -103,7 +103,7 @@ class TurnRunner:
         if pending is None:
             return
         pending.cancellation.cancel()
-        await self._conversation.cancel()
+        await self._interaction.cancel()
 
     async def wait(self) -> None:
         """Wait for the running turn, if any. Used by tests and by shutdown."""
@@ -117,7 +117,7 @@ class TurnRunner:
         Every reconnect and every turn end sends one of these, which is what lets
         a tab that dropped events rebuild rather than guess.
         """
-        return {"kind": "Snapshot", "snapshot": wire.view_to_json(self._conversation.snapshot())}
+        return {"kind": "Snapshot", "snapshot": wire.view_to_json(self._interaction.snapshot())}
 
     async def _run(self, text: str) -> None:
         """Run the turn to its end, then tell every tab the new state."""
@@ -128,7 +128,7 @@ class TurnRunner:
         consumer = asyncio.create_task(self._forward(notifications))
         failure: frontend.Failure | None = None
         try:
-            failure = await self._conversation.run_turn(text, notifications, pending.cancellation)
+            failure = await self._interaction.run_turn(text, notifications, pending.cancellation)
         except BaseException as unexpected:
             # The port reports failures by returning them; a raise here is a bug,
             # and it must still end the turn for every connected tab rather than

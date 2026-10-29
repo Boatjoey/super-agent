@@ -116,7 +116,7 @@ async def cancelRun(app: App) -> App:
     reports what it dropped on the notification stream, which is what empties the
     footer — this function keeps no queue of its own to clear.
     """
-    err = await app.turnPort.cancel()
+    err = await app.turn_port.cancel()
     if err is not None:
         app.err = str(err)
     if app.cancellation is not None:

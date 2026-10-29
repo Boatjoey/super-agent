@@ -10,8 +10,8 @@ Two front ends, one contract:
 * :mod:`super_agent.tui` renders it in a terminal;
 * :mod:`super_agent.web` carries it over HTTP and server-sent events.
 
-Implementation is supplied by :mod:`super_agent.app.conversation_adapter`, which
-is the only place runtime values are converted into these types.
+Implementation is supplied by :mod:`super_agent.application.conversation`;
+:mod:`super_agent.application.presentation` converts runtime values for display.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ from super_agent.frontend.notifications import (
 )
 from super_agent.frontend.ports import (
     CAPABILITIES as CAPABILITIES,
+    AgentInteractionPort as AgentInteractionPort,
     AgentPort as AgentPort,
     AgentSummary as AgentSummary,
     AttachmentsPort as AttachmentsPort,
@@ -106,6 +107,7 @@ __all__ = [
     "ROLE_USER",
     "STEERING_HELD",
     "WORKFLOW_PROMPTS",
+    "AgentInteractionPort",
     "AgentPort",
     "AgentStatus",
     "AgentStatusChanged",

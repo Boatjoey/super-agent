@@ -5,9 +5,8 @@ editor all read the same snapshot, start the same turn, and send the same three
 answers to an approval; nothing else is shared, and no front end is given the
 runtime's scheduler.
 
-Implementation lives at the composition boundary
-(:mod:`super_agent.app.conversation_adapter`). Type conversion between runtime
-values and these DTOs happens there and nowhere else.
+Implementation lives in :mod:`super_agent.application.conversation`; runtime
+values are converted by :mod:`super_agent.application.presentation`.
 """
 
 from __future__ import annotations
@@ -22,6 +21,7 @@ from super_agent.frontend.transport import Cancellation, Channel
 from super_agent.frontend.view import ApprovalReceipt, ConversationView, QueuedReceipt, SteeringReceipt
 
 __all__ = [
+    "AgentInteractionPort",
     "AgentPort",
     "AgentSummary",
     "AttachmentSummary",
@@ -220,6 +220,10 @@ class TurnPort(Protocol):
         ...
 
 
+class AgentInteractionPort(SnapshotPort, TurnPort, Protocol):
+    """Read the current view and interact with the running submission."""
+
+
 class SessionPort(Protocol):
     """The conversation lifecycle commands operate on."""
 
@@ -359,9 +363,8 @@ class AttachmentsPort(Protocol):
 
 
 class Conversation(
-    SnapshotPort,
+    AgentInteractionPort,
     ConfigPort,
-    TurnPort,
     SessionPort,
     PermissionPort,
     AgentPort,
@@ -377,5 +380,5 @@ class Conversation(
 
     Both front ends use this contract: the terminal renders it in process, the
     Web transport carries it over HTTP and server-sent events. A capability in
-    this bundle is available to both; there is no second, narrower bundle.
+    this bundle is available to both; individual features use narrow ports.
     """

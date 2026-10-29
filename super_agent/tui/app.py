@@ -87,8 +87,8 @@ class ConversationNotificationMsg:
 class App:
     """The composition root and the global router."""
 
-    snapshot: SnapshotPort
-    turnPort: TurnPort
+    snapshot_port: SnapshotPort
+    turn_port: TurnPort
     commands: commands.Model
     composer: ComposerModel
     approval: ApprovalModel

@@ -19,7 +19,7 @@
 - `runtime/execution` 调用出站的模型和工具端口，并承载审批等待。
 - `runtime/session` 提供应用用例，不得包含终端行为，也不得导入 `os` 或 `pathlib`；文件系统访问必须经过端口。
 - `frontend` 是前端契约：驱动端端口（含 MCP、附件、工作区查询、扩展、记忆）、展示 DTO、通知集合、通道与取消值，以及契约的 JSON 投影。两个前端使用同一份契约；它不导入运行时、不导入任何适配器，只依赖自身。
-- `tui` 负责 `TerminalApplication` 及其不依赖框架的交互模型。Rich 仅限于此适配器；视图保持纯函数；它只通过 `Conversation` 端口和展示 DTO 依赖应用，并按终端既有名称重新导出契约中的展示值。
+- `tui` 负责 `TerminalApplication` 及其不依赖框架的交互模型。Rich 仅限于此适配器；视图保持纯函数；它只通过前端端口和展示 DTO 依赖应用，并按终端既有名称重新导出契约中的展示值。
 - `web` 是另一个前端适配器，只依赖 `frontend`，把端口承载为本机 HTTP 与服务器推送事件；不得导入运行时、`tui` 或组合根。
 - `application` 承载跨运行用例的应用控制器及前端契约实现；具体落点见[六边形边界的代码约束](#六边形边界的代码约束)。
 - `app` 包含组合根、启动配置适配与设施桥接；不能把整个包都视作组合根，逐文件归属见下表。
@@ -71,6 +71,16 @@
 终端不再单独声明 `MemoryPort`；两个前端使用前端契约里的同一个端口。
 
 人工审批不在此表：请求由应用发起，回答经 `TurnPort.approve` 入站，因此横跨两侧。`ApprovalWaiter`、`Closer`、`WorkspaceContext` 与适配器内部的 `Tool`、`command_sandbox`、`KeyReader` 等接口不满足边界判据，不算端口。
+
+## 前端端口的组合与使用
+
+`frontend/ports.py` 保留细粒度端口，以 `typing.Protocol` 声明组合接口；公开端口由 `frontend/__init__.py` 重新导出，不另建平行契约。
+
+`AgentInteractionPort` 组合 `SnapshotPort` 与 `TurnPort`，不重新声明方法。`Conversation` 组合该接口与其余现有细粒度端口，继续提供完整前端契约；`SnapshotPort`、`TurnPort` 仍可独立使用，记忆、附件与工作区端口保持独立。
+
+`web/turns.py` 的 `TurnRunner` 仅依赖 `AgentInteractionPort`，参数及成员命名为 `interaction`、`_interaction`，表达其交互能力范围。完整前端组合入口仍可持有 `Conversation`。`tui/app.py` 的 `App` 分别持有 `snapshot_port` 与 `turn_port`，区别端口对象和读取的快照值；终端构造入口中的完整契约对象命名为 `conversation`，避免与核心 Session 混淆。
+
+`application/conversation.py` 的 `ConversationAdapter` 通过结构化类型实现这些端口，无须显式继承，也不为组合端口拆分实现。应用职责仍按[六边形边界的代码约束](#六边形边界的代码约束)维护；兼容要求见[交互端口兼容性](application-interface.md#交互端口兼容性)。
 
 ## 六边形边界的代码约束
 

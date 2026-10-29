@@ -316,3 +316,33 @@ class AwaitingConversation(FakeConversation):
     async def queue(self, text: str) -> frontend.QueuedReceipt:
         self.queued.append(text)
         return frontend.QueuedReceipt.queued(f"queue-{len(self.queued)}")
+
+
+class InteractionOnly:
+    """Expose only interaction capabilities from a scripted conversation."""
+
+    def __init__(self, conversation: FakeConversation) -> None:
+        self._conversation = conversation
+
+    def snapshot(self) -> frontend.ConversationView:
+        return self._conversation.snapshot()
+
+    async def run_turn(
+        self,
+        text: str,
+        notifications: frontend.Channel[frontend.ConversationNotification],
+        cancellation: frontend.Cancellation,
+    ) -> frontend.Failure | None:
+        return await self._conversation.run_turn(text, notifications, cancellation)
+
+    async def steer(self, text: str) -> frontend.SteeringReceipt:
+        return await self._conversation.steer(text)
+
+    async def queue(self, text: str) -> frontend.QueuedReceipt:
+        return await self._conversation.queue(text)
+
+    async def approve(self, decision: frontend.Decision, request_id: str = "") -> frontend.ApprovalReceipt:
+        return await self._conversation.approve(decision, request_id)
+
+    async def cancel(self) -> frontend.Failure | None:
+        return await self._conversation.cancel()

@@ -136,7 +136,7 @@ async def updateKey(app: App, key: str) -> tuple[App, tuple[runtime.Command[Msg]
         _, decision, submitted = app.approval.update(key)
         if submitted:
             app.transcript.clear_streaming()
-            receipt = await app.turnPort.approve(decision, app.approvalRequestID)
+            receipt = await app.turn_port.approve(decision, app.approvalRequestID)
             if receipt.status != ACCEPTED:
                 # The decision answered nothing: the request it named is gone, or a
                 # second click raced the first. Saying so is the point — silently
@@ -288,7 +288,7 @@ async def queueInput(app: App, text: str) -> tuple[App, tuple[runtime.Command[Ms
     if commands.is_command(text):
         app.err = "Slash commands are unavailable while a turn is running"
         return app, ()
-    receipt = await app.turnPort.queue(text)
+    receipt = await app.turn_port.queue(text)
     if receipt.status != QUEUED:
         app.err = f"Not queued: {receipt.reason}"
         app.status = ""
@@ -311,7 +311,7 @@ async def steerInput(app: App, text: str) -> tuple[App, tuple[runtime.Command[Ms
     if commands.is_command(text):
         app.err = "Slash commands are unavailable while a turn is running"
         return app, ()
-    receipt = await app.turnPort.steer(text)
+    receipt = await app.turn_port.steer(text)
     if receipt.status != STEERING_HELD:
         app.err = f"Steering not accepted: {receipt.reason}"
         return app, ()
@@ -376,7 +376,7 @@ def runTurn(
     """The command that runs the submission and reports how it ended."""
 
     async def run() -> Msg:
-        err = await app.turnPort.run_turn(text, notifications, cancellation)
+        err = await app.turn_port.run_turn(text, notifications, cancellation)
         return SubmitDone(err=err)
 
     return run
