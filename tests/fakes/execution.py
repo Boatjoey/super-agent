@@ -62,7 +62,13 @@ __all__ = [
 class FakeToolRunner:
     """Fixed specs and results, and it records every call."""
 
-    def __init__(self, results: Mapping[str, str] | None = None, specs: Sequence[ToolSpec] = ()) -> None:
+    def __init__(
+        self,
+        results: Mapping[str, str] | None = None,
+        specs: Sequence[ToolSpec] = (),
+        errors: Mapping[str, BaseException] | None = None,
+    ) -> None:
+        self.errors = dict(errors or {})
         self.results: dict[str, str] = dict(results or {})
         self._specs: list[ToolSpec] = list(specs)
         self.calls: list[ToolCall] = []
@@ -72,6 +78,8 @@ class FakeToolRunner:
 
     async def run(self, ctx: RunContext, call: ToolCall) -> str:
         self.calls.append(call)
+        if call.name in self.errors:
+            raise self.errors[call.name]
         return self.results.get(call.name, "")
 
 

@@ -719,7 +719,7 @@ async def test_no_tools_tool_call_is_protocol_error() -> None:
     await engine.ready()
 
     waiter = ScriptedApprovalWaiter([machine.APPROVE_ONCE])
-    with pytest.raises(ValueError, match="model returned tool call while tools are disabled"):
+    with pytest.raises(machine.ProtocolViolationError, match="model returned tool call while tools are disabled"):
         await run_turn(engine, "use bash", waiter)
 
     assert engine.state() == machine.STATE_IDLE
@@ -958,3 +958,48 @@ async def test_only_run_turn_accepts_user_message_submitted() -> None:
 
     with pytest.raises(ValueError, match=r"user messages must be submitted through Engine\.RunTurn"):
         await engine.dispatch_event(live_context(), machine.UserMessageSubmitted(content="hi"), None)
+
+
+@pytest.mark.asyncio
+async def test_tool_exception_is_settled_and_next_call_runs_before_model_resumes() -> None:
+    calls = (ToolCall(id="a", name="broken"), ToolCall(id="b", name="working"))
+    model = ScriptedModel([ModelResponse(tool_calls=calls), ModelResponse(content="done")])
+    tools = FakeToolRunner(
+        results={"working": "ok"},
+        specs=(ToolSpec(name="broken"), ToolSpec(name="working")),
+        errors={"broken": RuntimeError("unavailable")},
+    )
+    engine = new_engine(model, tools, None)
+    await engine.ready()
+    await run_turn(engine, "run both")
+
+    assert tools.calls == list(calls)
+    results = [message for message in engine.messages() if message.role == machine.ROLE_TOOL]
+    assert [(message.tool_call_id, message.content) for message in results] == [
+        ("a", "Error: unavailable"),
+        ("b", "ok"),
+    ]
+    assert len(model.calls) == 2
+    assert model.calls[-1] == results[-1]
+    assert engine.state() == machine.STATE_IDLE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [Cancelled("stopped"), asyncio.CancelledError()])
+async def test_tool_cancellation_stops_batch_and_does_not_resume_model(failure: BaseException) -> None:
+    calls = (ToolCall(id="a", name="cancelled"), ToolCall(id="b", name="working"))
+    model = ScriptedModel([ModelResponse(tool_calls=calls)])
+    tools = FakeToolRunner(specs=(ToolSpec(name="cancelled"), ToolSpec(name="working")), errors={"cancelled": failure})
+    engine = new_engine(model, tools, None)
+    await engine.ready()
+    with pytest.raises(Cancelled):
+        await run_turn(engine, "run both")
+
+    assert tools.calls == [calls[0]]
+    results = [message for message in engine.messages() if message.role == machine.ROLE_TOOL]
+    assert [(message.tool_call_id, message.content) for message in results] == [
+        ("a", "cancelled"),
+        ("b", "not executed: cancelled"),
+    ]
+    assert len(model.calls) == 1
+    assert engine.state() == machine.STATE_IDLE

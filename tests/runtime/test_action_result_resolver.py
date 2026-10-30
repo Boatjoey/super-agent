@@ -27,6 +27,7 @@ from super_agent.runtime.execution import (
     Policy,
     ScheduledActionResult,
     ToolDecision,
+    ToolFinished,
     ToolPolicyInput,
     new_default_policy,
     new_policy,
@@ -99,14 +100,17 @@ def test_default_action_result_resolver_turns_approval_results_into_events(
     assert type(event) is expected
 
 
-def test_default_action_result_resolver_rejects_tool_calls_when_no_tools_are_configured() -> None:
-    with pytest.raises(ValueError, match="model returned tool call while tools are disabled"):
-        resolver().resolve(
-            ModelReplied(
-                response=machine.ModelResponse(tool_calls=(machine.ToolCall(id="call-1", name="bash", input="pwd"),))
-            ),
-            ActionResultInput(),
-        )
+def test_resolver_passes_disabled_tools_fact_to_machine() -> None:
+    call = machine.ToolCall(id="call-1", name="bash", input="pwd")
+    event = resolver().resolve(ModelReplied(response=machine.ModelResponse(tool_calls=(call,))), ActionResultInput())
+    assert event == machine.ToolBatchReceived(calls=(call,), tools_enabled=False)
+
+
+def test_resolver_preserves_tool_failure_fact() -> None:
+    call = bash("pwd")
+    error = RuntimeError("tool unavailable")
+    event = resolver().resolve(ToolFinished(call=call, error=error), ActionResultInput())
+    assert event == machine.ToolResultReceived(call=call, error=error)
 
 
 def test_unknown_result_and_decision_are_rejected() -> None:

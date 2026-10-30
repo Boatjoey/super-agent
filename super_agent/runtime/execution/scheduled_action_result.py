@@ -37,6 +37,7 @@ class ToolFinished(ScheduledActionResult):
 
     call: ToolCall = dataclasses.field(default_factory=ToolCall)
     result: str = ""
+    error: Exception | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

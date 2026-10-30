@@ -314,10 +314,10 @@ async def test_session_close_reports_every_failing_closer() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolver_error_leaves_no_tool_message_when_nothing_was_asked() -> None:
+async def test_machine_rejects_disabled_tool_batch_without_unmatched_tool_result() -> None:
     """A rejected tool batch must not invent a tool result nobody asked for.
 
-    The resolver rejects the call before it reaches the transcript, so the
+    The machine rejects the call before it reaches the transcript, so the
     assistant never asked for anything and nothing may be answered. Appending a
     tool message with a placeholder call id produces a transcript the provider
     rejects on the next request — and because it is persisted, that failure would
@@ -329,7 +329,7 @@ async def test_resolver_error_leaves_no_tool_message_when_nothing_was_asked() ->
     session = new_session(engine)  # type: ignore[arg-type]
     queue = notifications()
 
-    with pytest.raises(ValueError, match="model returned tool call while tools are disabled"):
+    with pytest.raises(machine.ProtocolViolationError, match="model returned tool call while tools are disabled"):
         await session.run_turn(live_context(), "use tool", queue, approvals())
 
     messages = session.snapshot().messages

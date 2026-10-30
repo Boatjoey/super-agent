@@ -109,7 +109,7 @@ while True:
 
 Machine 选择批次中的具体调用并调度 `CheckToolPermission(call)`。Executor 使用执行输入中的权限策略与审批记录完成检查，返回携带原调用、决定和请求说明的 `PermissionChecked`；始终允许记录仍优先于策略分类。Resolver 不读取批次或索引，不调用权限策略。策略热更新由执行侧 Runner 接收并用于后续动作。批次耗尽时 Machine 直接形成下一模型动作，见[状态机调度动作](machine.md#调度动作)。
 
-工具执行失败转换为以 `Error:` 开头的工具结果，交回模型继续处理。
+Executor 将普通工具异常作为 `ToolFinished.error` 返回，Resolver 原样搬运为 `ToolResultReceived.error`；结果结算与续调规则见[执行流程决策](machine.md#执行流程决策)。取消继续沿取消通道传播。Resolver 只映射事实，包括工具能力是否启用，不对模型回复作执行流程判断。
 
 批次是上下文单位，单个调用是审批和执行单位。无论用户还是策略拒绝调用，拒绝信息都会作为该调用的工具结果追加，随后继续处理队列，让模型可以选择其他动作而不丢失整轮对话。两条拒绝路径及其结果文本见 `machine.md`。
 

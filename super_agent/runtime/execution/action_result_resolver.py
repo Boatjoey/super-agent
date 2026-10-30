@@ -36,7 +36,7 @@ from super_agent.runtime.protocol.types import ToolSpec
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ActionResultInput:
-    """Model capabilities needed to validate a model reply."""
+    """Model capability facts carried into the machine."""
 
     tool_specs: tuple[ToolSpec, ...] = ()
 
@@ -56,7 +56,7 @@ class DefaultActionResultResolver:
         if isinstance(result, ModelReplied):
             return self._resolve_model_reply(result, input)
         if isinstance(result, ToolFinished):
-            return ToolResultReceived(call=result.call, result=result.result)
+            return ToolResultReceived(call=result.call, result=result.result, error=result.error)
         if isinstance(result, PermissionChecked):
             if result.decision == ToolDecision.DECISION_DENIED:
                 return ToolCallDenied(call=result.call, reason=result.request.reason)
@@ -72,15 +72,11 @@ class DefaultActionResultResolver:
     def _resolve_model_reply(self, result: ModelReplied, input: ActionResultInput) -> Event:
         if not result.response.tool_calls:
             return AssistantMessageReceived(response=result.response)
-        if not input.tool_specs:
-            # A model that asks for tools when none are advertised would produce a
-            # transcript with an unanswered tool call, which the provider rejects.
-            # Failing here answers the turn with an error instead.
-            raise ValueError("model returned tool call while tools are disabled")
         return ToolBatchReceived(
             content=result.response.content,
             calls=result.response.tool_calls,
             reasoning_content=result.response.reasoning_content,
+            tools_enabled=bool(input.tool_specs),
         )
 
     def _resolve_approval(self, result: ApprovalReceived) -> Event:

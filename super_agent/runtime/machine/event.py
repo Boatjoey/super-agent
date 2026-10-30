@@ -93,6 +93,7 @@ class ToolBatchReceived(Event):
     content: str = ""
     calls: tuple[ToolCall, ...] = ()
     reasoning_content: str = ""
+    tools_enabled: bool = True
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -124,6 +125,7 @@ class ToolResultReceived(Event):
 
     call: ToolCall = dataclasses.field(default_factory=ToolCall)
     result: str = ""
+    error: Exception | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

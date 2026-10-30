@@ -330,6 +330,8 @@ def handle_assistant_message_received(snapshot: MachineSnapshot, event: Assistan
 
 
 def handle_tool_batch_received(snapshot: MachineSnapshot, event: ToolBatchReceived) -> TransitionResult:
+    if not event.tools_enabled:
+        raise ProtocolViolationError(snapshot.state, event, "model returned tool call while tools are disabled")
     if len(event.calls) == 0:
         raise ProtocolViolationError(snapshot.state, event, "tool batch is empty")
     return TransitionResult(
@@ -391,7 +393,9 @@ def handle_tool_result_received(snapshot: MachineSnapshot, event: ToolResultRece
     return _continue_tool_batch(
         snapshot.queue.remaining,
         (
-            AppendToolResult(call=event.call, result=event.result),
+            AppendToolResult(
+                call=event.call, result=f"Error: {event.error}" if event.error is not None else event.result
+            ),
             ClearCurrentTool(),
         ),
     )

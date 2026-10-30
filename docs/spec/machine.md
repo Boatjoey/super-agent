@@ -6,6 +6,14 @@
 
 Turn 与 Step 的概念边界见[核心概念](../design/concepts.md)，目标执行契约见[运行时规范](runtime.md#轮次与步骤边界)。下方转移表覆盖当前已实现的事件集合；输入归属的行为见[输入接纳](#输入接纳)。
 
+## 执行流程决策
+
+影响 Agent 执行顺序和状态合法性的规则由 Machine 统一决定，包括批次中下一调用的选择、权限检查时点、审批后的动作、结果结算、失败或拒绝后是否继续，以及何时重新调用模型。权限策略负责判断操作是否获准，模型选择由配置负责；Machine 根据这些外部判断的结果转移。
+
+`ToolBatchReceived.tools_enabled` 表示外层提供的工具能力事实，默认为 `True`；为 `False` 时，Machine 在写入助手工具调用消息前以 `ProtocolViolationError` 拒绝批次，原因是 `model returned tool call while tools are disabled`。
+
+`ToolResultReceived` 携带成功文本或 `error` 异常事实。普通工具异常由 Machine 结算为 `Error: <error>`，与成功结果一样继续剩余调用；剩余调用耗尽时才调度模型。取消不作为普通工具失败，仍走 `CancelRequested`。
+
 ## 状态
 
 `State` 是在 `runtime/machine/state.py` 中声明的字符串类型，共有六种状态：

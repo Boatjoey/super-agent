@@ -155,10 +155,10 @@ Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归
 `runtime/execution` 负责出站调用与结果解析：
 
 - `scheduled_action_runner.py`：提供当前权限策略与审批记录，支持策略热更新；执行调度动作，返回 `ActionCompletion`。
-- `scheduled_action_executor.py`：执行明确动作，调用模型、权限策略、工具执行器或审批等待器。
+- `scheduled_action_executor.py`：执行明确动作，调用模型、权限策略、工具执行器或审批等待器，返回成功、普通工具异常或外部判断事实。
 - `scheduled_action_result.py`：结果类型。
 - `action_queue.py`：提交后的调度动作队列。
-- `action_result_resolver.py`：将结果映射为可供转移处理的事件，不读取工具队列或调用权限策略。
+- `action_result_resolver.py`：将结果与能力事实映射为可供转移处理的事件，不读取工具队列、调用权限策略或判断执行流程合法性。
 - `policy.py`：权限决策。`command_analyzer.py`：shell 检查与分类。
 - `approval_store.py`：始终允许与自动审批状态。`run_controller.py`：运行 ID、取消函数和过期结果检查。
 

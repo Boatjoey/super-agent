@@ -143,11 +143,7 @@ class DefaultScheduledActionExecutor:
             # adapter boundary keeps the cancel path a normal exception.
             raise Cancelled("tool run cancelled") from None
         except Exception as error:
-            # A tool failure is a RESULT, not a fault: it is fed back to the model
-            # so it can choose another action. Raising instead would leave the
-            # dispatched call unanswered, and a transcript with an unanswered tool
-            # call is rejected by the provider — and persisted.
-            return ToolFinished(call=action.call, result=f"Error: {error}")
+            return ToolFinished(call=action.call, error=error)
         return ToolFinished(call=action.call, result=result)
 
     async def _await_approval(

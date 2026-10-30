@@ -603,3 +603,85 @@ def test_cancel_answers_outstanding_calls_with_cancelled_text() -> None:
     result = machine.transition(transition_snapshot(machine.STATE_RUNNING_TOOL, event), event)
     results = [change for change in result.runtime_data_changes if isinstance(change, machine.AppendToolResult)]
     assert [change.result for change in results] == ["boom"]
+
+
+@pytest.mark.parametrize("first_outcome", ["success", "failure", "policy_denied", "approval_denied"])
+@pytest.mark.parametrize("second_outcome", ["success", "failure", "policy_denied", "approval_denied"])
+def test_batch_settles_each_call_before_checking_next_permission_and_resumes_model(
+    first_outcome: str, second_outcome: str
+) -> None:
+    calls = sample_tool_calls()
+    data = machine.RuntimeData(state=machine.STATE_WAITING_LLM, step=machine.Step(index=1))
+    applier = machine.DefaultRuntimeDataChangeApplier()
+
+    def apply(event: machine.Event) -> machine.TransitionResult:
+        nonlocal data
+        decision = machine.transition(machine.snapshot_from(data), event)
+        data = applier.apply_runtime_data_changes(data, decision).runtime_data
+        assert not decision.action_plan.clear_existing
+        return decision
+
+    batch = apply(machine.ToolBatchReceived(calls=calls))
+    assert batch.next_state == machine.STATE_ADVANCING_QUEUE
+    assert batch.action_plan.schedule == (machine.CheckToolPermission(call=calls[0]),)
+    expected_results: list[str] = []
+    for index, (call, outcome) in enumerate(zip(calls, (first_outcome, second_outcome), strict=True)):
+        if outcome == "policy_denied":
+            settled = apply(machine.ToolCallDenied(call=call, reason="protected"))
+            changes = (
+                machine.AdvanceToolCallBatch(),
+                machine.AppendToolResult(call, "denied by permission policy: protected"),
+            )
+            expected_results.append("denied by permission policy: protected")
+        elif outcome == "approval_denied":
+            request = machine.PermissionRequest(reason="risky")
+            approval = apply(machine.ToolCallNeedsApproval(call=call, request=request))
+            assert approval.next_state == machine.STATE_WAITING_APPROVAL
+            assert approval.action_plan.schedule == (machine.AwaitApproval(call=call, request=request),)
+            assert approval.runtime_data_changes == (
+                machine.SetPendingTool(call=call, request=request),
+                machine.AdvanceToolCallBatch(),
+            )
+            settled = apply(machine.ApprovalDenied(call=call))
+            text = "denied: " + call.name
+            changes = (machine.ClearPendingTool(), machine.AppendToolResult(call, text))
+            expected_results.append(text)
+        else:
+            ready = apply(machine.ToolCallReadyToRun(call=call))
+            assert ready.next_state == machine.STATE_RUNNING_TOOL
+            assert ready.action_plan.schedule == (machine.RunTool(call=call),)
+            assert ready.runtime_data_changes == (machine.AdvanceToolCallBatch(), machine.SetCurrentTool(call=call))
+            error = RuntimeError("broken") if outcome == "failure" else None
+            settled = apply(machine.ToolResultReceived(call=call, result="ok" if error is None else "", error=error))
+            text = "Error: broken" if error is not None else "ok"
+            changes = (machine.AppendToolResult(call, text), machine.ClearCurrentTool())
+            expected_results.append(text)
+        if index == 0:
+            assert settled.next_state == machine.STATE_ADVANCING_QUEUE
+            assert settled.runtime_data_changes == changes
+            assert settled.action_plan.schedule == (machine.CheckToolPermission(call=calls[1]),)
+            assert data.step == machine.Step(index=1)
+        else:
+            assert settled.next_state == machine.STATE_WAITING_LLM
+            assert settled.runtime_data_changes == (
+                *changes,
+                machine.ClearToolCallBatch(),
+                machine.AdvanceStep(),
+                machine.AcceptSteering(),
+            )
+            assert settled.action_plan.schedule == (machine.CallModel(),)
+            assert data.step == machine.Step(index=2)
+    assert data.tool_batch is None
+    results = [message for message in data.messages if message.role == machine.ROLE_TOOL]
+    assert [message.tool_call_id for message in results] == [call.id for call in calls]
+    assert [message.content for message in results] == expected_results
+
+
+def test_machine_rejects_tool_batch_when_tools_are_disabled_before_recording_calls() -> None:
+    data = machine.RuntimeData(state=machine.STATE_WAITING_LLM, step=machine.Step(index=1))
+    with pytest.raises(machine.ProtocolViolationError, match="model returned tool call while tools are disabled"):
+        machine.transition(
+            machine.snapshot_from(data), machine.ToolBatchReceived(calls=sample_tool_calls(), tools_enabled=False)
+        )
+    assert data.messages == []
+    assert data.tool_batch is None
