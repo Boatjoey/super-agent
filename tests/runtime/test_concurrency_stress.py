@@ -27,9 +27,17 @@ from collections.abc import Callable
 import pytest
 
 from super_agent.runtime import machine
-from super_agent.runtime.engine import Engine, new_engine
+from super_agent.runtime.engine import Engine, EngineView, new_engine, new_engine_with_executor
+from super_agent.runtime.execution import (
+    DefaultScheduledActionExecutor,
+    ScheduledActionInput,
+    ScheduledActionResult,
+    new_approval_key,
+)
 from super_agent.runtime.protocol.run_context import RunContext, live_context
-from super_agent.runtime.protocol.types import ModelResponse, StreamChunk, ToolCall, ToolSpec
+from super_agent.runtime.protocol.types import ModelResponse, StreamChunk, ToolCall, ToolSpec, Usage
+from tests.fakes.execution import FakeToolRunner, ScriptedApprovalWaiter
+from tests.fakes.model import ScriptedModel
 
 #: How many times each test repeats its scenario. The point is coverage of
 #: interleavings, and a single pass reaches only one of them.
@@ -311,3 +319,138 @@ async def test_state_observer_never_runs_while_the_lock_is_held_under_interleavi
 
         assert held, f"round {round_number}: the observer never ran"
         assert not any(held), f"round {round_number}: the observer saw the lock held"
+
+
+class CompletionGateExecutor(DefaultScheduledActionExecutor):
+    """Hold one completed action before the engine starts resolving its result."""
+
+    def __init__(self, model: ScriptedModel, tools: FakeToolRunner, action_type: type[machine.ScheduledAction]) -> None:
+        super().__init__(model, tools)
+        self.action_type = action_type
+        self.completed = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def execute(
+        self,
+        ctx: RunContext,
+        action: machine.ScheduledAction,
+        env: ScheduledActionInput,
+        chunk_func: Callable[[StreamChunk], None],
+    ) -> ScheduledActionResult:
+        result = await super().execute(ctx, action, env, chunk_func)
+        if isinstance(action, self.action_type):
+            self.completed.set()
+            await self.release.wait()
+        return result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("control", ["cancel", "reset", "replace"])
+@pytest.mark.parametrize(
+    "action_type", [machine.CallModel, machine.CheckToolPermission, machine.RunTool, machine.AwaitApproval]
+)
+async def test_result_invalidated_while_waiting_for_commit_lock_is_discarded(
+    control: str, action_type: type[machine.ScheduledAction], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Queue completion first, retire its run second, then let both acquire the lock.
+
+    A real asyncio lock and its FIFO waiter order force the old completion to
+    acquire the commit lock before the cancelling command can update the machine.
+    The acquire probe only signals contention; it preserves the lock's behavior.
+    """
+    call = ToolCall(id="call-1", name="bash", input=COMMAND)
+    stale_usage = Usage(input_tokens=11, output_tokens=7, total_tokens=18)
+    fresh_usage = Usage(input_tokens=5, output_tokens=2, total_tokens=7)
+    first_response = (
+        ModelResponse(content="stale reply", usage=stale_usage)
+        if action_type is machine.CallModel
+        else ModelResponse(tool_calls=(call,))
+    )
+    model = ScriptedModel([first_response, ModelResponse(content="fresh reply", usage=fresh_usage)])
+    tools = FakeToolRunner(
+        results={"bash": "stale tool result"},
+        specs=(ToolSpec(name="bash", risky=action_type is machine.AwaitApproval),),
+    )
+    executor = CompletionGateExecutor(model, tools, action_type)
+    engine = new_engine_with_executor(executor, None)
+    await engine.ready()
+    usage: list[Usage | None] = []
+    usage_views: list[EngineView] = []
+    usage_lock_states: list[bool] = []
+    observed: list[EngineView] = []
+
+    def report_usage(value: Usage | None) -> None:
+        usage.append(value)
+        usage_views.append(engine.snapshot())
+        usage_lock_states.append(engine.lock.locked())
+
+    engine.set_model_usage_observer(report_usage)
+
+    async def observe() -> None:
+        assert not engine.lock.locked()
+        observed.append(engine.snapshot())
+
+    engine.set_state_observer(observe)
+    contenders: asyncio.Queue[asyncio.Task[None] | None] = asyncio.Queue()
+    acquire = engine.lock.acquire
+
+    async def probe_acquire() -> bool:
+        if engine.lock.locked():
+            contenders.put_nowait(asyncio.current_task())
+        return await acquire()
+
+    monkeypatch.setattr(engine.lock, "acquire", probe_acquire)
+    async with asyncio.timeout(3):
+        turn = asyncio.create_task(
+            engine.run_turn(
+                live_context(),
+                machine.UserMessageSubmitted(content="first"),
+                None,
+                ScriptedApprovalWaiter([machine.APPROVE_ALWAYS]),
+            )
+        )
+        await executor.completed.wait()
+        usage_before_completion = list(usage)
+        async with engine.lock:
+            executor.release.set()
+            assert await contenders.get() is turn
+            # cancel/reset/replace retire the run synchronously, before waiting
+            # for the same lock already queued for the old completion.
+            if control == "cancel":
+                command = asyncio.create_task(engine.cancel())
+            elif control == "reset":
+                command = asyncio.create_task(engine.reset())
+            else:
+                command = asyncio.create_task(
+                    engine.replace_messages([machine.Message(role=machine.ROLE_USER, content="replacement")])
+                )
+            assert await contenders.get() is command
+            observed.clear()
+        await asyncio.gather(turn, command)
+
+        assert usage == usage_before_completion
+        assert all(
+            message.content not in ("stale reply", "stale tool result")
+            for view in observed
+            for message in view.messages
+        )
+        if action_type in (machine.CheckToolPermission, machine.AwaitApproval):
+            assert all(view.state != machine.STATE_RUNNING_TOOL for view in observed)
+            assert tools.calls == []
+        assert not engine._approvals.is_always_allowed(new_approval_key(call))  # pyright: ignore[reportPrivateUsage]
+        assert engine.state() == machine.STATE_IDLE
+        if control == "cancel" and action_type is not machine.CallModel:
+            expected = "cancelled" if action_type is machine.RunTool else "not executed: cancelled"
+            assert [message.content for message in engine.messages() if message.role == machine.ROLE_TOOL] == [expected]
+        elif control == "reset":
+            assert engine.messages() == []
+        elif control == "replace":
+            assert [message.content for message in engine.messages()] == ["replacement"]
+
+        await engine.run_turn(live_context(), machine.UserMessageSubmitted(content="second"), None, None)
+        assert engine.state() == machine.STATE_IDLE
+        assert engine.messages()[-1].content == "fresh reply"
+        assert usage == [*usage_before_completion, fresh_usage]
+        assert not any(usage_lock_states)
+        assert usage_views[-1].state == machine.STATE_IDLE
+        assert usage_views[-1].messages[-1].content == "fresh reply"

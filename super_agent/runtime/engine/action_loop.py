@@ -392,14 +392,9 @@ class ActionLoopMixin:
         telemetry.record("action", fields)
 
         if not self._runs.is_current(completion.run_id):
-            # A stale completion is discarded, not applied. This is the whole
-            # mechanism that keeps a cancelled turn out of the next one.
+            # Skip spec reads for results already known to be stale. The check
+            # inside the commit lock below remains authoritative.
             return
-
-        if isinstance(completion.result, ModelReplied):
-            # The interface hears what a model call cost only while that call
-            # still belongs to the conversation.
-            self._notify_model_usage_observer(completion.result.response.usage)
 
         # Specs are fetched outside the engine lock on purpose: a registry change
         # (an MCP reconnect, say) can block Specs for seconds, and the lock must
@@ -408,6 +403,11 @@ class ActionLoopMixin:
         # next action re-fetches.
         tool_specs = self._tool_specs()
         async with self.lock:
+            # Acquiring the lock can yield after the fast check above. Cancellation,
+            # reset, or replacement may retire the run while this completion waits.
+            # Recheck at the commit boundary, with no await through the commit.
+            if not self._runs.is_current(completion.run_id):
+                return
             event = self._resolver.resolve(
                 completion.result,  # type: ignore[arg-type]
                 ActionResultInput(tool_specs=tuple(tool_specs)),
@@ -415,6 +415,10 @@ class ActionLoopMixin:
             decision = self._calculate_transition_locked(event)
             self._commit_transition_locked(decision)
 
+        # Result-dependent callbacks and approval updates follow a successful
+        # commit, outside the lock and without yielding to control operations.
+        if isinstance(completion.result, ModelReplied):
+            self._notify_model_usage_observer(completion.result.response.usage)
         if isinstance(event, ApprovalAlwaysGranted):
             self._approvals.allow_always(new_approval_key(event.call))
 
