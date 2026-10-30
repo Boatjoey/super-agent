@@ -79,6 +79,7 @@ from super_agent.runtime.session.notifications import (
     UsageReported as UsageReported,
 )
 from super_agent.runtime.session.persistence import (
+    ErrorPersistenceFailed as ErrorPersistenceFailed,
     PersistenceMixin as PersistenceMixin,
 )
 from super_agent.runtime.session.repository import (
@@ -138,6 +139,7 @@ __all__ = [
     "Closer",
     "Engine",
     "EngineView",
+    "ErrorPersistenceFailed",
     "ExportMixin",
     "ExportWriter",
     "FileSnapshot",

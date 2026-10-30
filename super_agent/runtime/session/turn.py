@@ -29,6 +29,8 @@ from super_agent.runtime.session.notifications import (
     StreamChunkReceived,
     UsageReported,
 )
+from super_agent.runtime.session.persistence import ErrorPersistenceFailed
+from super_agent.runtime.telemetry import telemetry
 
 if TYPE_CHECKING:
     from super_agent.runtime.session.repository import Repository, SessionID
@@ -220,9 +222,31 @@ class TurnMixin:
         return _WaitApprovalFunc(wait)
 
     def failTurn(self, notifications: asyncio.Queue[SessionNotification], failure: BaseException) -> BaseException:
-        notifications.put_nowait(SessionError(err=failure))
-        self.persistError(failure)
-        return failure
+        """Keep the execution error primary while attempting both reporting paths."""
+        failures: list[BaseException] = [failure]
+        try:
+            self.persistError(failure)
+        except Exception as persistence_error:
+            failures.append(ErrorPersistenceFailed(persistence_error))
+            _record_reporting_failure("error_persistence_failed", persistence_error)
+        try:
+            notifications.put_nowait(SessionError(err=failure))
+        except asyncio.QueueFull as notification_error:
+            _record_reporting_failure("error_notification_dropped", notification_error)
+        except Exception as notification_error:
+            failures.append(notification_error)
+            _record_reporting_failure("error_notification_dropped", notification_error)
+        if len(failures) == 1:
+            return failure
+        reported = JoinedError(*failures)
+        reported.__cause__ = failure
+        return reported
+
+
+def _record_reporting_failure(kind: str, failure: Exception) -> None:
+    # Telemetry is itself a reporting path and must not replace the execution error.
+    with contextlib.suppress(Exception):
+        telemetry.record(kind, {"error": str(failure), "error_type": type(failure).__name__})
 
 
 class _WaitApprovalFunc:

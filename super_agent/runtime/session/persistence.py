@@ -11,6 +11,14 @@ if TYPE_CHECKING:
     from super_agent.runtime.session.repository import Repository, SessionID
 
 
+class ErrorPersistenceFailed(Exception):
+    """The execution error could not be saved; its storage cause remains inspectable."""
+
+    def __init__(self, failure: Exception) -> None:
+        super().__init__("persist execution error: " + str(failure))
+        self.__cause__ = failure
+
+
 class MessagePersistence:
     """Track acknowledged appends; reconcile uncertain writes before retrying."""
 
