@@ -35,6 +35,7 @@ from super_agent.runtime.machine import (
     Event,
     Message,
     ResetRequested,
+    clone_runtime_data,
     validate_runtime_data,
 )
 from super_agent.runtime.protocol.run_context import RunContext, live_context
@@ -104,22 +105,22 @@ class CommandsMixin:
         self._runs.cancel_run()
         self._runs.invalidate_current_run()
         async with self.lock:
-            data = self._runtime_data
-            data.messages = list(messages)
-            data.pending_tool = None
-            data.pending_permission = None
-            data.current_tool = None
-            data.tool_batch = None
-            data.step = None
-            data.steering = ()
-            data.streaming_content = ""
-            data.streaming_reasoning = ""
-            data.state = STATE_IDLE
+            candidate = clone_runtime_data(self._runtime_data)
+            candidate.messages = list(messages)
+            candidate.pending_tool = None
+            candidate.pending_permission = None
+            candidate.current_tool = None
+            candidate.tool_batch = None
+            candidate.step = None
+            candidate.steering = ()
+            candidate.streaming_content = ""
+            candidate.streaming_reasoning = ""
+            candidate.state = STATE_IDLE
+            # Management writes use the same validate-before-commit rule as
+            # transitions, preserving committed data and queued work on failure.
+            validate_runtime_data(candidate)
+            self._runtime_data = candidate
             self._action_queue.clear()
-            # The only write that bypasses the applier, so it validates here: a
-            # replacement that left a step or steering input behind would poison
-            # every later transition.
-            validate_runtime_data(data)
 
     async def set_permission_policy(self, mode: PermissionMode, rules: PermissionRules) -> None:
         """Swap the policy, refusing a mode the settings loader would reject too."""
