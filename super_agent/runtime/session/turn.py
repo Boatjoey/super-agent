@@ -12,7 +12,7 @@ import contextlib
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from super_agent.errors import Cancelled
+from super_agent.errors import Cancelled, JoinedError
 from super_agent.runtime.engine import Engine, EngineView
 from super_agent.runtime.execution import (
     ERR_APPROVAL_DISMISSED,
@@ -93,7 +93,6 @@ class TurnMixin:
         def snapshot(self) -> EngineView: ...
         async def emitSnapshot(self, notifications: asyncio.Queue[SessionNotification]) -> None: ...
         def persistTurnBoundary(self) -> None: ...
-        def persistMessage(self, message: object) -> None: ...
         def persistApproval(self, decision: ApprovalDecision, call: ToolCall) -> None: ...
         def persistError(self, error: BaseException | None) -> None: ...
 
@@ -142,6 +141,7 @@ class TurnMixin:
                 finally:
                     self.engine.set_model_usage_observer(None)
                     self.engine.set_state_observer(None)
+                    await self.emitter.stop_delivery()
             finally:
                 self._unlock()
         finally:
@@ -193,7 +193,14 @@ class TurnMixin:
             error = self.failTurn(notifications, failure)
         else:
             error = None
-        await self.emitter.emit(notifications, self.engine.snapshot(), self.persistMessage)
+        try:
+            await self.emitSnapshot(notifications)
+        except Exception as failure:
+            error = failure if error is None else JoinedError(error, failure)
+        try:
+            await self.emitter.flush(notifications)
+        except Exception as failure:
+            error = failure if error is None else JoinedError(error, failure)
         return error
 
     def _approvalWaiter(self, approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed]) -> ApprovalWaiter:

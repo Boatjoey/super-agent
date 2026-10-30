@@ -1,19 +1,51 @@
-"""Durability hooks the rest of the session calls.
-
-Each of these is best effort on purpose: a transcript that cannot be written must
-not fail the turn the user is watching. The two places where a *failed* write must
-fail the operation — reset and compaction — persist before mutating instead of
-calling these.
-"""
+"""Message durability progress and audit writes, independent of notification delivery."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from super_agent.runtime.machine import ApprovalDecision, Message, ToolCall
 
 if TYPE_CHECKING:
     from super_agent.runtime.session.repository import Repository, SessionID
+
+
+class MessagePersistence:
+    """Track acknowledged appends; reconcile uncertain writes before retrying."""
+
+    def __init__(self, session_id: SessionID, initial: Sequence[Message] = ()) -> None:
+        self._session_id = session_id
+        self._messages = list(initial)
+        self._reconcile = False
+
+    @property
+    def persisted_count(self) -> int:
+        return len(self._messages)
+
+    def persist_new_messages(
+        self, repository: Repository | None, session_id: SessionID, messages: Sequence[Message]
+    ) -> None:
+        if repository is None:
+            self._session_id = session_id
+            self._messages = list(messages)
+            return
+        if session_id != self._session_id or list(messages[: self.persisted_count]) != self._messages:
+            self._reconcile = True
+        if self._reconcile:
+            durable, _meta = repository.load(session_id)
+            if list(messages[: len(durable)]) != durable:
+                raise ValueError("stored message history does not match the committed snapshot")
+            self._messages = list(durable)
+            self._session_id = session_id
+            self._reconcile = False
+        for message in messages[self.persisted_count :]:
+            try:
+                repository.save_message(session_id, message)
+            except Exception:
+                self._reconcile = True
+                raise
+            self._messages.append(message)
 
 
 class PersistenceMixin:

@@ -34,7 +34,7 @@ from super_agent.runtime.session.export import ExportMixin
 from super_agent.runtime.session.history import HistoryMixin
 from super_agent.runtime.session.memory import Memory, OffMemory
 from super_agent.runtime.session.notifications import SessionNotification
-from super_agent.runtime.session.persistence import PersistenceMixin
+from super_agent.runtime.session.persistence import MessagePersistence, PersistenceMixin
 from super_agent.runtime.session.repository import (
     Metadata,
     Repository,
@@ -76,6 +76,7 @@ class SessionBase:
         self.repository = repository
         self.workspace = workspace
         self.meta = meta if meta is not None else Metadata()
+        self.message_persistence = MessagePersistence(self.meta.id, initial or ())
         self.permissionMode = PermissionMode("")
         self.permissionRules = PermissionRules()
         #: Where the cross-session memory lives. It is a port, not the repository:
@@ -115,6 +116,7 @@ class SessionBase:
         worth reporting even when three others closed cleanly.
         """
         await self.cancel()
+        await self.emitter.stop_delivery()
         closers = self._closers
         self._closers = []
         failures: list[BaseException] = []
@@ -219,13 +221,21 @@ class SessionBase:
         self.permissionMode = mode
 
     async def emitSnapshot(self, notifications: asyncio.Queue[SessionNotification]) -> None:
-        """Push the current snapshot through the emitter."""
-        await self.emitter.emit(notifications, self.snapshot(), self.persistMessage)
-
-    def persistMessage(self, message: Message) -> None:
-        """Persist one appended message. Overridden by :class:`PersistenceMixin`."""
-        if self.repository is not None:
-            self.repository.save_message(self.metaID(), message)
+        """Independently advance persistence and notification output for one snapshot."""
+        snapshot = self.snapshot()
+        failures: list[Exception] = []
+        try:
+            self.message_persistence.persist_new_messages(self.repository, self.metaID(), snapshot.messages)
+        except Exception as failure:
+            failures.append(failure)
+        try:
+            await self.emitter.emit(notifications, snapshot)
+        except Exception as failure:
+            failures.append(failure)
+        if len(failures) == 1:
+            raise failures[0]
+        if failures:
+            raise JoinedError(*failures)
 
 
 def new_session(engine: Engine, memory: Memory | None = None) -> Session:
@@ -243,7 +253,9 @@ def new_persistent_session(
     """A session over an existing stored conversation."""
     emitter = SnapshotEmitter()
     emitter.emittedMessages = len(engine.snapshot().messages)
-    return Session(engine, repository, workspace, meta, emitter, memory=memory)
+    return Session(
+        engine, repository, workspace, meta, emitter, initial=list(engine.snapshot().messages), memory=memory
+    )
 
 
 def create_persistent_session(

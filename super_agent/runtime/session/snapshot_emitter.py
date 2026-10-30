@@ -23,10 +23,12 @@ with it.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import asyncio
+import contextlib
+from collections import deque
 
 from super_agent.runtime.engine import EngineView
-from super_agent.runtime.machine import STATE_IDLE, Message, PermissionRequest, ToolCall
+from super_agent.runtime.machine import STATE_IDLE, PermissionRequest, ToolCall
 from super_agent.runtime.session.notifications import (
     MessageAppended,
     QueuedInputAccepted,
@@ -39,18 +41,25 @@ from super_agent.runtime.session.notifications import (
     ToolApprovalRequested,
 )
 
-if TYPE_CHECKING:
-    import asyncio
-
-    from super_agent.runtime.session.notifications import SessionNotification
-
 
 class SnapshotEmitter:
     """Deduplicates the notification stream across repeated snapshots."""
 
-    __slots__ = ("emittedMessages", "hasApproval", "lastApprovalCall", "queuedIDs", "steeringIDs")
+    __slots__ = (
+        "_delivery_failure",
+        "_delivery_task",
+        "_pending",
+        "emittedMessages",
+        "hasApproval",
+        "lastApprovalCall",
+        "queuedIDs",
+        "steeringIDs",
+    )
 
     def __init__(self) -> None:
+        self._pending: deque[SessionNotification] = deque()
+        self._delivery_task: asyncio.Task[None] | None = None
+        self._delivery_failure: Exception | None = None
         self.emittedMessages = 0
         self.hasApproval = False
         self.lastApprovalCall: ToolCall | None = None
@@ -67,30 +76,30 @@ class SnapshotEmitter:
 
     def reset(self, emittedMessages: int) -> None:
         """Re-arm after a context reset, keeping the messages the engine still holds."""
+        if self._delivery_task is not None:
+            self._delivery_task.cancel()
+            self._delivery_task = None
+        self._pending.clear()
+        self._delivery_failure = None
         self.emittedMessages = emittedMessages
         self.hasApproval = False
         self.lastApprovalCall = None
         self.steeringIDs = ()
         self.queuedIDs = ()
 
-    async def emit(
-        self,
-        notifications: asyncio.Queue[SessionNotification],
-        snapshot: EngineView,
-        onMessage: Any = None,
-    ) -> None:
-        """Publish whatever changed since the last call, in a fixed order.
+    async def emit(self, notifications: asyncio.Queue[SessionNotification], snapshot: EngineView) -> None:
+        """Stage a committed snapshot without waiting for the frontend consumer."""
+        self._capture(self._pending, snapshot)
+        self._publish(notifications)
 
-        State first, then the approval change, then message appends: a consumer
-        that renders as it reads must never show an approval against the wrong
-        state.
-        """
-        await notifications.put(StateChanged(state=snapshot.state))
+    def _capture(self, notifications: deque[SessionNotification], snapshot: EngineView) -> None:
+        """Capture state, approval, messages, then input receipts atomically."""
+        notifications.append(StateChanged(state=snapshot.state))
 
         pending = snapshot.pending_tool
         if pending is not None:
             if not self.hasApproval or self.lastApprovalCall is None or self.lastApprovalCall != pending:
-                await notifications.put(
+                notifications.append(
                     ToolApprovalRequested(
                         tool_call=pending,
                         request=permission_request(snapshot),
@@ -103,7 +112,7 @@ class SnapshotEmitter:
                 self.hasApproval = True
         else:
             if self.hasApproval:
-                await notifications.put(ToolApprovalCleared())
+                notifications.append(ToolApprovalCleared())
             self.hasApproval = False
             self.lastApprovalCall = None
 
@@ -111,44 +120,83 @@ class SnapshotEmitter:
         if self.emittedMessages > len(messages):
             self.emittedMessages = 0
         for message in messages[self.emittedMessages :]:
-            await notifications.put(MessageAppended(message=message))
-            if onMessage is not None:
-                onMessage(message)
+            notifications.append(MessageAppended(message=message))
         self.emittedMessages = len(messages)
 
         # Last, so a consumer that renders as it reads already has the message an
         # accepted input became before it is told the input landed.
-        await self._emit_steering(notifications, snapshot)
-        await self._emit_queued(notifications, snapshot)
+        self._emit_steering(notifications, snapshot)
+        self._emit_queued(notifications, snapshot)
 
-    async def _emit_steering(self, notifications: asyncio.Queue[SessionNotification], snapshot: EngineView) -> None:
+    def _check_delivery(self) -> None:
+        if self._delivery_task is not None and self._delivery_task.done():
+            self._delivery_task = None
+        if self._delivery_failure is not None:
+            failure = self._delivery_failure
+            self._delivery_failure = None
+            raise failure
+
+    def _publish(self, notifications: asyncio.Queue[SessionNotification]) -> None:
+        self._check_delivery()
+        if self._delivery_task is not None:
+            return
+        while self._pending:
+            try:
+                notifications.put_nowait(self._pending[0])
+            except asyncio.QueueFull:
+                self._delivery_task = asyncio.create_task(self._deliver(notifications))
+                return
+            self._pending.popleft()
+
+    async def _deliver(self, notifications: asyncio.Queue[SessionNotification]) -> None:
+        try:
+            while self._pending:
+                await notifications.put(self._pending[0])
+                self._pending.popleft()
+        except Exception as failure:
+            self._delivery_failure = failure
+
+    async def flush(self, notifications: asyncio.Queue[SessionNotification]) -> None:
+        """Finish delivery at the turn boundary, after committed messages are saved."""
+        self._publish(notifications)
+        if self._delivery_task is not None:
+            await self._delivery_task
+        self._check_delivery()
+
+    async def stop_delivery(self) -> None:
+        """Retire a delivery task while retaining anything it has not sent."""
+        task = self._delivery_task
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            self._delivery_task = None
+
+    def _emit_steering(self, notifications: deque[SessionNotification], snapshot: EngineView) -> None:
         """Report each held input that left the queue since the last snapshot."""
         current = tuple(item.id for item in snapshot.steering if item.id)
         gone = tuple(input_id for input_id in self.steeringIDs if input_id not in current)
         self.steeringIDs = current
         if snapshot.state == STATE_IDLE:
             for input_id in gone:
-                await notifications.put(SteeringWithdrawn(input_id=input_id))
+                notifications.append(SteeringWithdrawn(input_id=input_id))
             return
         for input_id in gone:
-            await notifications.put(SteeringAccepted(input_id=input_id, step=snapshot.step_index))
+            notifications.append(SteeringAccepted(input_id=input_id, step=snapshot.step_index))
 
-    async def _emit_queued(self, notifications: asyncio.Queue[SessionNotification], snapshot: EngineView) -> None:
+    def _emit_queued(self, notifications: deque[SessionNotification], snapshot: EngineView) -> None:
         """Report each queued input that left the queue since the last snapshot."""
         current = tuple(item.id for item in snapshot.queued if item.id)
         gone = tuple(input_id for input_id in self.queuedIDs if input_id not in current)
         self.queuedIDs = current
         if snapshot.state == STATE_IDLE:
             for input_id in gone:
-                await notifications.put(QueuedInputWithdrawn(input_id=input_id))
+                notifications.append(QueuedInputWithdrawn(input_id=input_id))
             return
         for input_id in gone:
-            await notifications.put(QueuedInputAccepted(input_id=input_id, turn=snapshot.turn_index))
+            notifications.append(QueuedInputAccepted(input_id=input_id, turn=snapshot.turn_index))
 
 
 def permission_request(snapshot: EngineView) -> PermissionRequest:
     permission = snapshot.pending_permission
     return permission if permission is not None else PermissionRequest()
-
-
-_ = Message

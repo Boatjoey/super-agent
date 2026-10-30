@@ -168,7 +168,8 @@ Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归
 - `turn.py`：单轮对话与审批流程。
 - `history.py`：已保存会话、压缩和撤销。
 - `memory.py`：跨会话记忆的端口、开关，以及把记忆放进上下文的规则。
-- `persistence.py`：持久化通知。
+- `persistence.py`：消息保存进度、异常写入对账及审计写入。
+- `snapshot_emitter.py`：通知去重、待投递通知和投递生命周期，不承担持久化。
 - `notifications.py`：会话到 UI 的通知协议。
 - `repository.py`：持久化和工作区端口，包括检查点创建、`load_undo_point`、`truncate_after`，以及一次性的 `save_workspace_description` 升级。
 
