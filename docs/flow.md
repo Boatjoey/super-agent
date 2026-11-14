@@ -8,7 +8,7 @@
 
 - 每一行是一个尚未完成的开发节点，ID 稳定；“后继节点”是该节点完成后可以参与解锁的直接下游。
 - 边 `A → B` 表示 B 的完成依赖 A 的交付；B 有多个前驱时，必须全部验收完成才能进入正式实施。独立的调查和准备可以提前进行，但不算完成下游交付。
-- 没有前驱的节点可以独立推进，当前入口是 D91 和 D48；D53、D95、D97、D98 等待用户确认。
+- 没有前驱的节点可以独立推进，当前入口是 D91、D48 和 D53。
 - `—` 表示没有后继节点。依赖图不得出现环、未知节点或悬空引用；并行行进到汇合节点时采用“全部满足”的条件。
 - 节点状态在本文件维护。状态改变不等于自动满足后继节点条件。
 - 已完成的节点从本表移除，不保留归档；重开时按原 ID 恢复节点。
@@ -17,16 +17,16 @@
 
 | ID | 开发节点 | 关联 Gap | 当前状态 | 后继节点 | 交付物引用 | 状态或阻塞 |
 |---|---|---|---|---|---|---|
-| D53 | 两端入口统一使用 Adapter 命名 | G19 | 待确认 | D94、D95、D96 | [模块职责](spec/packages.md#代码依赖与接口约束)、[终端规范](spec/terminal.md)、[应用接口](spec/application-interface.md) | 已核对实际入口与引用；拟将 `TerminalApplication` 改为 `TUIAdapter`、Web `Server` 改为 `WebAdapter`；等待用户确认节点后更新规范和代码，开发流程文件保持不变 |
+| D53 | 两端入口统一使用 Adapter 命名 | G19 | 进行中 | D94、D95、D96 | [模块职责](spec/packages.md#代码依赖与接口约束)、[终端规范](spec/terminal.md)、[应用接口](spec/application-interface.md) | 2026-11-14 项目负责人确认：`TerminalApplication` 改为 `TUIAdapter`、Web `Server` 改为 `WebAdapter`，不保留旧名别名；开发流程文件只同步其中一处类名引用 |
 | D48 | 为非 Linux 平台实现命令隔离沙箱 | G09 | 进行中 | D101 | [工具沙箱](spec/tools.md#沙箱)、[配置](spec/config.md#沙箱) | 项目负责人已于 2026-10-29 决定实现；2026-11-14 开始，macOS 先采用系统自带的 `sandbox-exec`（Seatbelt）实现严格隔离，Windows 机制尚未开始 |
 | D91 | 建立度量基线并集中取得顶层决策 | G25 | 进行中 | D92、D93、D97、D98、D99、D100 | [完成标准](development.md#完成标准)、[验收](development.md#验收) | 2026-11-14 开始：度量脚本、基线归档、持续集成上报与对外名称清单；顶层决策汇总 G19、G29、G31、G32 |
 | D92 | 标识符改为 PEP 8 命名并启用命名检查 | G26 | 待开始 | D94、D95、D96 | [Python 约定](development.md#python-约定) | 前驱 D91；按包分批合入 |
 | D93 | 移除内部对兼容门面与重复导出的依赖 | G27 | 待开始 | D94、D95、D96 | [代码依赖与接口约束](spec/packages.md#代码依赖与接口约束) | 前驱 D91；删除范围以对外名称清单为准 |
 | D94 | 引擎与会话由 mixin 改为显式组合 | G28 | 待开始 | D102 | [运行时](spec/runtime.md)、[文件分工](spec/packages.md#文件分工) | 前驱 D53、D92、D93；开工前先补并发压力与不变量用例 |
-| D95 | 划清 `app` 包中组合根与设施的边界 | G29 | 待确认 | D102 | [软件架构](design/software-architecture.md#职责的严格判据)、[模块职责](spec/packages.md#六边形边界的代码约束) | 等待项目负责人选定包结构方案；前驱 D53、D92、D93 |
+| D95 | 划清 `app` 包中组合根与设施的边界 | G29 | 待开始 | D102 | [软件架构](design/software-architecture.md#职责的严格判据)、[模块职责](spec/packages.md#六边形边界的代码约束) | 2026-11-14 项目负责人选定拆为独立的组合根包与设施包，包名在更新设计与模块职责时确定；前驱 D53、D92、D93 |
 | D96 | 收敛 `Any` 并拆分超大文件 | G30 | 待开始 | D102 | [实现与重构](development.md#实现与重构)、[文件分工](spec/packages.md#文件分工) | 前驱 D53、D92、D93 |
-| D97 | Web 界面访问认证 | G31 | 待确认 | D103 | [应用接口](spec/application-interface.md)、[配置](spec/config.md) | 等待项目负责人确认认证取舍；前驱 D91 |
-| D98 | 统一沙箱降级规则 | G32 | 待确认 | D103 | [配置：沙箱](spec/config.md#沙箱)、[工具沙箱](spec/tools.md#沙箱) | 等待项目负责人确认降级策略；前驱 D91 |
+| D97 | Web 界面访问认证 | G31 | 待开始 | D103 | [应用接口](spec/application-interface.md)、[配置](spec/config.md) | 2026-11-14 项目负责人确认：每次启动生成随机令牌，经启动时给出的地址一次性换取 HttpOnly、SameSite=Strict 的 Cookie，所有 `/api` 请求必须携带；每次请求校验 Host 与 Origin；回环地址同样启用；前驱 D91 |
+| D98 | 统一沙箱降级规则 | G32 | 待开始 | D103 | [配置：沙箱](spec/config.md#沙箱)、[工具沙箱](spec/tools.md#沙箱) | 2026-11-14 项目负责人确认：在没有沙箱实现的平台，未显式设置的默认 `strict` 降级为 `off` 并提示 `sandbox_downgraded`，显式 `strict` 拒绝启动；另一处规范改为链接；前驱 D91 |
 | D99 | 对齐 Windows 工具链与路径语义 | G14 | 待开始 | D101 | [工具](spec/tools.md)、[运行时](spec/runtime.md) | 前驱 D91；Gap 中列出的已修部分不重做 |
 | D100 | 加深命令分类与工具输出的安全测试 | G34 | 待开始 | D103 | [工具](spec/tools.md) | 前驱 D91 |
 | D101 | 三平台持续集成 | G33 | 待开始 | D103 | [验证方式](design/constraints.md#验证方式) | 前驱 D48、D99 |
