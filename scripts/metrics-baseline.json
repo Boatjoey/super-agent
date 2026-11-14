@@ -1,0 +1,1069 @@
+{
+  "schema": 1,
+  "environment": {
+    "git_commit": "da94b56e94187a3eb347985d50d3d4240da929a3",
+    "git_dirty": false,
+    "date": "2026-11-14T09:10:46+00:00",
+    "system": "Darwin",
+    "release": "24.6.0",
+    "machine": "arm64",
+    "platform": "macOS-15.7.4-arm64-arm-64bit",
+    "python": "3.12.13",
+    "implementation": "CPython"
+  },
+  "trees": {
+    "production": {
+      "directory": "super_agent",
+      "files": 166,
+      "lines": 24446
+    },
+    "tests": {
+      "directory": "tests",
+      "files": 94,
+      "lines": 16482
+    }
+  },
+  "naming": {
+    "production": {
+      "functions": {
+        "count": 196,
+        "names": 181,
+        "by_file": {
+          "super_agent/tui/commands/model.py": 21,
+          "super_agent/tui/transcript/model.py": 17,
+          "super_agent/runtime/execution/policy.py": 13,
+          "super_agent/tui/update.py": 13,
+          "super_agent/runtime/execution/command_analyzer.py": 11,
+          "super_agent/runtime/session/turn.py": 10,
+          "super_agent/workspace/workspace.py": 9,
+          "super_agent/app/config.py": 8,
+          "super_agent/app/extensions.py": 7,
+          "super_agent/runtime/session/history.py": 7,
+          "super_agent/tui/composer/model.py": 7,
+          "super_agent/tui/commands/format.py": 6,
+          "super_agent/runtime/session/persistence.py": 5,
+          "super_agent/store/repository.py": 5,
+          "super_agent/application/delegation.py": 4,
+          "super_agent/runtime/engine/action_loop.py": 4,
+          "super_agent/store/store.py": 4,
+          "super_agent/tui/actions.py": 4,
+          "super_agent/tui/app.py": 4,
+          "super_agent/app/agents.py": 3,
+          "super_agent/app/mcp.py": 3,
+          "super_agent/runtime/session/export.py": 3,
+          "super_agent/runtime/session/session.py": 3,
+          "super_agent/tui/__init__.py": 3,
+          "super_agent/workspace/context.py": 3,
+          "super_agent/app/memory.py": 2,
+          "super_agent/app/session.py": 2,
+          "super_agent/application/agents.py": 2,
+          "super_agent/runtime/session/checkpoint.py": 2,
+          "super_agent/runtime/session/memory.py": 2,
+          "super_agent/app/instructions/__init__.py": 1,
+          "super_agent/app/subagents.py": 1,
+          "super_agent/application/mcp.py": 1,
+          "super_agent/application/memory.py": 1,
+          "super_agent/cli.py": 1,
+          "super_agent/project/project.py": 1,
+          "super_agent/runtime/execution/approval_store.py": 1,
+          "super_agent/runtime/session/repository.py": 1,
+          "super_agent/runtime/session/snapshot_emitter.py": 1
+        }
+      },
+      "classes": {
+        "count": 12,
+        "names": 12,
+        "by_file": {
+          "super_agent/app/session.py": 2,
+          "super_agent/application/agents.py": 2,
+          "super_agent/tools/sandbox.py": 2,
+          "super_agent/app/subagents.py": 1,
+          "super_agent/application/delegation.py": 1,
+          "super_agent/application/workflows.py": 1,
+          "super_agent/tools/commands.py": 1,
+          "super_agent/tools/output.py": 1,
+          "super_agent/tools/sandbox_linux.py": 1
+        }
+      },
+      "parameters": {
+        "count": 20,
+        "names": 11,
+        "by_file": {
+          "super_agent/tui/transcript/model.py": 6,
+          "super_agent/app/mcp.py": 3,
+          "super_agent/runtime/engine/engine.py": 2,
+          "super_agent/runtime/session/history.py": 2,
+          "super_agent/workspace/context.py": 2,
+          "super_agent/cli.py": 1,
+          "super_agent/runtime/session/snapshot_emitter.py": 1,
+          "super_agent/tui/approval/model.py": 1,
+          "super_agent/tui/commands/format.py": 1,
+          "super_agent/tui/commands/model.py": 1
+        }
+      },
+      "local_variables": {
+        "count": 41,
+        "names": 39,
+        "by_file": {
+          "super_agent/app/config.py": 12,
+          "super_agent/app/session.py": 11,
+          "super_agent/app/subagents.py": 4,
+          "super_agent/tui/transcript/model.py": 4,
+          "super_agent/app/agents.py": 3,
+          "super_agent/cli.py": 2,
+          "super_agent/application/delegation.py": 1,
+          "super_agent/application/mcp.py": 1,
+          "super_agent/application/workflows.py": 1,
+          "super_agent/tui/update.py": 1,
+          "super_agent/workspace/workspace.py": 1
+        }
+      },
+      "instance_attributes": {
+        "count": 10,
+        "names": 10,
+        "by_file": {
+          "super_agent/runtime/session/snapshot_emitter.py": 5,
+          "super_agent/runtime/session/session.py": 2,
+          "super_agent/app/mcp.py": 1,
+          "super_agent/cli.py": 1,
+          "super_agent/workspace/context.py": 1
+        }
+      },
+      "class_attributes": {
+        "count": 16,
+        "names": 16,
+        "by_file": {
+          "super_agent/tui/app.py": 6,
+          "super_agent/tui/composer/model.py": 4,
+          "super_agent/tui/transcript/model.py": 4,
+          "super_agent/tui/commands/model.py": 2
+        }
+      },
+      "module_names": {
+        "count": 5,
+        "names": 5,
+        "by_file": {
+          "super_agent/application/delegation.py": 2,
+          "super_agent/tui/commands/catalog.py": 2,
+          "super_agent/app/session.py": 1
+        }
+      },
+      "import_aliases": {
+        "count": 4,
+        "names": 2,
+        "by_file": {
+          "super_agent/app/agents.py": 1,
+          "super_agent/app/config.py": 1,
+          "super_agent/app/session.py": 1,
+          "super_agent/app/subagents.py": 1
+        }
+      }
+    },
+    "tests": {
+      "functions": {
+        "count": 3,
+        "names": 3,
+        "by_file": {
+          "tests/app/test_instructions.py": 2,
+          "tests/app/test_config.py": 1
+        }
+      },
+      "classes": {
+        "count": 0,
+        "names": 0,
+        "by_file": {}
+      },
+      "parameters": {
+        "count": 0,
+        "names": 0,
+        "by_file": {}
+      },
+      "local_variables": {
+        "count": 5,
+        "names": 5,
+        "by_file": {
+          "tests/app/test_instructions.py": 2,
+          "tests/build/test_build_local.py": 2,
+          "tests/app/test_mcp.py": 1
+        }
+      },
+      "instance_attributes": {
+        "count": 2,
+        "names": 2,
+        "by_file": {
+          "tests/app/test_subagents.py": 1,
+          "tests/tui/fakes.py": 1
+        }
+      },
+      "class_attributes": {
+        "count": 0,
+        "names": 0,
+        "by_file": {}
+      },
+      "module_names": {
+        "count": 0,
+        "names": 0,
+        "by_file": {}
+      },
+      "import_aliases": {
+        "count": 1,
+        "names": 1,
+        "by_file": {
+          "tests/app/test_subagents.py": 1
+        }
+      }
+    }
+  },
+  "facade_imports": {
+    "production": {
+      "count": 5,
+      "locations": [
+        {
+          "path": "super_agent/__main__.py",
+          "line": 37,
+          "names": [
+            "super_agent.runtime"
+          ]
+        },
+        {
+          "path": "super_agent/app/agents.py",
+          "line": 27,
+          "names": [
+            "PERMISSION_MODE_PLAN",
+            "ROLE_SYSTEM",
+            "Message",
+            "PermissionMode",
+            "Session",
+            "valid_permission_mode"
+          ]
+        },
+        {
+          "path": "super_agent/app/config.py",
+          "line": 37,
+          "names": [
+            "PERMISSION_MODE_BYPASS",
+            "PermissionMode",
+            "PermissionRules",
+            "valid_permission_mode"
+          ]
+        },
+        {
+          "path": "super_agent/app/session.py",
+          "line": 48,
+          "names": [
+            "DefaultScheduledActionExecutor",
+            "Metadata",
+            "Session",
+            "create_persistent_session",
+            "new_engine_with_executor_and_policy",
+            "new_policy"
+          ]
+        },
+        {
+          "path": "super_agent/app/subagents.py",
+          "line": 40,
+          "names": [
+            "DefaultScheduledActionExecutor",
+            "Metadata",
+            "PermissionRules",
+            "Session",
+            "ToolCall",
+            "ToolSpec",
+            "create_persistent_session",
+            "new_engine_with_executor_and_policy",
+            "new_policy"
+          ]
+        }
+      ]
+    },
+    "tests": {
+      "count": 4,
+      "locations": [
+        {
+          "path": "tests/app/test_frontend_ports.py",
+          "line": 17,
+          "names": [
+            "super_agent.runtime"
+          ]
+        },
+        {
+          "path": "tests/app/test_instructions.py",
+          "line": 26,
+          "names": [
+            "PERMISSION_MODE_ASK",
+            "PERMISSION_MODE_PLAN",
+            "ROLE_SYSTEM"
+          ]
+        },
+        {
+          "path": "tests/app/test_subagents.py",
+          "line": 25,
+          "names": [
+            "PermissionRules",
+            "ToolCall"
+          ]
+        },
+        {
+          "path": "tests/app/test_tui_adapter.py",
+          "line": 16,
+          "names": [
+            "super_agent.runtime"
+          ]
+        }
+      ]
+    }
+  },
+  "subpackage_imports_via_facade": {
+    "production": {
+      "count": 0,
+      "locations": []
+    },
+    "tests": {
+      "count": 19,
+      "locations": [
+        {
+          "path": "tests/architecture/test_spec.py",
+          "line": 21,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_action_queue.py",
+          "line": 5,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_action_result_resolver.py",
+          "line": 14,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_approval_action.py",
+          "line": 15,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_concurrency_stress.py",
+          "line": 29,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_engine.py",
+          "line": 23,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_failure_reporting.py",
+          "line": 13,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_machine_invariants.py",
+          "line": 13,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_message_outputs.py",
+          "line": 12,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_queued_input.py",
+          "line": 21,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_replace_messages.py",
+          "line": 9,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_session_notifications.py",
+          "line": 19,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_session_store.py",
+          "line": 31,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_steering.py",
+          "line": 19,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_step.py",
+          "line": 15,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_telemetry.py",
+          "line": 13,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_tool_batch.py",
+          "line": 11,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_tool_permission.py",
+          "line": 9,
+          "names": [
+            "machine"
+          ]
+        },
+        {
+          "path": "tests/runtime/test_transition.py",
+          "line": 13,
+          "names": [
+            "machine"
+          ]
+        }
+      ]
+    }
+  },
+  "compat_modules": {
+    "super_agent/app/agent_application.py": {
+      "present": true,
+      "lines": 16,
+      "references": {
+        "production": [
+          {
+            "path": "super_agent/app/__init__.py",
+            "line": 15,
+            "names": [
+              "AgentApplication",
+              "new_agent_application"
+            ]
+          },
+          {
+            "path": "super_agent/app/tui_adapter.py",
+            "line": 17,
+            "names": [
+              "AgentApplication",
+              "new_agent_application",
+              "to_conversation_notification",
+              "to_conversation_view",
+              "to_frontend_context_usage",
+              "to_frontend_message",
+              "to_frontend_message_ptr",
+              "to_frontend_permission",
+              "to_frontend_status",
+              "to_frontend_tool_call"
+            ]
+          }
+        ],
+        "tests": [
+          {
+            "path": "tests/app/test_frontend_ports.py",
+            "line": 19,
+            "names": [
+              "to_frontend_message"
+            ]
+          }
+        ]
+      }
+    },
+    "super_agent/app/tui_adapter.py": {
+      "present": true,
+      "lines": 41,
+      "references": {
+        "production": [
+          {
+            "path": "super_agent/app/__init__.py",
+            "line": 71,
+            "names": [
+              "TerminalConversation",
+              "new_terminal_conversation"
+            ]
+          }
+        ],
+        "tests": [
+          {
+            "path": "tests/app/test_tui_adapter.py",
+            "line": 18,
+            "names": [
+              "to_conversation_notification"
+            ]
+          }
+        ]
+      }
+    },
+    "super_agent/app/workflows.py": {
+      "present": true,
+      "lines": 3,
+      "references": {
+        "production": [
+          {
+            "path": "super_agent/app/__init__.py",
+            "line": 75,
+            "names": [
+              "WorkflowController"
+            ]
+          },
+          {
+            "path": "super_agent/app/agents.py",
+            "line": 19,
+            "names": [
+              "WorkflowController"
+            ]
+          },
+          {
+            "path": "super_agent/app/session.py",
+            "line": 45,
+            "names": [
+              "WorkflowController"
+            ]
+          }
+        ],
+        "tests": []
+      }
+    },
+    "super_agent/runtime/machine/aliases.py": {
+      "present": true,
+      "lines": 52,
+      "references": {
+        "production": [
+          {
+            "path": "super_agent/runtime/machine/__init__.py",
+            "line": 14,
+            "names": [
+              "COMMAND_CLASS_DESTRUCTIVE",
+              "COMMAND_CLASS_NETWORK",
+              "COMMAND_CLASS_READ_ONLY",
+              "COMMAND_CLASS_UNKNOWN",
+              "COMMAND_CLASS_WRITE",
+              "ROLE_ASSISTANT",
+              "ROLE_SYSTEM",
+              "ROLE_TOOL",
+              "ROLE_USER",
+              "ZERO_COMMAND_CLASS",
+              "Attachment",
+              "CommandClass",
+              "Message",
+              "ModelResponse",
+              "PermissionRequest",
+              "Role",
+              "StreamChunk",
+              "ToolCall"
+            ]
+          }
+        ],
+        "tests": []
+      }
+    },
+    "super_agent/runtime/execution/aliases.py": {
+      "present": true,
+      "lines": 94,
+      "references": {
+        "production": [
+          {
+            "path": "super_agent/runtime/execution/__init__.py",
+            "line": 17,
+            "names": [
+              "APPROVE_ALWAYS",
+              "APPROVE_ONCE",
+              "COMMAND_CLASS_DESTRUCTIVE",
+              "COMMAND_CLASS_NETWORK",
+              "COMMAND_CLASS_READ_ONLY",
+              "COMMAND_CLASS_UNKNOWN",
+              "COMMAND_CLASS_WRITE",
+              "DENY_APPROVAL",
+              "AppendStreamingAssistant",
+              "ApprovalAlwaysGranted",
+              "ApprovalDecision",
+              "ApprovalDenied",
+              "ApprovalGranted",
+              "AssistantMessageReceived",
+              "AwaitApproval",
+              "CallModel",
+              "CheckToolPermission",
+              "CommandClass",
+              "Event",
+              "Message",
+              "Model",
+              "ModelResponse",
+              "PermissionRequest",
+              "RunTool",
+              "ScheduledAction",
+              "StreamChunk",
+              "ToolBatchReceived",
+              "ToolCall",
+              "ToolCallBatch",
+              "ToolCallDenied",
+              "ToolCallNeedsApproval",
+              "ToolCallReadyToRun",
+              "ToolResultReceived",
+              "ToolRunner",
+              "ToolSpec"
+            ]
+          }
+        ],
+        "tests": []
+      }
+    },
+    "super_agent/runtime/session/aliases.py": {
+      "present": true,
+      "lines": 59,
+      "references": {
+        "production": [
+          {
+            "path": "super_agent/runtime/session/__init__.py",
+            "line": 15,
+            "names": [
+              "APPROVE_ALWAYS",
+              "APPROVE_ONCE",
+              "DENY_APPROVAL",
+              "PERMISSION_MODE_ASK",
+              "PERMISSION_MODE_BYPASS",
+              "ROLE_SYSTEM",
+              "ROLE_TOOL",
+              "ApprovalDecision",
+              "ApprovalWaiter",
+              "Attachment",
+              "Engine",
+              "EngineView",
+              "Message",
+              "PermissionMode",
+              "PermissionRequest",
+              "PermissionRules",
+              "State",
+              "StreamChunk",
+              "ToolCall",
+              "UserMessageSubmitted",
+              "valid_permission_mode"
+            ]
+          }
+        ],
+        "tests": []
+      }
+    }
+  },
+  "any": {
+    "production": {
+      "count": 173,
+      "by_file": {
+        "super_agent/tools/mcp/client.py": 27,
+        "super_agent/jsonutil.py": 22,
+        "super_agent/tools/lsp/client.py": 15,
+        "super_agent/runtime/engine/action_loop.py": 14,
+        "super_agent/frontend/wire.py": 12,
+        "super_agent/web/routes.py": 9,
+        "super_agent/web/hub.py": 8,
+        "super_agent/llm/claude.py": 7,
+        "super_agent/runtime/execution/approval_store.py": 6,
+        "super_agent/tools/files.py": 6,
+        "super_agent/llm/openai.py": 5,
+        "super_agent/runtime/execution/command_analyzer.py": 4,
+        "super_agent/tools/web.py": 4,
+        "super_agent/app/config.py": 3,
+        "super_agent/runtime/session/checkpoint.py": 3,
+        "super_agent/tui/transcript/model.py": 3,
+        "super_agent/app/session.py": 2,
+        "super_agent/runtime/machine/transition.py": 2,
+        "super_agent/store/memory.py": 2,
+        "super_agent/store/store.py": 2,
+        "super_agent/store/telemetry.py": 2,
+        "super_agent/tools/commands.py": 2,
+        "super_agent/frontend/notifications.py": 1,
+        "super_agent/llm/__init__.py": 1,
+        "super_agent/runtime/execution/scheduled_action_result.py": 1,
+        "super_agent/runtime/machine/event.py": 1,
+        "super_agent/runtime/machine/runtime_data_change.py": 1,
+        "super_agent/runtime/machine/scheduled_action.py": 1,
+        "super_agent/runtime/protocol/telemetry.py": 1,
+        "super_agent/runtime/protocol/types.py": 1,
+        "super_agent/runtime/session/notifications.py": 1,
+        "super_agent/tools/bash.py": 1,
+        "super_agent/tools/proc_other.py": 1,
+        "super_agent/tools/proc_unix.py": 1,
+        "super_agent/tui/terminal_io.py": 1
+      }
+    }
+  },
+  "mixins": {
+    "production": {
+      "mixins": [
+        {
+          "path": "super_agent/runtime/engine/action_loop.py",
+          "line": 107,
+          "name": "ActionLoopMixin"
+        },
+        {
+          "path": "super_agent/runtime/engine/commands.py",
+          "line": 58,
+          "name": "CommandsMixin"
+        },
+        {
+          "path": "super_agent/runtime/engine/query.py",
+          "line": 29,
+          "name": "QueryMixin"
+        },
+        {
+          "path": "super_agent/runtime/session/attachments.py",
+          "line": 25,
+          "name": "AttachmentsMixin"
+        },
+        {
+          "path": "super_agent/runtime/session/checkpoint.py",
+          "line": 15,
+          "name": "CheckpointMixin"
+        },
+        {
+          "path": "super_agent/runtime/session/export.py",
+          "line": 26,
+          "name": "ExportMixin"
+        },
+        {
+          "path": "super_agent/runtime/session/history.py",
+          "line": 32,
+          "name": "HistoryMixin"
+        },
+        {
+          "path": "super_agent/runtime/session/persistence.py",
+          "line": 59,
+          "name": "PersistenceMixin"
+        },
+        {
+          "path": "super_agent/runtime/session/turn.py",
+          "line": 83,
+          "name": "TurnMixin"
+        }
+      ],
+      "composed": [
+        {
+          "path": "super_agent/runtime/engine/engine.py",
+          "line": 59,
+          "name": "Engine",
+          "mixins": [
+            "CommandsMixin",
+            "ActionLoopMixin",
+            "QueryMixin"
+          ]
+        },
+        {
+          "path": "super_agent/runtime/session/session.py",
+          "line": 300,
+          "name": "Session",
+          "mixins": [
+            "TurnMixin",
+            "HistoryMixin",
+            "PersistenceMixin",
+            "CheckpointMixin",
+            "AttachmentsMixin",
+            "ExportMixin"
+          ]
+        }
+      ]
+    }
+  },
+  "largest_files": {
+    "production": [
+      {
+        "path": "super_agent/application/agent_application.py",
+        "lines": 689
+      },
+      {
+        "path": "super_agent/store/store.py",
+        "lines": 653
+      },
+      {
+        "path": "super_agent/app/config.py",
+        "lines": 621
+      },
+      {
+        "path": "super_agent/runtime/machine/transition.py",
+        "lines": 547
+      },
+      {
+        "path": "super_agent/tools/mcp/client.py",
+        "lines": 533
+      },
+      {
+        "path": "super_agent/tui/transcript/model.py",
+        "lines": 532
+      },
+      {
+        "path": "super_agent/tools/lsp/client.py",
+        "lines": 492
+      },
+      {
+        "path": "super_agent/runtime/engine/action_loop.py",
+        "lines": 468
+      },
+      {
+        "path": "super_agent/tui/commands/model.py",
+        "lines": 452
+      },
+      {
+        "path": "super_agent/tui/update.py",
+        "lines": 407
+      }
+    ]
+  },
+  "tests_collected": {
+    "count": 778,
+    "by_directory": {
+      "tests/app": 75,
+      "tests/architecture": 14,
+      "tests/frontend": 12,
+      "tests/llm": 19,
+      "tests/project": 3,
+      "tests/runtime": 389,
+      "tests/scripts": 55,
+      "tests/tools": 86,
+      "tests/tui": 66,
+      "tests/web": 50,
+      "tests/workspace": 9
+    },
+    "pytest": "9.1.1"
+  },
+  "coverage": {
+    "data_file": ".coverage",
+    "coverage_py": "7.16.1",
+    "total": {
+      "statements": 10617,
+      "missed": 1873,
+      "percent": 82.36
+    },
+    "packages": {
+      "super_agent": {
+        "statements": 351,
+        "missed": 125,
+        "percent": 64.39
+      },
+      "super_agent/app": {
+        "statements": 870,
+        "missed": 158,
+        "percent": 81.84
+      },
+      "super_agent/application": {
+        "statements": 795,
+        "missed": 240,
+        "percent": 69.81
+      },
+      "super_agent/frontend": {
+        "statements": 385,
+        "missed": 7,
+        "percent": 98.18
+      },
+      "super_agent/llm": {
+        "statements": 367,
+        "missed": 71,
+        "percent": 80.65
+      },
+      "super_agent/project": {
+        "statements": 37,
+        "missed": 4,
+        "percent": 89.19
+      },
+      "super_agent/runtime": {
+        "statements": 24,
+        "missed": 0,
+        "percent": 100.0
+      },
+      "super_agent/runtime/engine": {
+        "statements": 346,
+        "missed": 12,
+        "percent": 96.53
+      },
+      "super_agent/runtime/execution": {
+        "statements": 593,
+        "missed": 29,
+        "percent": 95.11
+      },
+      "super_agent/runtime/machine": {
+        "statements": 685,
+        "missed": 23,
+        "percent": 96.64
+      },
+      "super_agent/runtime/permission": {
+        "statements": 22,
+        "missed": 1,
+        "percent": 95.45
+      },
+      "super_agent/runtime/protocol": {
+        "statements": 120,
+        "missed": 4,
+        "percent": 96.67
+      },
+      "super_agent/runtime/session": {
+        "statements": 921,
+        "missed": 92,
+        "percent": 90.01
+      },
+      "super_agent/runtime/telemetry": {
+        "statements": 21,
+        "missed": 6,
+        "percent": 71.43
+      },
+      "super_agent/store": {
+        "statements": 610,
+        "missed": 85,
+        "percent": 86.07
+      },
+      "super_agent/tools": {
+        "statements": 1606,
+        "missed": 243,
+        "percent": 84.87
+      },
+      "super_agent/tui": {
+        "statements": 2068,
+        "missed": 671,
+        "percent": 67.55
+      },
+      "super_agent/web": {
+        "statements": 533,
+        "missed": 59,
+        "percent": 88.93
+      },
+      "super_agent/workspace": {
+        "statements": 263,
+        "missed": 43,
+        "percent": 83.65
+      }
+    }
+  },
+  "cold_start": {
+    "runs": 20,
+    "probes": {
+      "interpreter": {
+        "median_ms": 10.8,
+        "min_ms": 10.2,
+        "max_ms": 11.7,
+        "samples_ms": [
+          10.5,
+          10.7,
+          10.8,
+          10.5,
+          10.9,
+          10.2,
+          11.7,
+          10.5,
+          10.6,
+          11.0,
+          10.8,
+          11.2,
+          10.9,
+          10.3,
+          10.4,
+          11.0,
+          11.1,
+          11.4,
+          10.9,
+          10.3
+        ]
+      },
+      "entry_import": {
+        "median_ms": 187.1,
+        "min_ms": 184.6,
+        "max_ms": 192.6,
+        "samples_ms": [
+          192.3,
+          185.4,
+          185.4,
+          184.6,
+          187.7,
+          192.6,
+          191.5,
+          186.4,
+          187.8,
+          184.6,
+          187.0,
+          187.2,
+          187.5,
+          191.8,
+          185.3,
+          187.3,
+          186.5,
+          187.0,
+          187.1,
+          186.0
+        ]
+      },
+      "terminal_import": {
+        "median_ms": 288.5,
+        "min_ms": 286.0,
+        "max_ms": 300.5,
+        "samples_ms": [
+          287.5,
+          288.8,
+          289.3,
+          287.3,
+          289.6,
+          300.5,
+          290.9,
+          288.4,
+          289.6,
+          286.6,
+          287.8,
+          288.7,
+          288.6,
+          286.0,
+          289.2,
+          288.1,
+          286.8,
+          286.7,
+          289.8,
+          287.1
+        ]
+      }
+    },
+    "skipped": {}
+  },
+  "definitions": {
+    "camel_case": "A name is camelCase when, after any leading underscores, it starts with a lowercase letter and contains an uppercase letter (fooBar, _fooBar). Counts are per identifier: once per name in its scope.",
+    "functions": "Function and method definitions whose name contains an uppercase letter; PEP 8 wants snake_case. A method decorated with @override is exempt, because its base class owns the name.",
+    "classes": "Class names that are not CapWords: after leading underscores they start lowercase or contain an underscore.",
+    "parameters": "camelCase parameters of functions, methods and lambdas.",
+    "local_variables": "camelCase names bound inside a function by assignment, loop, with, except, walrus, comprehension or match targets, once per function; parameters and global or nonlocal names are excluded.",
+    "instance_attributes": "camelCase attributes assigned through self (self.fooBar = ...), once per class, excluding names the class body declares, which count as class_attributes. pep8-naming has no rule for these.",
+    "class_attributes": "camelCase names bound in a class body, such as dataclass fields, once per class.",
+    "module_names": "camelCase names bound at module scope by assignment-like statements, once per module.",
+    "import_aliases": "camelCase names an import binds under a new name (import x as fooBar); x as x re-exports are not aliases.",
+    "facade_imports": "Import statements that bind the root super_agent.runtime facade or a name it re-exports, or that import one of its api_*.py parts. The facade's own __init__.py and api_*.py are excluded. Each statement counts once, wherever it stands, TYPE_CHECKING blocks included.",
+    "subpackage_imports_via_facade": "from super_agent.runtime import <subpackage> statements. They import the owning subpackage and keep working once the facade is gone, so they are not facade imports.",
+    "compat_modules": "Import statements that load one of the compatibility re-export modules, counted per module. Lines are physical lines of the module.",
+    "any": "References to typing.Any in code, string type expressions in annotations, cast() and type aliases included; the import statement itself, comments and docstrings are not references.",
+    "mixins": "Classes whose name ends in Mixin, and classes that list such a class among their bases.",
+    "largest_files": "Production files with the most physical lines (newline count, as wc -l reports it).",
+    "tests_collected": "Test items listed by pytest --collect-only -q: each parametrised case counts, and tests skipped on this platform are still collected.",
+    "coverage": "Line coverage read from an existing coverage data file: covered statements over statements, per super_agent/<package> and per super_agent/runtime/<subpackage>. super_agent/runtime holds the facade's own files and super_agent the top-level modules.",
+    "cold_start": "Wall-clock time of fresh `python -c <code>` processes started from the repository root: one unrecorded warm-up per probe first (it compiles bytecode and warms the OS file cache), then the probes interleaved; the median is the figure to compare. entry_import imports the console-script module super_agent.__main__, which is everything loaded before flag parsing, without configuration or a front end. terminal_import adds super_agent.tui, the default front end on Linux and macOS. interpreter runs `pass`, the floor on this machine."
+  }
+}
