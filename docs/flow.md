@@ -18,8 +18,8 @@
 | ID | 开发节点 | 关联 Gap | 当前状态 | 后继节点 | 交付物引用 | 状态或阻塞 |
 |---|---|---|---|---|---|---|
 | D53 | 两端入口统一使用 Adapter 命名 | G19 | 待确认 | D94、D95、D96 | [模块职责](spec/packages.md#代码依赖与接口约束)、[终端规范](spec/terminal.md)、[应用接口](spec/application-interface.md) | 已核对实际入口与引用；拟将 `TerminalApplication` 改为 `TUIAdapter`、Web `Server` 改为 `WebAdapter`；等待用户确认节点后更新规范和代码，开发流程文件保持不变 |
-| D48 | 为非 Linux 平台实现命令隔离沙箱 | G09 | 待开始 | D101 | [工具沙箱](spec/tools.md#沙箱)、[配置](spec/config.md#沙箱) | 项目负责人已于 2026-10-29 决定实现；机制选型与实现均未开始 |
-| D91 | 建立度量基线并集中取得顶层决策 | G25 | 待开始 | D92、D93、D97、D98、D99、D100 | [完成标准](development.md#完成标准)、[验收](development.md#验收) | 范围已明确，等待开始；顶层决策汇总 G19、G29、G31、G32 |
+| D48 | 为非 Linux 平台实现命令隔离沙箱 | G09 | 进行中 | D101 | [工具沙箱](spec/tools.md#沙箱)、[配置](spec/config.md#沙箱) | 项目负责人已于 2026-10-29 决定实现；2026-11-14 开始，macOS 先采用系统自带的 `sandbox-exec`（Seatbelt）实现严格隔离，Windows 机制尚未开始 |
+| D91 | 建立度量基线并集中取得顶层决策 | G25 | 进行中 | D92、D93、D97、D98、D99、D100 | [完成标准](development.md#完成标准)、[验收](development.md#验收) | 2026-11-14 开始：度量脚本、基线归档、持续集成上报与对外名称清单；顶层决策汇总 G19、G29、G31、G32 |
 | D92 | 标识符改为 PEP 8 命名并启用命名检查 | G26 | 待开始 | D94、D95、D96 | [Python 约定](development.md#python-约定) | 前驱 D91；按包分批合入 |
 | D93 | 移除内部对兼容门面与重复导出的依赖 | G27 | 待开始 | D94、D95、D96 | [代码依赖与接口约束](spec/packages.md#代码依赖与接口约束) | 前驱 D91；删除范围以对外名称清单为准 |
 | D94 | 引擎与会话由 mixin 改为显式组合 | G28 | 待开始 | D102 | [运行时](spec/runtime.md)、[文件分工](spec/packages.md#文件分工) | 前驱 D53、D92、D93；开工前先补并发压力与不变量用例 |
