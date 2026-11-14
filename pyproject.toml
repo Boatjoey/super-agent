@@ -83,7 +83,7 @@ known-first-party = ["super_agent", "tests"]
 "tests/**" = ["B011"]
 
 [tool.pyright]
-include = ["super_agent", "tests"]
+include = ["super_agent", "tests", "scripts/metrics.py"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
