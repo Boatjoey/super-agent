@@ -19,7 +19,7 @@
 - `runtime/execution` 调用出站的模型和工具端口，并承载审批等待。
 - `runtime/session` 提供应用用例，不得包含终端行为，也不得导入 `os` 或 `pathlib`；文件系统访问必须经过端口。
 - `frontend` 是前端契约：驱动端端口（含 MCP、附件、工作区查询、扩展、记忆）、展示 DTO、通知集合、通道与取消值，以及契约的 JSON 投影。两个前端使用同一份契约；它不导入运行时、不导入任何适配器，只依赖自身。
-- `tui` 负责 `TerminalApplication` 及其不依赖框架的交互模型。Rich 仅限于此适配器；视图保持纯函数；它只通过前端端口和展示 DTO 依赖应用，并按终端既有名称重新导出契约中的展示值。
+- `tui` 负责 `TUIAdapter` 及其不依赖框架的交互模型。Rich 仅限于此适配器；视图保持纯函数；它只通过前端端口和展示 DTO 依赖应用，并按终端既有名称重新导出契约中的展示值。
 - `web` 是另一个前端适配器，只依赖 `frontend`，把端口承载为本机 HTTP 与服务器推送事件；不得导入运行时、`tui` 或组合根。
 - `application` 承载跨运行用例的应用控制器及前端契约实现；具体落点见[六边形边界的代码约束](#六边形边界的代码约束)。
 - `app` 包含组合根、启动配置适配与设施桥接；不能把整个包都视作组合根，逐文件归属见下表。
@@ -35,7 +35,7 @@
 
 `ToolBatchReceived`、`ToolCallNeedsApproval` 和 `ActionResultResolver` 分别是工具批次接收、审批请求和结果映射的规范名称；运行时不得为它们重新导出其他名称。
 
-`TerminalApplication` 与 `web.Server` 是[系统范围](../design/software-architecture.md#系统范围)规定的两个用户交互入口。它们共享同一应用接口，暴露同一组操作，只有承载方式不同；因此新增前端只需新增一个承载层，不需要复制业务规则。
+`TUIAdapter` 与 `WebAdapter` 是[系统范围](../design/software-architecture.md#系统范围)规定的两个用户交互入口。它们共享同一应用接口，暴露同一组操作，只有承载方式不同；因此新增前端只需新增一个承载层，不需要复制业务规则。
 
 ## 端口与适配器映射
 
@@ -87,7 +87,7 @@
 
 `web/turns.py` 的 `TurnRunner` 仅依赖 `AgentInteractionPort`，参数及成员命名为 `interaction`、`_interaction`，表达其交互能力范围。完整前端组合入口仍可持有 `FrontendPorts`，参数及成员使用 `frontend_ports`／`_frontend_ports`。`tui/app.py` 的 `App` 分别持有 `snapshot_port` 与 `turn_port`，区别端口对象和读取的快照值；终端构造入口中的完整契约对象命名为 `frontend_ports`，避免与核心 Session 混淆。
 
-`application/agent_application.py` 的 `AgentApplication` 是应用服务，通过结构化类型实现这些端口；Web 与 TUI 是调用端口的入站适配器，该应用服务不属于前端适配器。无须显式继承，也不为组合端口拆分实现。应用职责仍按[六边形边界的代码约束](#六边形边界的代码约束)维护；构造入口命名为 `new_agent_application`。该实现持有的控制器命名为 `agent_controller`、`mcp_controller` 和 `memory_controller`；审批队列与待决标识分别命名为 `_approval_queue`、`_pending_approval_id`，局部名称区分运行时队列和前端通知通道。相关标识符使用 `snake_case`，测试中的完整契约替身使用 `FakeFrontendPorts`，审批等待替身名称明确表示其场景。历史终端入口仍只重新导出同一个实现。兼容要求见[交互端口兼容性](application-interface.md#交互端口兼容性)。
+`application/agent_application.py` 的 `AgentApplication` 是应用服务，通过结构化类型实现这些端口；Web 与 TUI 是调用端口的入站适配器，该应用服务不属于前端适配器。无须显式继承，也不为组合端口拆分实现。应用职责仍按[六边形边界的代码约束](#六边形边界的代码约束)维护；构造入口命名为 `new_agent_application`。该实现持有的控制器命名为 `agent_controller`、`mcp_controller` 和 `memory_controller`；审批队列与待决标识分别命名为 `_approval_queue`、`_pending_approval_id`，局部名称区分运行时队列和前端通知通道。相关标识符使用 `snake_case`，测试中的完整契约替身使用 `FakeFrontendPorts`，审批等待替身名称明确表示其场景。历史终端名称仍只重新导出同一个实现。兼容要求见[交互端口兼容性](application-interface.md#交互端口兼容性)。
 
 ## 六边形边界的代码约束
 

@@ -173,7 +173,7 @@ Web 交互源码使用 TypeScript，样式与页面结构保持原生 CSS 和 HT
 | `terminal` | POSIX 伪终端 | 启动参数、流式回复、窗口缩放、取消、会话操作、补全与中文输入 |
 | `web` | 启动本机 HTTP 服务 | 页面与快照、SSE 回复、并发提交拒绝、取消与后续交互 |
 
-冒烟测试验证真实进程中的入口可达性及收尾；会话数据与恢复结果由 session 测试精确断言，终端交互与渲染由 `TerminalApplication` 测试验证。行为依据分别见[应用接口](spec/application-interface.md)、[终端](spec/terminal.md)和[会话](spec/session.md)规范，不在此重复定义。
+冒烟测试验证真实进程中的入口可达性及收尾；会话数据与恢复结果由 session 测试精确断言，终端交互与渲染由 `TUIAdapter` 测试验证。行为依据分别见[应用接口](spec/application-interface.md)、[终端](spec/terminal.md)和[会话](spec/session.md)规范，不在此重复定义。
 
 仍需人工检查的内容包括：颜色可读性，Linux 终端、tmux 与 SSH 下的行为，Unicode 与宽字符，终端原生选择和复制，以及剪贴板后备路径。可见的交互式命令行变更必须在变更审阅记录中记录测试过的终端。
 
