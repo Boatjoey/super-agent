@@ -18,14 +18,14 @@
 | ID | 开发节点 | 关联 Gap | 当前状态 | 后继节点 | 交付物引用 | 状态或阻塞 |
 |---|---|---|---|---|---|---|
 | D92 | 标识符改为 PEP 8 命名并启用命名检查 | G26 | 待开始 | D94、D95、D96 | [Python 约定](development.md#python-约定) | 按包分批合入；ruff 的命名规则不检查实例属性名，属性命名需要另设检查，可复用度量脚本 |
-| D93 | 移除内部对兼容门面与重复导出的依赖 | G27 | 待开始 | D94、D95、D96 | [代码依赖与接口约束](spec/packages.md#代码依赖与接口约束) | 删除范围以[对外名称清单](spec/packages.md#对外名称与兼容入口)为准；历史控制器构造入口随 D95 删除 |
+| D93 | 移除内部对兼容门面与重复导出的依赖 | G27 | 进行中 | D94、D95、D96 | [代码依赖与接口约束](spec/packages.md#代码依赖与接口约束) | 2026-11-14 开始；删除范围以[对外名称清单](spec/packages.md#对外名称与兼容入口)为准；历史控制器构造入口随 D95 删除 |
 | D94 | 引擎与会话由 mixin 改为显式组合 | G28 | 待开始 | D102 | [运行时](spec/runtime.md)、[文件分工](spec/packages.md#文件分工) | 前驱 D92、D93；开工前先补并发压力与不变量用例 |
 | D95 | 划清 `app` 包中组合根与设施的边界 | G29 | 待开始 | D102 | [软件架构](design/software-architecture.md#职责的严格判据)、[模块职责](spec/packages.md#六边形边界的代码约束) | 2026-11-14 项目负责人选定拆为独立的组合根包与设施包，包名在更新设计与模块职责时确定；历史控制器构造入口在本节点删除；前驱 D92、D93 |
 | D96 | 收敛 `Any` 并拆分超大文件 | G30 | 待开始 | D102 | [实现与重构](development.md#实现与重构)、[文件分工](spec/packages.md#文件分工) | 前驱 D92、D93 |
-| D97 | Web 界面访问认证 | G31 | 待开始 | D103 | [应用接口](spec/application-interface.md)、[配置](spec/config.md) | 2026-11-14 项目负责人确认：每次启动生成随机令牌，经启动时给出的地址一次性换取 HttpOnly、SameSite=Strict 的 Cookie，所有 `/api` 请求必须携带；每次请求校验 Host 与 Origin；回环地址同样启用 |
-| D98 | 统一沙箱降级规则 | G32 | 待开始 | D103 | [配置：沙箱](spec/config.md#沙箱)、[工具沙箱](spec/tools.md#沙箱) | 2026-11-14 项目负责人确认：在没有沙箱实现的平台，未显式设置的默认 `strict` 降级为 `off` 并提示 `sandbox_downgraded`，显式 `strict` 拒绝启动；另一处规范改为链接；现有实现会在设置归一化时先填入默认值，显式 `strict` 在 Windows 上同样被降级，需一并修正 |
+| D97 | Web 界面访问认证 | G31 | 进行中 | D103 | [应用接口](spec/application-interface.md)、[配置](spec/config.md) | 2026-11-14 开始；2026-11-14 项目负责人确认：每次启动生成随机令牌，经启动时给出的地址一次性换取 HttpOnly、SameSite=Strict 的 Cookie，所有 `/api` 请求必须携带；每次请求校验 Host 与 Origin；回环地址同样启用 |
+| D98 | 统一沙箱降级规则 | G32 | 进行中 | D103 | [配置：沙箱](spec/config.md#沙箱)、[工具沙箱](spec/tools.md#沙箱) | 2026-11-14 开始；2026-11-14 项目负责人确认：在没有沙箱实现的平台，未显式设置的默认 `strict` 降级为 `off` 并提示 `sandbox_downgraded`，显式 `strict` 拒绝启动；另一处规范改为链接；现有实现会在设置归一化时先填入默认值，显式 `strict` 在 Windows 上同样被降级，需一并修正 |
 | D99 | 对齐 Windows 工具链与路径语义 | G14 | 待开始 | D101 | [工具](spec/tools.md)、[运行时](spec/runtime.md) | Gap 中列出的已修部分不重做 |
-| D100 | 加深命令分类与工具输出的安全测试 | G34 | 待开始 | D103 | [工具](spec/tools.md) | 可以开始 |
+| D100 | 加深命令分类与工具输出的安全测试 | G34 | 进行中 | D103 | [工具](spec/tools.md) | 2026-11-14 开始；可以开始 |
 | D101 | 三平台持续集成 | G33 | 待开始 | D103、D107 | [验证方式](design/constraints.md#验证方式) | 前驱 D99 |
 | D102 | 性能基准与遥测汇总 | G35 | 待开始 | D103 | [遥测](spec/runtime.md#遥测)、[会话](spec/session.md) | 前驱 D94、D95、D96 |
 | D103 | 工程化门槛与发布流程 | G36 | 待开始 | — | [开发命令](development.md#开发命令)、[构建](development.md#构建) | 前驱 D97、D98、D100、D101、D102、D104 |
