@@ -19,7 +19,7 @@ sudo apt install bubblewrap util-linux   # Debian/Ubuntu
 sudo dnf install bubblewrap util-linux   # Fedora
 ```
 
-缺少 `bwrap` 或 `prlimit` 时，应用按[沙箱要求](docs/spec/tools.md#沙箱)拒绝启动。macOS 使用系统自带的 `sandbox-exec` 隔离命令，无需另行安装。Windows 目前没有命令隔离：未显式配置沙箱时会自动降级为 `off`，命令以当前用户的完整权限运行，详见[沙箱配置](docs/spec/config.md#沙箱)。
+缺少 `bwrap` 或 `prlimit` 时，应用按[沙箱要求](docs/spec/tools.md#沙箱)拒绝启动。macOS 使用系统自带的 `sandbox-exec` 隔离命令，无需另行安装。Windows 目前没有命令隔离，命令以当前用户的完整权限运行；`sandbox.mode` 在 Windows 上的取值见[沙箱配置](docs/spec/config.md#沙箱)。
 
 ### 安装与启动
 

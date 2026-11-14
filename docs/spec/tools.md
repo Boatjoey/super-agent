@@ -83,4 +83,4 @@ macOS 没有挂载与进程命名空间，因此与 Linux 有以下差异：宿�
 
 沙箱参数来自顶层 `sandbox` 配置，见 `config.md`。
 
-严格模式**在条件不满足时拒绝执行**：Linux 上缺少 `bwrap` 或 `prlimit`，或 macOS 上缺少 `/usr/bin/sandbox-exec`、沙箱配置无法应用，就不运行命令。`bwrap` 和 `prlimit` 是 Linux 上的系统依赖，`sandbox-exec` 随 macOS 提供；macOS 在启动时运行一条试验命令，确认配置能够应用。条件不满足时应用在启动阶段即拒绝启动，不会降级为无隔离运行；不受支持的平台同样必须显式设置 `sandbox.mode: off` 才能启动，此时命令以当前用户权限执行。安装方式见 [README](../../README.md#安装与启动)。
+严格模式**在条件不满足时拒绝执行**：Linux 上缺少 `bwrap` 或 `prlimit`，或 macOS 上缺少 `/usr/bin/sandbox-exec`、沙箱配置无法应用，就不运行命令。`bwrap` 和 `prlimit` 是 Linux 上的系统依赖，`sandbox-exec` 随 macOS 提供；macOS 在启动时运行一条试验命令，确认配置能够应用。条件不满足时应用在启动阶段即拒绝启动，不会降级为无隔离运行。没有严格沙箱实现的平台上 `sandbox.mode` 的取值与降级规则见[配置：沙箱](config.md#沙箱)。安装方式见 [README](../../README.md#安装与启动)。
