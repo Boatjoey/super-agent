@@ -93,9 +93,9 @@
 }
 ```
 
-默认模式为 `strict`；`off` 显式关闭隔离。平台支持及依赖缺失时的执行行为见[工具沙箱](tools.md#沙箱)。
+默认模式为 `strict`；`off` 显式关闭隔离。平台支持、各平台生效的资源限制及依赖缺失时的执行行为见[工具沙箱](tools.md#沙箱)。
 
-`strict` 依赖 Linux 的 `bubblewrap`。在非 Linux 平台，未显式设置的默认 `strict` 自动降级为 `off` 并记录 `sandbox_downgraded`，使应用仍能启动、让操作者看到“命令将以完整权限运行”的提示；显式选择 `strict` 仍按不支持处理（见[工具沙箱](tools.md#沙箱)）。
+`strict` 在 Linux 和 macOS 上有实现。在没有实现的平台（如 Windows），未显式设置的默认 `strict` 自动降级为 `off` 并记录 `sandbox_downgraded`，使应用仍能启动、让操作者看到“命令将以完整权限运行”的提示；显式选择 `strict` 仍按不支持处理（见[工具沙箱](tools.md#沙箱)）。
 
 ## 服务器
 

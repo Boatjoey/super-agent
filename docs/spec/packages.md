@@ -227,6 +227,11 @@ Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归
 
 `project` 解析选中的项目，与文件系统访问策略相互独立。`workspace.Context` 是工作区根目录和 cwd 的、独立于进程的唯一权威来源；`workspace.Workspace` 将其适配到会话检查点、附件、导出和工作区恢复端口，包括对旧版保存路径的一次性规范化升级。`store/store.py` 写入和回放持久化会话记录；其保证的持久化顺序见 `session.md`。`store/memory.py` 提供跨会话记忆的两个文件后端（会话存储自己的文件、用户指定路径的文件），实现 `runtime/session/memory.py` 声明的端口。`app/mcp.py` 连接 MCP 管理器、工具注册表与设置文件；`app/memory.py` 挑选记忆后端并写入记忆设置。事务补偿和开关用例位于应用层，见[六边形边界的代码约束](#六边形边界的代码约束)。
 
+`tools/sandbox.py` 按 `sys.platform` 选择严格沙箱的实现：Linux 为 `sandbox_linux.py`，没有实现的平台为 `sandbox_other.py`，macOS 由以下两个文件组成，隔离行为见[工具沙箱](tools.md#沙箱)：
+
+- `tools/sandbox_darwin.py`：生成 Seatbelt 配置与命令行；构造时运行一条试验命令，配置无法应用即拒绝。
+- `tools/sandbox_darwin_launcher.py`：在每条命令前以独立脚本运行，只依赖标准库；创建并回收命令的临时目录、设置资源限制，再交给 `sandbox-exec` 执行。
+
 
 ## 工作区类型映射
 
