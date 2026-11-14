@@ -4,8 +4,9 @@ set -euo pipefail
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${project_root}"
 
-# The strict sandbox is the Linux default, and these are its declared system
-# dependencies. Fail here instead of letting the sandbox tests skip silently.
+# The strict sandbox is the default on Linux and macOS, and these are its
+# declared system dependencies. Fail here instead of letting the sandbox tests
+# skip silently.
 if [[ "$(uname -s)" == "Linux" ]]; then
     for tool in bwrap prlimit; do
         if ! command -v "${tool}" >/dev/null 2>&1; then
@@ -13,6 +14,12 @@ if [[ "$(uname -s)" == "Linux" ]]; then
             exit 1
         fi
     done
+fi
+# macOS ships Seatbelt's front end at a fixed path; the sandbox never looks it
+# up in PATH, so neither does this check.
+if [[ "$(uname -s)" == "Darwin" && ! -x /usr/bin/sandbox-exec ]]; then
+    printf 'missing macOS sandbox dependency: /usr/bin/sandbox-exec (it ships with macOS)\n' >&2
+    exit 1
 fi
 
 # The four gates: formatting, linting, strict typing, and behaviour.
