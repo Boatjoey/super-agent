@@ -126,6 +126,45 @@
 
 依赖检查同时保留合法依赖的正例和越界导入的反例，覆盖嵌套适配器、应用层与整个运行时，防止检查只扫描到顶层文件。
 
+## 对外名称与兼容入口
+
+本节盘点哪些名称对外可见，并规定每个兼容入口的处置。门面导入与兼容模块的引用数由度量脚本统计，命令见[开发命令](../development.md#开发命令)。
+
+### 对外可见的名称
+
+产品只经由下表的界面对外。名称及其兼容语义由右列规范维护，本节不复述：
+
+| 界面 | 名称与兼容语义的出处 |
+|---|---|
+| 命令行参数与环境变量 | [命令行参数与环境变量](config.md#命令行参数与环境变量)；前端选择见[两个前端与承载方式](application-interface.md#两个前端与承载方式) |
+| `settings.json` 配置键 | [配置](config.md) |
+| HTTP 路由与请求、响应 JSON | [Web 接口](application-interface.md#web-接口)、[交互端口兼容性](application-interface.md#交互端口兼容性) |
+| SSE 事件名 | [已有通知契约](application-interface.md#已有通知契约)、[Web 接口](application-interface.md#web-接口) |
+| 斜杠命令与工作流名称 | [命令](terminal.md#命令)、[Web 接口](application-interface.md#web-接口) |
+| 扩展的钩子事件与命令、技能、插件文件 | [扩展](config.md#扩展)、[配置与存储路径](config.md#配置与存储路径) |
+| 会话、记忆与遥测文件 | [运行时与持久化数据](session.md#运行时与持久化数据)、[跨会话记忆](session.md#跨会话记忆)、[遥测](runtime.md#遥测)、[磁盘格式稳定性](session.md#磁盘格式稳定性) |
+
+这些界面都不按 Python 名称加载代码。扩展以文件提供：命令是提示词，钩子是 shell 命令，技能是 `SKILL.md`，插件是含 `plugin.json` 的目录；MCP 服务器与语言服务器是独立进程。SSE 事件名取自通知的 `kind` 字面量，JSON 键由 `json_field` 声明，都不随 Python 名称变化。产品不提供无界面批处理（见[系统范围](../design/software-architecture.md#系统范围)），也不提供 Python 库接口，因此外部按 Python 名称引用的只有 `pyproject.toml` 中命令行程序的入口 `super_agent.__main__:main`，它不是兼容入口。
+
+Python 类名只在遥测中成为持久化的取值：`event`、`action` 字段写入状态机事件与调度动作的类名，失败报告的 `error_type` 写入异常类名（`runtime/engine/action_loop.py`、`runtime/session/turn.py`）。重命名这些类会改变遥测记录的取值，须先按[磁盘格式稳定性](session.md#磁盘格式稳定性)处理。
+
+### 兼容入口的处置
+
+内部 Python 兼容名称没有外部使用者，全部直接删除，不设废弃周期：先把内部模块与测试的引用改为从拥有类型的包导入，再删除兼容名称。
+
+| 兼容入口 | 转发内容 | 处置 |
+|---|---|---|
+| 根 `super_agent.runtime` 门面：`runtime/__init__.py` 及 `api_engine.py`、`api_execution.py`、`api_machine.py`、`api_model.py`、`api_session.py` | `machine`、`execution`、`engine`、`session`、`protocol` 的名称 | 直接删除（在 D93 中执行）；`from super_agent.runtime import <子包>` 导入的是拥有类型的子包，不受影响 |
+| `app/agent_application.py` | `AgentApplication`、`new_agent_application` 与展示转换函数 | 直接删除（在 D93 中执行） |
+| `app/tui_adapter.py` | 历史名称 `TerminalConversation`、`new_terminal_conversation`、`to_tui_*` | 直接删除（在 D93 中执行） |
+| `app/workflows.py` | `Runner`、`WorkflowController` | 直接删除（在 D93 中执行） |
+| `runtime/machine/aliases.py`、`runtime/execution/aliases.py`、`runtime/session/aliases.py` | 其他包的值，例如 `machine.Message`、`session.Engine` | 直接删除（在 D93 中执行），包的 `__init__.py` 不再转发这些名称 |
+| `app/__init__.py` 中的 `AgentApplication`、`new_agent_application`、`TerminalConversation`、`new_terminal_conversation`、`WorkflowController` | 经上述兼容模块转发的应用层名称 | 直接删除（在 D93 中执行） |
+| 类型迁移后留在原位置的转发：`app/agents.py` 的 `AgentProfile`、`filteredToolRunner`、`routedModel`，`app/config.py` 的 `MCPServerSettings`，`app/extensions.py` 的 `Extensions`，`app/mcp.py` 的 `MCPServerSummary`，`app/session.py` 的 `toolHooks`，`app/subagents.py` 转发的五个委派名称，`application/agents.py` 的 `AgentProfile`，`runtime/engine/engine.py` 的 `PolicySetter`、`PolicySnapshot`、`PolicyStore`，`runtime/telemetry/telemetry.py` 的 `Fields`、`install`、`record`，`tui/actions.py` 的 `extract_code_blocks` | 拥有模块中的同一对象 | 直接删除（在 D93 中执行） |
+| 历史控制器构造入口：`app/agents.py` 的 `AgentController`，`app/mcp.py` 的 `MCPController` 与 `new_mcp_controller`，`app/memory.py` 的 `MemoryController` | 只为应用控制器注入设施的子类与工厂 | 直接删除（在 D95 中执行）：组合根直接构造 `application` 中的控制器并注入设施 |
+
+下列转发不是兼容入口，予以保留：各包 `__init__.py` 按 [Python 约定](../development.md#python-约定)公开的接口；`tools/commands.py`、`tools/files.py`、`tools/sandbox.py` 按平台选择实现的转发；终端以既有名称使用契约展示值的转发（`tui/conversation.py`、`tui/approval/model.py`、`tui/commands/ports.py`、`tui/transcript/model.py`），依据见[代码依赖与接口约束](#代码依赖与接口约束)。
+
 ## 文件分工
 
 `runtime/machine` 是纯领域核心，不执行 I/O、不加锁，也不调用模型或工具。文件职责如下：

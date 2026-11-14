@@ -139,9 +139,12 @@ uv run pytest                   # 运行全部测试
 uv run ruff format <files>       # 格式化修改过的 Python 文件
 ./scripts/coverage.sh            # 全项目覆盖率检查
 ./scripts/verify.sh              # 格式、静态检查、类型、测试、并发和覆盖率
+uv run python scripts/metrics.py # 代码度量（命名、门面导入、兼容模块、Any、mixin、文件规模）
 uv run python scripts/smoke.py   # 伪终端与 Web 端到端验收
 ./scripts/build-local.sh        # 构建并安装本地程序
 ```
+
+度量基线归档在 `scripts/metrics-baseline.json`，在 macOS 上生成；持续集成在 Linux 上生成自己的度量，写入运行摘要，只上报不设门禁。更新基线时，先提交改动，运行 `./scripts/coverage.sh`，再执行 `uv run python scripts/metrics.py --collect-tests --coverage-file .coverage --cold-start-runs 20 --json scripts/metrics-baseline.json`；各项指标的定义随输出给出。
 
 Web 交互源码使用 TypeScript，样式与页面结构保持原生 CSS 和 HTML，不引入浏览器运行时框架。修改 `super_agent/web/static/app.ts` 后必须执行 `npm run build:web` 并一起提交生成的 `app.js`；Python 包和本地 HTTP 服务不依赖 Node.js，Node.js 只用于开发期类型检查和构建。
 
