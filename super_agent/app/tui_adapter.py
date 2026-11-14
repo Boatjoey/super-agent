@@ -1,10 +1,13 @@
 """Historical terminal names for the agent application service.
 
-The application service lives in :mod:`super_agent.app.agent_application`, because it
-serves both front ends: the web interface drives the same object, and the
-terminal is one of two front ends that read it. This module
-keeps the old spellings — ``TerminalConversation``, ``new_terminal_conversation``,
-``to_tui_*`` — working for callers and tests written before the split.
+Despite the module name, this is not the terminal adapter: that is
+:class:`super_agent.tui.TUIAdapter`, which reaches the application only through
+the frontend contract. The application service lives in
+:mod:`super_agent.application.agent_application`, because it serves both front
+ends: the web interface drives the same object, and the terminal is one of two
+front ends that read it. This module keeps the old spellings —
+``TerminalConversation``, ``new_terminal_conversation``, ``to_tui_*`` — working
+for callers and tests written before the split.
 
 Nothing here is a second implementation. Every name is the same object.
 """

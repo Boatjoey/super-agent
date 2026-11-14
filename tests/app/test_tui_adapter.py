@@ -1,8 +1,10 @@
-"""The interactive CLI adapter's mapping of runtime values to presentation values.
+"""The application's mapping of runtime values to presentation values.
 
-The adapter is the one place runtime values become presentation values, so the
-test drives it through the engine: an unready engine is ``Initializing``, and a
-ready one is ``Idle`` with nothing pending.
+It is reached here through the historical terminal names in
+``super_agent.app.tui_adapter``, a compatibility module rather than the terminal
+adapter. The application boundary is the one place runtime values become
+presentation values, so the test drives it through the engine: an unready engine
+is ``Initializing``, and a ready one is ``Idle`` with nothing pending.
 """
 
 from __future__ import annotations

@@ -15,7 +15,7 @@ import httpx
 import pytest
 
 from super_agent import frontend
-from super_agent.web import new_server
+from super_agent.web import new_web_adapter
 from super_agent.web.server import _read_request  # pyright: ignore[reportPrivateUsage]
 from tests.fakes.frontend import FakeFrontendPorts
 
@@ -38,7 +38,7 @@ async def test_the_page_the_script_and_the_json_surface_are_served() -> None:
     frontend_ports = FakeFrontendPorts(
         agents=[frontend.AgentSummary(name="build", provider="deepseek", model="deepseek-chat", permission_mode="ask")]
     )
-    server, _hub, _runner = new_server(frontend_ports, port=0)
+    server, _hub, _runner = new_web_adapter(frontend_ports, port=0)
     await server.start()
     try:
         async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{server.port}", timeout=5) as client:
@@ -78,7 +78,7 @@ async def test_the_event_stream_greets_a_tab_then_follows_a_turn() -> None:
             frontend.MessageAppended(message=frontend.Message(role=frontend.ROLE_ASSISTANT, content="hi")),
         ]
     )
-    server, hub, runner = new_server(frontend_ports, port=0)
+    server, hub, runner = new_web_adapter(frontend_ports, port=0)
     await server.start()
     reader, writer = await asyncio.open_connection("127.0.0.1", server.port)
     try:
@@ -114,7 +114,7 @@ async def test_the_event_stream_greets_a_tab_then_follows_a_turn() -> None:
 
 @pytest.mark.asyncio
 async def test_a_malformed_request_is_answered_rather_than_dropped() -> None:
-    server, _hub, _runner = new_server(FakeFrontendPorts(), port=0)
+    server, _hub, _runner = new_web_adapter(FakeFrontendPorts(), port=0)
     await server.start()
     reader, writer = await asyncio.open_connection("127.0.0.1", server.port)
     try:
@@ -132,7 +132,7 @@ async def test_a_malformed_request_is_answered_rather_than_dropped() -> None:
 @pytest.mark.asyncio
 async def test_only_the_events_path_streams() -> None:
     """A JSON route never leaves a connection open: the socket closes with it."""
-    server, _hub, _runner = new_server(FakeFrontendPorts(), port=0)
+    server, _hub, _runner = new_web_adapter(FakeFrontendPorts(), port=0)
     await server.start()
     try:
         async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{server.port}", timeout=5) as client:

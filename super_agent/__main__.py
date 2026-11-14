@@ -134,7 +134,7 @@ async def _run_terminal(
     from super_agent import tui
 
     profile = agent_controller.active_profile()
-    program = tui.TerminalApplication(
+    program = tui.TUIAdapter(
         tui.new(
             frontend_ports,
             tui.StartupInfo(

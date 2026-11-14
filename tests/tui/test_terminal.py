@@ -16,7 +16,7 @@ import pytest
 from rich.console import Console
 
 from super_agent.tui import APPROVE_ONCE, ROLE_ASSISTANT, Message, MessageAppended, StreamChunkReceived
-from super_agent.tui.terminal import TerminalApplication, _read_line  # pyright: ignore[reportPrivateUsage]
+from super_agent.tui.terminal import TUIAdapter, _read_line  # pyright: ignore[reportPrivateUsage]
 from tests.tui.fakes import ApprovalFrontendPorts, FakeFrontendPorts, new_app
 
 
@@ -73,7 +73,7 @@ def test_terminal_input_accepts_chinese_and_replaces_invalid_utf8(monkeypatch: p
 async def test_terminal_appends_reply_to_normal_output() -> None:
     output = io.StringIO()
     fake = FakeFrontendPorts([MessageAppended(message=Message(role=ROLE_ASSISTANT, content="native reply"))])
-    program = TerminalApplication(
+    program = TUIAdapter(
         new_app(fake),
         reader=reader(("hello", "/quit")),
         console=Console(file=output, force_terminal=False, width=80),
@@ -96,7 +96,7 @@ async def test_terminal_streams_reply_once() -> None:
             MessageAppended(message=Message(role=ROLE_ASSISTANT, content="你好，世界")),
         ]
     )
-    program = TerminalApplication(
+    program = TUIAdapter(
         new_app(fake),
         reader=reader(("介绍项目", "/quit")),
         console=Console(file=output, force_terminal=False, width=80),
@@ -112,7 +112,7 @@ async def test_terminal_streams_reply_once() -> None:
 async def test_terminal_reads_inline_approval() -> None:
     output = io.StringIO()
     fake = ApprovalFrontendPorts()
-    program = TerminalApplication(
+    program = TUIAdapter(
         new_app(fake),
         reader=reader(("run it", "1", "/quit")),
         console=Console(file=output, force_terminal=False, width=80),
@@ -127,7 +127,7 @@ async def test_terminal_reads_inline_approval() -> None:
 @pytest.mark.asyncio
 async def test_terminal_writes_slash_command_output_to_scrollback() -> None:
     output = io.StringIO()
-    program = TerminalApplication(
+    program = TUIAdapter(
         new_app(FakeFrontendPorts()),
         reader=reader(("/diff", "/quit")),
         console=Console(file=output, force_terminal=False, width=80),
@@ -143,7 +143,7 @@ async def test_terminal_writes_slash_command_output_to_scrollback() -> None:
 @pytest.mark.asyncio
 async def test_terminal_help_is_inline() -> None:
     output = io.StringIO()
-    program = TerminalApplication(
+    program = TUIAdapter(
         new_app(FakeFrontendPorts()),
         reader=reader(("/help", "/quit")),
         console=Console(file=output, force_terminal=False, width=80),
@@ -166,7 +166,7 @@ async def test_terminal_restores_the_prompt_after_command_output(monkeypatch: py
     monkeypatch.setattr(sys, "stdin", _LiveTTY())
     monkeypatch.setattr(sys, "stdout", stdout)
     keys = [*"/clear", "enter", *"/quit", "enter"]
-    program = TerminalApplication(
+    program = TUIAdapter(
         new_app(FakeFrontendPorts()),
         console=Console(file=stdout, force_terminal=False, width=80),
         key_reader=_ScriptedKeyReader(keys),
@@ -197,7 +197,7 @@ async def test_resize_signal_relayouts_the_live_prompt(monkeypatch: pytest.Monke
         return next(sizes, os.terminal_size((40, 12)))
 
     monkeypatch.setattr(shutil, "get_terminal_size", terminal_size)
-    program = TerminalApplication(
+    program = TUIAdapter(
         new_app(FakeFrontendPorts()),
         console=Console(file=stdout, force_terminal=False, width=80),
         key_reader=_ScriptedKeyReader([""] * 50 + ["ctrl+c"]),

@@ -21,7 +21,7 @@ import urllib.parse
 from super_agent.web.assets import Assets
 from super_agent.web.routes import Request, Response, Router, error_response
 
-__all__ = ["EVENTS_PATH", "Server"]
+__all__ = ["EVENTS_PATH", "WebAdapter"]
 
 #: Where the browser subscribes. One stream per tab, for the whole session.
 EVENTS_PATH = "/api/events"
@@ -42,7 +42,7 @@ _REASONS = {
 }
 
 
-class Server:
+class WebAdapter:
     """One listening socket, one router, one asset directory."""
 
     __slots__ = ("_assets", "_host", "_port", "_router", "_server")

@@ -24,7 +24,7 @@ from super_agent.tui.terminal_io import KeyReader, new_key_reader
 from super_agent.tui.transcript import ROLE_ASSISTANT, ROLE_USER
 from super_agent.tui.update import update
 
-__all__ = ["TerminalApplication"]
+__all__ = ["TUIAdapter"]
 
 type InputReader = Callable[[str], Awaitable[str]]
 type SignalHandler = Callable[[int, FrameType | None], object] | int | None
@@ -43,7 +43,7 @@ def _read_line(prompt: str) -> str:
     return line.decode("utf-8", errors="replace").rstrip("\r\n")
 
 
-class TerminalApplication:
+class TUIAdapter:
     """Run the UI as ordinary stdin, stdout, and terminal scrollback."""
 
     def __init__(
