@@ -35,3 +35,6 @@ node_modules/
 .workbuddy/
 # WorkBuddy 打包演示时留在包目录里的应用描述文件
 .wbapp_*.genie
+
+# macOS Finder 自动生成的文件夹显示设置
+.DS_Store

@@ -4,10 +4,11 @@
 
 ## 必读顺序
 
-1. 阅读 [文档职责与决策权](AGENTS.md#文档职责与决策权)，按唯一出处查找规则。
-2. 开始开发前阅读 [Gap](docs/gap.md) 和 [Flow](docs/flow.md)，关联本次工作与开发节点。
-3. 按 [Development](docs/development.md) 选择开发流程，阅读涉及领域的设计与 Spec 后再修改。
-4. 完成后按开发流程同步 Gap 和 Flow；未执行的检查不得报告通过。
+1. 首次在本机工作时，按 [README 快速开始](README.md#快速开始) 准备依赖与模型配置，再按 [开发命令](docs/development.md#开发命令) 安装开发依赖。
+2. 阅读 [文档职责与决策权](AGENTS.md#文档职责与决策权)，按唯一出处查找规则。
+3. 开始开发前阅读 [Gap](docs/gap.md) 和 [Flow](docs/flow.md)，关联本次工作与开发节点。
+4. 按 [Development](docs/development.md) 选择开发流程，阅读涉及领域的设计与 Spec 后再修改。
+5. 完成后按开发流程同步 Gap 和 Flow；未执行的检查不得报告通过。
 
 ## 执行要求
 
@@ -20,6 +21,7 @@
 
 | 工作主题 | 必读文档 |
 |---|---|
+| 环境准备与首次运行 | [README 快速开始](README.md#快速开始)、[开发命令](docs/development.md#开发命令) |
 | 产品范围与入口 | [产品定义](docs/design/product.md)、[系统范围](docs/design/software-architecture.md#系统范围) |
 | 架构、包依赖和文件分工 | [软件架构](docs/design/software-architecture.md)、[模块职责](docs/spec/packages.md) |
 | 状态、转移、守卫与动作计划 | [状态机](docs/spec/machine.md) |
