@@ -23,7 +23,6 @@ import contextlib
 import dataclasses
 import json
 import os
-import sys
 import tempfile
 from collections.abc import Callable, Mapping
 from typing import Any, Final, cast
@@ -47,6 +46,7 @@ from super_agent.tools.sandbox import (
     SANDBOX_MODE_STRICT,
     SandboxConfig,
     SandboxMode,
+    strict_sandbox_supported,
     valid_sandbox_mode,
 )
 from super_agent.workspace import Context, new_default_context
@@ -339,14 +339,14 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
     sandboxMode = SandboxMode(settings.sandbox.mode)
     if not valid_sandbox_mode(sandboxMode):
         raise ValueError("invalid sandbox mode: " + settings.sandbox.mode)
-    # The strict sandbox needs Linux's ``bubblewrap``. On every other platform the
+    # Linux and macOS have a strict sandbox. On every other platform the
     # *configured* mode is kept — ``Config.sandbox.mode`` stays ``strict``, since
     # that is what the settings say — but the downgrade is flagged so the command
     # runner can fall back to unsandboxed execution and the operator is told that
     # commands run with full authority. Choosing ``strict`` explicitly on an
     # unsupported platform is still an error, not a silent downgrade.
     sandboxDowngraded = False
-    if sys.platform != "linux" and sandboxMode == SANDBOX_MODE_STRICT:
+    if not strict_sandbox_supported() and sandboxMode == SANDBOX_MODE_STRICT:
         sandboxDowngraded = True
     status_line = resolve_status_line(settings.tui.status_line)
     rules = PermissionRules(

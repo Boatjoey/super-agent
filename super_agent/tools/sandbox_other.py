@@ -15,4 +15,6 @@ if TYPE_CHECKING:
 
 def new_platform_sandbox(config: SandboxConfig) -> command_sandbox:
     """Refuse to construct a sandbox this platform cannot provide."""
-    raise RuntimeError("strict sandbox is currently supported only on Linux; set sandbox.mode to off explicitly")
+    raise RuntimeError(
+        "strict sandbox is currently supported only on Linux and macOS; set sandbox.mode to off explicitly"
+    )

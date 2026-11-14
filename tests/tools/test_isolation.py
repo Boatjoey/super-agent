@@ -174,12 +174,14 @@ async def test_run_command_timeout_kills_the_process_tree(tmp_path: Path) -> Non
     assert not marker.exists()
 
 
-@pytest.mark.skipif(sys.platform == "linux", reason="Linux has a real strict sandbox")
-def test_strict_sandbox_fails_closed_off_linux(tmp_path: Path) -> None:
+@pytest.mark.skipif(sys.platform in ("linux", "darwin"), reason="Linux and macOS have a real strict sandbox")
+def test_strict_sandbox_fails_closed_on_unsupported_platforms(tmp_path: Path) -> None:
     """Strict is the default, so an unsupported platform must refuse outright."""
     with pytest.raises(
         RuntimeError,
-        match=re.escape("strict sandbox is currently supported only on Linux; set sandbox.mode to off explicitly"),
+        match=re.escape(
+            "strict sandbox is currently supported only on Linux and macOS; set sandbox.mode to off explicitly"
+        ),
     ):
         sandboxed_registry(default_sandbox_config(str(tmp_path)), workspace_for(tmp_path))
 
@@ -280,7 +282,7 @@ def _sandbox(tmp_path: Path, *, allow_network: bool = False) -> bubblewrap_sandb
     return bubblewrap_sandbox(bwrap="/usr/bin/bwrap", prlimit="/usr/bin/prlimit", config=config)
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+@pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
 def test_sandbox_defaults_an_empty_cwd_to_the_workspace(tmp_path: Path) -> None:
     workspace = os.path.realpath(tmp_path)
 
@@ -290,7 +292,7 @@ def test_sandbox_defaults_an_empty_cwd_to_the_workspace(tmp_path: Path) -> None:
     assert args[args.index("--chdir") + 1] == workspace
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+@pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
 def test_sandbox_refuses_a_cwd_outside_the_workspace(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -301,13 +303,13 @@ def test_sandbox_refuses_a_cwd_outside_the_workspace(tmp_path: Path) -> None:
         _sandbox(workspace).wrap(str(workspace), str(outside), "true", [])
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+@pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
 def test_sandbox_refuses_a_missing_workspace(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="workspace is not configured"):
         _sandbox(tmp_path).wrap("", str(tmp_path), "true", [])
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+@pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
 def test_sandbox_shares_the_network_only_when_allowed(tmp_path: Path) -> None:
     _, denied, _ = _sandbox(tmp_path).wrap(str(tmp_path), str(tmp_path), "true", [])
     _, allowed, _ = _sandbox(tmp_path, allow_network=True).wrap(str(tmp_path), str(tmp_path), "true", [])
@@ -316,7 +318,7 @@ def test_sandbox_shares_the_network_only_when_allowed(tmp_path: Path) -> None:
     assert "--share-net" in allowed
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="the strict sandbox is Linux-only")
+@pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
 def test_sandbox_refuses_without_prlimit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     def which(name: str) -> str | None:
         return "/usr/bin/bwrap" if name == "bwrap" else None

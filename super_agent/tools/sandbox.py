@@ -1,8 +1,8 @@
 """Sandbox configuration and the command runner that consumes it.
 
-The platform-specific construction lives in ``sandbox_linux.py`` and
-``sandbox_other.py``; ``sys.platform`` selects between them the way platform
-dispatch does.
+The platform-specific construction lives in ``sandbox_linux.py``,
+``sandbox_darwin.py``, and ``sandbox_other.py``; ``sys.platform`` selects between
+them the way platform dispatch does.
 
 Strict mode fails closed on purpose: an unsupported platform must refuse to run
 a command rather than silently running it unsandboxed.
@@ -19,8 +19,18 @@ from super_agent.tools.workspace import WorkspaceContext
 
 if sys.platform == "linux":
     from super_agent.tools.sandbox_linux import new_platform_sandbox as new_platform_sandbox
+elif sys.platform == "darwin":
+    from super_agent.tools.sandbox_darwin import new_platform_sandbox as new_platform_sandbox
 else:
     from super_agent.tools.sandbox_other import new_platform_sandbox as new_platform_sandbox
+
+#: The ``sys.platform`` values with a strict sandbox implementation.
+STRICT_SANDBOX_PLATFORMS: Final[frozenset[str]] = frozenset({"linux", "darwin"})
+
+
+def strict_sandbox_supported(platform: str | None = None) -> bool:
+    """Whether ``platform``, this one by default, has a strict sandbox implementation."""
+    return (sys.platform if platform is None else platform) in STRICT_SANDBOX_PLATFORMS
 
 
 class SandboxMode(str):
@@ -112,12 +122,13 @@ def new_command_runner(config: SandboxConfig, workspace_context: WorkspaceContex
         raise RuntimeError("invalid sandbox mode: " + str(config.mode))
     if config.mode == SANDBOX_MODE_OFF:
         return command_runner(workspace=workspace_context)
-    # The strict sandbox needs Linux's ``bubblewrap``. On any other platform the
-    # runner falls back to unsandboxed execution only when the downgrade was
-    # decided at configuration resolution (``downgraded``); without that flag the
-    # refusal stands, so an explicit strict request still fails closed rather than
-    # silently running commands with full authority.
-    if sys.platform != "linux" and config.downgraded:
+    # Linux and macOS have a strict sandbox. On any other platform the runner
+    # falls back to unsandboxed execution only when the downgrade was decided at
+    # configuration resolution (``downgraded``); without that flag the refusal
+    # stands, so an explicit strict request still fails closed rather than
+    # silently running commands with full authority. A platform that has a
+    # sandbox ignores the flag and always builds it.
+    if not strict_sandbox_supported() and config.downgraded:
         return command_runner(workspace=workspace_context)
     if config.workspace == "":
         raise RuntimeError("strict sandbox requires a workspace")
