@@ -146,7 +146,7 @@
 
 这些界面都不按 Python 名称加载代码。扩展以文件提供：命令是提示词，钩子是 shell 命令，技能是 `SKILL.md`，插件是含 `plugin.json` 的目录；MCP 服务器与语言服务器是独立进程。SSE 事件名取自通知的 `kind` 字面量，JSON 键由 `json_field` 声明，都不随 Python 名称变化。产品不提供无界面批处理（见[系统范围](../design/software-architecture.md#系统范围)），也不提供 Python 库接口，因此外部按 Python 名称引用的只有 `pyproject.toml` 中命令行程序的入口 `super_agent.__main__:main`，它不是兼容入口。
 
-Python 类名只在遥测中成为持久化的取值：`event`、`action` 字段写入状态机事件与调度动作的类名，失败报告的 `error_type` 写入异常类名（`runtime/engine/action_loop.py`、`runtime/session/turn.py`）。重命名这些类会改变遥测记录的取值，须先按[磁盘格式稳定性](session.md#磁盘格式稳定性)处理。
+Python 类名只在遥测记录中成为持久化的取值，涉及的字段见[遥测](runtime.md#遥测)；重命名相应的类须先按[磁盘格式稳定性](session.md#磁盘格式稳定性)处理。
 
 ### 兼容入口的处置
 
@@ -154,14 +154,14 @@ Python 类名只在遥测中成为持久化的取值：`event`、`action` 字段
 
 | 兼容入口 | 转发内容 | 处置 |
 |---|---|---|
-| 根 `super_agent.runtime` 门面：`runtime/__init__.py` 及 `api_engine.py`、`api_execution.py`、`api_machine.py`、`api_model.py`、`api_session.py` | `machine`、`execution`、`engine`、`session`、`protocol` 的名称 | 直接删除（在 D93 中执行）；`from super_agent.runtime import <子包>` 导入的是拥有类型的子包，不受影响 |
-| `app/agent_application.py` | `AgentApplication`、`new_agent_application` 与展示转换函数 | 直接删除（在 D93 中执行） |
-| `app/tui_adapter.py` | 历史名称 `TerminalConversation`、`new_terminal_conversation`、`to_tui_*` | 直接删除（在 D93 中执行） |
-| `app/workflows.py` | `Runner`、`WorkflowController` | 直接删除（在 D93 中执行） |
-| `runtime/machine/aliases.py`、`runtime/execution/aliases.py`、`runtime/session/aliases.py` | 其他包的值，例如 `machine.Message`、`session.Engine` | 直接删除（在 D93 中执行），包的 `__init__.py` 不再转发这些名称 |
-| `app/__init__.py` 中的 `AgentApplication`、`new_agent_application`、`TerminalConversation`、`new_terminal_conversation`、`WorkflowController` | 经上述兼容模块转发的应用层名称 | 直接删除（在 D93 中执行） |
-| 类型迁移后留在原位置的转发：`app/agents.py` 的 `AgentProfile`、`filteredToolRunner`、`routedModel`，`app/config.py` 的 `MCPServerSettings`，`app/extensions.py` 的 `Extensions`，`app/mcp.py` 的 `MCPServerSummary`，`app/session.py` 的 `toolHooks`，`app/subagents.py` 转发的五个委派名称，`application/agents.py` 的 `AgentProfile`，`runtime/engine/engine.py` 的 `PolicySetter`、`PolicySnapshot`、`PolicyStore`，`runtime/telemetry/telemetry.py` 的 `Fields`、`install`、`record`，`tui/actions.py` 的 `extract_code_blocks` | 拥有模块中的同一对象 | 直接删除（在 D93 中执行） |
-| 历史控制器构造入口：`app/agents.py` 的 `AgentController`，`app/mcp.py` 的 `MCPController` 与 `new_mcp_controller`，`app/memory.py` 的 `MemoryController` | 只为应用控制器注入设施的子类与工厂 | 直接删除（在 D95 中执行）：组合根直接构造 `application` 中的控制器并注入设施 |
+| 根 `super_agent.runtime` 门面：`runtime/__init__.py` 及 `api_engine.py`、`api_execution.py`、`api_machine.py`、`api_model.py`、`api_session.py` | `machine`、`execution`、`engine`、`session`、`protocol` 的名称 | 直接删除；`from super_agent.runtime import <子包>` 导入的是拥有类型的子包，不受影响 |
+| `app/agent_application.py` | `AgentApplication`、`new_agent_application` 与展示转换函数 | 直接删除 |
+| `app/tui_adapter.py` | 历史名称 `TerminalConversation`、`new_terminal_conversation`、`to_tui_*` | 直接删除 |
+| `app/workflows.py` | `Runner`、`WorkflowController` | 直接删除 |
+| `runtime/machine/aliases.py`、`runtime/execution/aliases.py`、`runtime/session/aliases.py` | 其他包的值，例如 `machine.Message`、`session.Engine` | 直接删除，包的 `__init__.py` 不再转发这些名称 |
+| `app/__init__.py` 中的 `AgentApplication`、`new_agent_application`、`TerminalConversation`、`new_terminal_conversation`、`WorkflowController` | 经上述兼容模块转发的应用层名称 | 直接删除 |
+| 类型迁移后留在原位置的转发：`app/agents.py` 的 `AgentProfile`、`filteredToolRunner`、`routedModel`，`app/config.py` 的 `MCPServerSettings`，`app/extensions.py` 的 `Extensions`，`app/mcp.py` 的 `MCPServerSummary`，`app/session.py` 的 `toolHooks`，`app/subagents.py` 转发的五个委派名称，`application/agents.py` 的 `AgentProfile`，`runtime/engine/engine.py` 的 `PolicySetter`、`PolicySnapshot`、`PolicyStore`，`runtime/telemetry/telemetry.py` 的 `Fields`、`install`、`record`，`tui/actions.py` 的 `extract_code_blocks` | 拥有模块中的同一对象 | 直接删除 |
+| 历史控制器构造入口：`app/agents.py` 的 `AgentController`，`app/mcp.py` 的 `MCPController` 与 `new_mcp_controller`，`app/memory.py` 的 `MemoryController` | 只为应用控制器注入设施的子类与工厂 | 直接删除：组合根直接构造 `application` 中的控制器并注入设施 |
 
 下列转发不是兼容入口，予以保留：各包 `__init__.py` 按 [Python 约定](../development.md#python-约定)公开的接口；`tools/commands.py`、`tools/files.py`、`tools/sandbox.py` 按平台选择实现的转发；终端以既有名称使用契约展示值的转发（`tui/conversation.py`、`tui/approval/model.py`、`tui/commands/ports.py`、`tui/transcript/model.py`），依据见[代码依赖与接口约束](#代码依赖与接口约束)。
 
