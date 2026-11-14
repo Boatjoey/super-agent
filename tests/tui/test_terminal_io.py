@@ -120,7 +120,13 @@ def test_enter_and_exit_restore_the_terminal_mode(monkeypatch: pytest.MonkeyPatc
         assert not during[3] & termios.ECHO, "cbreak leaves keystrokes echoed"
 
         reader.exit()
-        assert termios.tcgetattr(slave) == original
+        restored = termios.tcgetattr(slave)
+        # BSD kernels (macOS) set PENDIN whenever a terminal returns to canonical
+        # mode. It is kernel state that retypes pending input, not a mode the
+        # reader chose, so it is excluded from the comparison.
+        restored[3] &= ~termios.PENDIN
+        original[3] &= ~termios.PENDIN
+        assert restored == original
     finally:
         os.close(master)
         os.close(slave)
