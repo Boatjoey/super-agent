@@ -27,3 +27,14 @@ jobs:
       - run: npm run build:web
       - run: git diff --exit-code -- super_agent/web/static/app.js
       - run: ./scripts/verify.sh
+      # Metrics are reported, never gated: this step fails only when the script
+      # cannot measure. It reads the coverage data verify.sh just wrote, so the
+      # suite does not run a second time.
+      - run: >-
+          uv run python scripts/metrics.py --collect-tests --coverage-file .coverage --cold-start-runs 20
+          --json "$RUNNER_TEMP/metrics.json" --markdown "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: metrics
+          path: ${{ runner.temp }}/metrics.json
+          if-no-files-found: error
