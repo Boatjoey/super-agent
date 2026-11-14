@@ -13,6 +13,7 @@ provider map and could therefore send the template placeholder as a bearer token
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
@@ -20,11 +21,12 @@ from typing import Final
 import pytest
 
 from super_agent import llm
-from super_agent.app import Flags, load_config, load_settings_file, new_session_with_extensions
+from super_agent.app import Flags, config as app_config, load_config, load_settings_file, new_session_with_extensions
 from super_agent.app.config import Lookup
 from super_agent.llm import ProviderConfig
 from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import Message, Model, ModelResponse, StreamChunk, ToolSpec
+from super_agent.tools.sandbox import strict_sandbox_supported
 from tests.conftest import assert_mode
 
 #: The placeholder a fresh settings.json carries, so the test says why it matters.
@@ -252,6 +254,46 @@ def test_load_config_rejects_invalid_sandbox_mode(monkeypatch: pytest.MonkeyPatc
         load_config(Flags(), lookup())
 
     assert "invalid sandbox mode: maybe" in str(failure.value)
+
+
+@pytest.mark.parametrize(("platform", "supported"), [("linux", True), ("darwin", True), ("win32", False)])
+def test_strict_sandbox_platforms(platform: str, supported: bool) -> None:
+    assert strict_sandbox_supported(platform) is supported
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="checks the macOS resolution of an unset sandbox mode")
+def test_load_config_keeps_an_unset_strict_sandbox_on_macos(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    writeSettings(home, '{"provider":"openai","providers":{"openai":{"api_key":"key","model":"model"}}}')
+
+    cfg = load_config(Flags(), lookup())
+
+    # macOS has a sandbox now, so an unset mode stays strict instead of being
+    # downgraded to running commands with full authority.
+    assert cfg.sandbox.mode == "strict"
+    assert cfg.sandbox_downgraded is False
+    assert cfg.sandbox.downgraded is False
+
+
+def test_load_config_downgrades_an_unset_strict_sandbox_without_an_implementation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    writeSettings(home, '{"provider":"openai","providers":{"openai":{"api_key":"key","model":"model"}}}')
+
+    def unsupported(platform: str | None = None) -> bool:
+        """Stands in for a platform such as Windows that has no strict sandbox."""
+        return False
+
+    monkeypatch.setattr(app_config, "strict_sandbox_supported", unsupported)
+
+    cfg = load_config(Flags(), lookup())
+
+    assert cfg.sandbox.mode == "strict"
+    assert cfg.sandbox_downgraded is True
+    assert cfg.sandbox.downgraded is True
 
 
 def test_load_config_maps_mcp_servers_in_name_order(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
