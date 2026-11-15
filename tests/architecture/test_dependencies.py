@@ -2,7 +2,9 @@
 
 This module parses each package's imports and fails when the dependency rule in
 ``docs/spec/packages.md`` is broken. It also scans the interactive CLI package's
-identifiers so a removed full-screen renderer cannot return unannounced.
+identifiers so a removed full-screen renderer cannot return unannounced, and it
+walks ``tests/`` as well as the package so that neither internal code nor a test
+can import a name through a compatibility facade again (R14, R15).
 
 Rules. ``super_agent`` is the import root, so ``super-agent/tui`` becomes
 ``super_agent.tui``.
@@ -21,6 +23,9 @@ R10 ``web/**`` (new)                 must not import runtime, tui, app, or a con
 R11 ``frontend/**`` (new)            must not import anything but itself
 R12 ``application/**``              must use inward contracts, not adapters or direct external I/O
 R13 ``tui/**``                      must use the frontend contract, not application internals
+R14 ``super_agent/**``, ``tests/**`` must not bind the root ``super_agent.runtime`` package or take
+                                     a name from it; only its subpackages may be imported through it
+R15 ``super_agent/**``, ``tests/**`` must not import a deleted compatibility module
 
 Two Python-shaped adjustments, both narrowing a hole rather than widening a
 permission:
@@ -66,8 +71,33 @@ PURE_CORE_ALLOWLIST = frozenset(
     }
 )
 
-#: Adapters the ``runtime`` facade must not know about (R4).
+#: Adapters no module under ``runtime`` may know about (R4).
 CONCRETE_ADAPTERS = ("store", "workspace", "llm", "tools", "tui", "web", "project", "app", "application", "frontend")
+
+#: The root ``runtime`` package only groups its subpackages and re-exports nothing (R14).
+RUNTIME_ROOT = "super_agent.runtime"
+
+#: Compatibility modules that were deleted (R15). Each only re-exported names
+#: owned elsewhere, so one that comes back is a reintroduced facade, not a new
+#: module.
+RETIRED_COMPAT_MODULES: Final[frozenset[str]] = frozenset(
+    {
+        "super_agent.app.agent_application",
+        "super_agent.app.tui_adapter",
+        "super_agent.app.workflows",
+        "super_agent.runtime.api_engine",
+        "super_agent.runtime.api_execution",
+        "super_agent.runtime.api_machine",
+        "super_agent.runtime.api_model",
+        "super_agent.runtime.api_session",
+        "super_agent.runtime.execution.aliases",
+        "super_agent.runtime.machine.aliases",
+        "super_agent.runtime.session.aliases",
+    }
+)
+
+#: The trees R14 and R15 walk: the package and the tests that import it.
+COMPAT_TREES: Final[tuple[str, ...]] = (PACKAGE_NAME, "tests")
 
 #: Standard-library modules that would give the pure core an imperative shell (R7).
 IO_MODULES = (
@@ -243,7 +273,7 @@ def _rule_violations(
 
     # R4: the entire runtime must not know the adapters that wrap it.
     if top == "runtime" and any(_within(name, f"super_agent.{adapter}") for adapter in CONCRETE_ADAPTERS):
-        found.append(("R4", "runtime facade must not depend on concrete adapters"))
+        found.append(("R4", "runtime must not depend on concrete adapters"))
 
     # R5: the session use-case layer reaches storage and the filesystem through ports.
     if top == "runtime" and nested[:1] == ("session",):
@@ -389,14 +419,14 @@ _VIOLATION_CASES: dict[str, tuple[str, str]] = {
     "R1": ("super_agent/tui/layout.py", "from super_agent.runtime.machine import state"),
     "R2": ("super_agent/llm/factory.py", "from super_agent.runtime.engine import engine"),
     "R3": ("super_agent/store/store.py", "from super_agent.runtime.engine import engine"),
-    "R4": ("super_agent/runtime/api_engine.py", "from super_agent.store import store"),
+    "R4": ("super_agent/runtime/__init__.py", "from super_agent.store import store"),
     "R5-os": ("super_agent/runtime/session/turn.py", "import os"),
     "R5-pathlib": ("super_agent/runtime/session/turn.py", "from pathlib import Path"),
     "R6": ("super_agent/tui/commands/model.py", "from super_agent.tui.composer import model"),
     "R7-io": ("super_agent/runtime/machine/transition.py", "import asyncio"),
     "R7-core": ("super_agent/runtime/machine/transition.py", "from super_agent.tools import registry"),
     "R8": ("super_agent/tui/commands/model.py", "from super_agent import tui"),
-    "R9": ("super_agent/tui/commands/model.py", "from super_agent.app import tui_adapter"),
+    "R9": ("super_agent/tui/commands/model.py", "from super_agent.app import config"),
     "R10": ("super_agent/web/routes.py", "from super_agent.runtime.session import Session"),
     "R11": ("super_agent/frontend/wire.py", "from super_agent.runtime.protocol import types"),
     "R2-nested": ("super_agent/tools/mcp/client.py", "from super_agent.runtime.engine import engine"),
@@ -437,7 +467,7 @@ def test_rules_accept_the_corrective_alternative(tmp_path: Path) -> None:
         "R1": ("super_agent/tui/layout.py", "from super_agent.tui.conversation import FrontendPorts"),
         "R2": ("super_agent/llm/factory.py", "from super_agent.runtime.protocol.types import Message"),
         "R3": ("super_agent/store/store.py", "from super_agent.runtime.protocol.types import Message"),
-        "R4": ("super_agent/runtime/api_engine.py", "from super_agent.runtime.engine import engine"),
+        "R4": ("super_agent/runtime/__init__.py", "from super_agent.runtime import engine"),
         "R5": ("super_agent/runtime/session/turn.py", "from super_agent.runtime.session import repository"),
         "R6": ("super_agent/tui/commands/model.py", "from super_agent.tui.commands import ports"),
         "R7": ("super_agent/runtime/machine/transition.py", "from super_agent.runtime.permission import types"),
@@ -460,6 +490,177 @@ def test_rules_accept_the_corrective_alternative(tmp_path: Path) -> None:
 
         violations, _ = check_dependencies(case_root)
         assert not violations, f"{label}: the corrected import was rejected: {_format(violations)}"
+
+
+# ---------------------------------------------------------------------------
+# Compatibility facades
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ImportedName:
+    """One binding an import statement makes, resolved to where it is read from."""
+
+    line: int
+    #: The module bound, or the module the name is taken from.
+    module: str
+    #: The name taken from ``module``; ``None`` when the module itself is bound.
+    name: str | None
+
+    @property
+    def dotted(self) -> str:
+        return self.module if self.name is None else f"{self.module}.{self.name}"
+
+
+def _bindings_of(path: Path, tree_root: Path, tree_name: str, index: set[str]) -> list[ImportedName]:
+    """Every binding the imports in ``path`` make, one per imported name.
+
+    ``_imports_of`` reports the parent of ``from X import y`` even when ``y`` is a
+    submodule, which is right for the layer rules and wrong here: R14 must tell
+    ``from super_agent.runtime import machine`` (the subpackage) apart from
+    ``from super_agent.runtime import Session`` (a name read from the root).
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    package = _package_of(path, tree_root, tree_name)
+    found: list[ImportedName] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.extend(ImportedName(line=node.lineno, module=alias.name, name=None) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            base = _resolve_relative(package, node.level, node.module)
+            if base is None:
+                continue
+            for alias in node.names:
+                submodule = f"{base}.{alias.name}"
+                if submodule in index:
+                    found.append(ImportedName(line=node.lineno, module=submodule, name=None))
+                else:
+                    found.append(ImportedName(line=node.lineno, module=base, name=alias.name))
+    return found
+
+
+def _facade_violations(binding: ImportedName) -> list[tuple[str, str]]:
+    """Apply R14 and R15 to one binding."""
+    found: list[tuple[str, str]] = []
+
+    # R14: the root runtime package groups subpackages and re-exports nothing, so
+    # binding it, or reading any name from it, reaches for a facade.
+    if binding.module == RUNTIME_ROOT:
+        found.append(("R14", "import the name from the runtime subpackage that owns it"))
+
+    # R15: a deleted compatibility module stays deleted.
+    if any(_within(binding.dotted, module) for module in RETIRED_COMPAT_MODULES):
+        found.append(("R15", "the compatibility module was deleted; import from the package that owns the name"))
+
+    return found
+
+
+def check_facade_imports(repo_root: Path) -> tuple[list[Violation], dict[str, int]]:
+    """Return every import through a compatibility facade, and the files visited per tree.
+
+    Unlike ``check_dependencies`` this walks ``tests/`` too: a test importing
+    through a facade keeps that facade alive just as surely as a module does. The
+    counts are per tree because a scan that silently skipped one tree would pass.
+    """
+    index = _module_index(repo_root / PACKAGE_NAME, PACKAGE_NAME)
+    violations: list[Violation] = []
+    visited: dict[str, int] = {}
+
+    for tree_name in COMPAT_TREES:
+        tree_root = repo_root / tree_name
+        visited[tree_name] = 0
+        for path in sorted(tree_root.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            visited[tree_name] += 1
+            relative = path.relative_to(repo_root).as_posix()
+            for binding in _bindings_of(path, tree_root, tree_name, index):
+                for rule, message in _facade_violations(binding):
+                    violations.append(
+                        Violation(file=relative, line=binding.line, imported=binding.dotted, rule=rule, message=message)
+                    )
+
+    return violations, visited
+
+
+def test_internal_code_and_tests_import_from_owning_packages() -> None:
+    violations, visited = check_facade_imports(REPO_ROOT)
+    assert all(visited[tree] > 0 for tree in COMPAT_TREES), f"a tree was not walked: {visited}"
+    assert not violations, f"imports through a compatibility facade:\n{_format(violations)}"
+
+
+#: A tree whose imports all come from the owning packages: R14 and R15 must
+#: accept it. Each case below adds or replaces exactly one file.
+_FACADE_FREE_TREE = {
+    "super_agent/__init__.py": "",
+    "super_agent/runtime/__init__.py": "",
+    "super_agent/runtime/machine/__init__.py": "",
+    "super_agent/runtime/protocol/__init__.py": "",
+    "super_agent/runtime/protocol/types.py": "",
+    "super_agent/runtime/session/__init__.py": "",
+    "super_agent/runtime/engine/__init__.py": "",
+    "super_agent/runtime/engine/engine.py": "from .. import machine\nfrom ..protocol.types import Message\n",
+    "super_agent/app/__init__.py": "",
+    "super_agent/app/session.py": (
+        "import super_agent.runtime.machine\n"
+        "from super_agent.runtime.session import Session\n"
+        "from super_agent.application.workflows import WorkflowController\n"
+    ),
+    "super_agent/application/__init__.py": "",
+    "super_agent/application/workflows.py": "",
+    "tests/__init__.py": "",
+    "tests/test_engine.py": (
+        "from super_agent.runtime import machine, session\nfrom super_agent.runtime.protocol.types import ToolCall\n"
+    ),
+}
+
+_FACADE_CASES: dict[str, tuple[str, str]] = {
+    "R14": ("super_agent/app/session.py", "from super_agent.runtime import Session"),
+    "R14-module": ("super_agent/app/session.py", "from super_agent import runtime"),
+    "R14-import": ("super_agent/app/session.py", "import super_agent.runtime"),
+    "R14-alias": ("super_agent/app/session.py", "import super_agent.runtime as rt"),
+    "R14-star": ("super_agent/app/session.py", "from super_agent.runtime import *"),
+    "R14-relative": ("super_agent/runtime/engine/engine.py", "from .. import Session"),
+    "R14-tests": ("tests/test_engine.py", "from super_agent.runtime import Message, machine"),
+    "R15": ("super_agent/app/session.py", "from super_agent.app.workflows import WorkflowController"),
+    "R15-module": ("super_agent/app/session.py", "from super_agent.app import tui_adapter"),
+    "R15-import": ("super_agent/app/session.py", "import super_agent.runtime.api_engine"),
+    "R15-relative": ("super_agent/runtime/machine/__init__.py", "from .aliases import Message as Message"),
+    "R15-tests": ("tests/test_engine.py", "from super_agent.app.agent_application import AgentApplication"),
+}
+
+
+def _tree_sizes(files: dict[str, str]) -> dict[str, int]:
+    return {tree: sum(1 for path in files if path.startswith(tree + "/")) for tree in COMPAT_TREES}
+
+
+def test_facade_rules_accept_imports_from_owning_packages(tmp_path: Path) -> None:
+    """The positive control: subpackages through the root, and names from their owners."""
+    _write_tree(tmp_path, _FACADE_FREE_TREE)
+    violations, visited = check_facade_imports(tmp_path)
+    assert visited == _tree_sizes(_FACADE_FREE_TREE)
+    assert not violations, _format(violations)
+
+
+def test_facade_rules_reject_each_facade_import(tmp_path: Path) -> None:
+    """Every form must bite, in the package and in the tests alike."""
+    for label, (relative, body) in _FACADE_CASES.items():
+        expected = label.split("-")[0]
+        case_root = tmp_path / label
+        _write_tree(case_root, {**_FACADE_FREE_TREE, relative: body})
+
+        violations, _ = check_facade_imports(case_root)
+        matched = [v for v in violations if v.rule == expected and v.file == relative]
+        assert matched, f"{label}: {relative} with {body!r} produced no {expected} violation: {_format(violations)}"
+
+
+def test_facade_scan_reports_a_tree_it_could_not_walk(tmp_path: Path) -> None:
+    """A missing tree counts zero files, which the repository check refuses to pass."""
+    package_only = {path: body for path, body in _FACADE_FREE_TREE.items() if path.startswith(PACKAGE_NAME + "/")}
+    _write_tree(tmp_path, package_only)
+    violations, visited = check_facade_imports(tmp_path)
+    assert visited == {PACKAGE_NAME: len(package_only), "tests": 0}
+    assert not violations, _format(violations)
 
 
 # ---------------------------------------------------------------------------
