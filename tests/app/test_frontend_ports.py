@@ -14,19 +14,30 @@ from typing import Any
 
 import pytest
 
-from super_agent import frontend, runtime, workspace
-from super_agent.app import new_agent_application
-from super_agent.app.agent_application import to_frontend_message
+from super_agent import frontend, workspace
+from super_agent.application.agent_application import new_agent_application
+from super_agent.application.presentation import to_frontend_message
+from super_agent.runtime.engine import new_engine
+from super_agent.runtime.protocol.types import Attachment, Message, ModelResponse, Role, ToolCall, ToolSpec
+from super_agent.runtime.session import (
+    Metadata,
+    SessionID,
+    WorkspaceAccessMode,
+    WorkspaceRootSpec,
+    WorkspaceSpec,
+    new_persistent_session,
+    new_session,
+)
 from super_agent.web import EventHub, Request, Router, TurnRunner
 from tests.fakes.execution import FakeToolRunner
 from tests.fakes.model import GateModel, ScriptedModel
 
 
 async def build_frontend_ports() -> tuple[frontend.FrontendPorts, str]:
-    model = ScriptedModel([runtime.ModelResponse(content="hello from the engine")])
-    engine = runtime.new_engine(model, None, None)
+    model = ScriptedModel([ModelResponse(content="hello from the engine")])
+    engine = new_engine(model, None, None)
     await engine.ready()
-    session = runtime.new_session(engine)
+    session = new_session(engine)
     return new_agent_application(session), str(session.metaID())
 
 
@@ -69,11 +80,11 @@ async def test_the_adapter_runs_a_queued_input_as_the_next_turn() -> None:
     release = asyncio.Event()
     model = GateModel(
         release,
-        [runtime.ModelResponse(content="first"), runtime.ModelResponse(content="second")],
+        [ModelResponse(content="first"), ModelResponse(content="second")],
     )
-    engine = runtime.new_engine(model, None, None)
+    engine = new_engine(model, None, None)
     await engine.ready()
-    frontend_ports = new_agent_application(runtime.new_session(engine))
+    frontend_ports = new_agent_application(new_session(engine))
     notifications: frontend.Channel[frontend.ConversationNotification] = frontend.Channel()
 
     turn = asyncio.create_task(frontend_ports.run_turn("hi", notifications, frontend.Cancellation()))
@@ -121,14 +132,14 @@ async def build_approval_frontend_ports() -> frontend.FrontendPorts:
     """One risky tool call, so the turn has to stop and ask."""
     model = ScriptedModel(
         [
-            runtime.ModelResponse(tool_calls=(runtime.ToolCall(id="call-1", name="bash", input="printf ok"),)),
-            runtime.ModelResponse(content="done"),
+            ModelResponse(tool_calls=(ToolCall(id="call-1", name="bash", input="printf ok"),)),
+            ModelResponse(content="done"),
         ]
     )
-    tools = FakeToolRunner(results={"bash": "ok"}, specs=(runtime.ToolSpec(name="bash", risky=True),))
-    engine = runtime.new_engine(model, tools, None)
+    tools = FakeToolRunner(results={"bash": "ok"}, specs=(ToolSpec(name="bash", risky=True),))
+    engine = new_engine(model, tools, None)
     await engine.ready()
-    return new_agent_application(runtime.new_session(engine))
+    return new_agent_application(new_session(engine))
 
 
 @pytest.mark.asyncio
@@ -203,9 +214,9 @@ async def test_an_answer_with_no_turn_running_is_refused_by_value() -> None:
 async def test_a_failed_turn_comes_back_as_a_value_a_front_end_can_show() -> None:
     """No exception type to inspect: the message, the code, and the operation."""
     model = ScriptedModel([])  # exhausting the script raises inside the turn
-    engine = runtime.new_engine(model, None, None)
+    engine = new_engine(model, None, None)
     await engine.ready()
-    frontend_ports = new_agent_application(runtime.new_session(engine))
+    frontend_ports = new_agent_application(new_session(engine))
     notifications: frontend.Channel[frontend.ConversationNotification] = frontend.Channel()
 
     failure = await frontend_ports.run_turn("hi", notifications, frontend.Cancellation())
@@ -237,19 +248,19 @@ async def test_the_configuration_view_describes_this_application() -> None:
 async def test_the_configuration_view_reads_the_workspace_it_belongs_to(tmp_path: Path) -> None:
     """The view is read back through the port's spec, not a concrete object's helpers."""
     root = str(tmp_path)
-    spec = runtime.WorkspaceSpec(
+    spec = WorkspaceSpec(
         primary_root=root,
         cwd=root,
-        roots=(runtime.WorkspaceRootSpec(path=root, access=runtime.WorkspaceAccessMode("read_write")),),
+        roots=(WorkspaceRootSpec(path=root, access=WorkspaceAccessMode("read_write")),),
     )
-    engine = runtime.new_engine(ScriptedModel([]), None, None)
+    engine = new_engine(ScriptedModel([]), None, None)
     await engine.ready()
-    session = runtime.new_persistent_session(
+    session = new_persistent_session(
         engine,
         None,
         workspace.new(workspace.contextFromSpec(spec)),
-        runtime.Metadata(
-            id=runtime.SessionID("session-with-workspace"),
+        Metadata(
+            id=SessionID("session-with-workspace"),
             title="ws",
             cwd=root,
             instruction_sources=("AGENTS.md",),
@@ -271,10 +282,10 @@ def test_a_message_with_an_attachment_reaches_the_transcript() -> None:
     that carries an attachment — a session with an attached file would have
     crashed the snapshot rather than showing it.
     """
-    message = runtime.Message(
-        role=runtime.Role("user"),
+    message = Message(
+        role=Role("user"),
         content="look",
-        attachments=(runtime.Attachment(name="notes.txt", mime="text/plain"),),
+        attachments=(Attachment(name="notes.txt", mime="text/plain"),),
     )
 
     rendered = to_frontend_message(message)

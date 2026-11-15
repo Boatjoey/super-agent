@@ -14,16 +14,17 @@ import pytest
 
 from super_agent.app import (
     Config,
-    Extensions,
     instructions,
     load_project_instructions,
     new_session,
     new_session_with_extensions,
 )
 from super_agent.app.instructions import MAX_FILE_SIZE
+from super_agent.application.values import Extensions
 from super_agent.errors import JoinedError
 from super_agent.llm import ProviderConfig
-from super_agent.runtime import PERMISSION_MODE_ASK, PERMISSION_MODE_PLAN, ROLE_SYSTEM
+from super_agent.runtime.execution import PERMISSION_MODE_ASK, PERMISSION_MODE_PLAN
+from super_agent.runtime.protocol.types import ROLE_SYSTEM
 from super_agent.workspace import Context, new_default_context
 
 #: A credential the adapters accept. No request is ever made with it.

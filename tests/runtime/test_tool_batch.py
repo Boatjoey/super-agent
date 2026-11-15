@@ -9,11 +9,13 @@ from __future__ import annotations
 import pytest
 
 from super_agent.runtime import machine
+from super_agent.runtime.permission.types import Request as PermissionRequest
+from super_agent.runtime.protocol.types import ToolCall
 from tests.runtime.test_transition import transition_snapshot
 
 CALLS = (
-    machine.ToolCall(id="call-1", name="bash", input="one"),
-    machine.ToolCall(id="call-2", name="bash", input="two"),
+    ToolCall(id="call-1", name="bash", input="one"),
+    ToolCall(id="call-2", name="bash", input="two"),
 )
 
 
@@ -59,7 +61,7 @@ def test_snapshot_includes_pending_tool_batch_progress() -> None:
     engine._runtime_data = machine.RuntimeData(  # pyright: ignore[reportPrivateUsage]
         state=machine.STATE_WAITING_APPROVAL,
         pending_tool=batch.calls[1],
-        pending_permission=machine.PermissionRequest(tool_name="bash"),
+        pending_permission=PermissionRequest(tool_name="bash"),
         tool_batch=batch,
         step=machine.Step(index=1),
     )
@@ -84,7 +86,7 @@ def test_batch_id_is_derived_from_the_first_call() -> None:
     assert batch_change.id == "batch-call-1"
     assert batch_change.calls == CALLS
 
-    anonymous = machine.ToolBatchReceived(calls=(machine.ToolCall(name="bash", input="one"),))
+    anonymous = machine.ToolBatchReceived(calls=(ToolCall(name="bash", input="one"),))
     result = machine.transition(transition_snapshot(machine.STATE_WAITING_LLM, anonymous), anonymous)
     batch_change = result.runtime_data_changes[1]
     assert isinstance(batch_change, machine.SetToolCallBatch)
@@ -114,7 +116,7 @@ def test_machine_selects_next_call_or_finishes_batch(settlement: str, has_next: 
     elif settlement == "approval_denied":
         data.state = machine.STATE_WAITING_APPROVAL
         data.pending_tool = first
-        data.pending_permission = machine.PermissionRequest()
+        data.pending_permission = PermissionRequest()
         assert data.tool_batch is not None
         data.tool_batch.index = 1
         event = machine.ApprovalDenied(call=first)

@@ -8,7 +8,9 @@ import pytest
 
 from super_agent.runtime import machine
 from super_agent.runtime.engine import commands as engine_commands, new_engine
+from super_agent.runtime.permission.types import Request as PermissionRequest
 from super_agent.runtime.protocol.run_context import live_context
+from super_agent.runtime.protocol.types import ROLE_SYSTEM, ROLE_USER, Message, ModelResponse, ToolCall
 from tests.fakes.execution import FakeToolRunner
 from tests.fakes.model import ScriptedModel
 
@@ -18,13 +20,13 @@ RUNNING_STATES = (
     machine.STATE_WAITING_APPROVAL,
     machine.STATE_RUNNING_TOOL,
 )
-CALL = machine.ToolCall(id="call-1", name="bash", input='{"command":"pwd"}')
+CALL = ToolCall(id="call-1", name="bash", input='{"command":"pwd"}')
 
 
 def execution_context(state: machine.State) -> machine.RuntimeData:
     data = machine.RuntimeData(
         state=state,
-        messages=[machine.Message(role=machine.ROLE_USER, content="original")],
+        messages=[Message(role=ROLE_USER, content="original")],
         step=machine.Step(index=3),
         steering=(machine.SteeringInput(content="steer"),),
         queued=(machine.QueuedInput(id="follow-up", content="next turn"),),
@@ -38,7 +40,7 @@ def execution_context(state: machine.State) -> machine.RuntimeData:
         if state == machine.STATE_WAITING_APPROVAL:
             data.tool_batch.index = 1
             data.pending_tool = CALL
-            data.pending_permission = machine.PermissionRequest(tool_name=CALL.name)
+            data.pending_permission = PermissionRequest(tool_name=CALL.name)
         elif state == machine.STATE_RUNNING_TOOL:
             data.tool_batch.index = 1
             data.current_tool = CALL
@@ -57,7 +59,7 @@ async def test_replacement_validation_failure_preserves_committed_state_and_acti
     engine._runtime_data = original  # pyright: ignore[reportPrivateUsage]
     run_id, context = engine._runs.start_run(live_context())  # pyright: ignore[reportPrivateUsage]
     queued = engine._action_queue.queue(run_id, machine.CallModel())  # pyright: ignore[reportPrivateUsage]
-    replacement = [machine.Message(role=machine.ROLE_SYSTEM, content="replacement")]
+    replacement = [Message(role=ROLE_SYSTEM, content="replacement")]
     candidates: list[machine.RuntimeData] = []
     failure = machine.InvariantViolationError("injected replacement validation failure")
 
@@ -86,13 +88,13 @@ async def test_replacement_validation_failure_preserves_committed_state_and_acti
 @pytest.mark.asyncio
 @pytest.mark.parametrize("state", RUNNING_STATES)
 async def test_replacement_commits_new_state_without_mutating_previous_state(state: machine.State) -> None:
-    engine = new_engine(ScriptedModel([machine.ModelResponse(content="fresh reply")]), FakeToolRunner(), None)
+    engine = new_engine(ScriptedModel([ModelResponse(content="fresh reply")]), FakeToolRunner(), None)
     original = execution_context(state)
     before = deepcopy(original)
     engine._runtime_data = original  # pyright: ignore[reportPrivateUsage]
     run_id, context = engine._runs.start_run(live_context())  # pyright: ignore[reportPrivateUsage]
     engine._action_queue.queue(run_id, machine.CallModel())  # pyright: ignore[reportPrivateUsage]
-    replacement = [machine.Message(role=machine.ROLE_SYSTEM, content="replacement")]
+    replacement = [Message(role=ROLE_SYSTEM, content="replacement")]
 
     await engine.replace_messages(replacement)
 
@@ -104,7 +106,7 @@ async def test_replacement_commits_new_state_without_mutating_previous_state(sta
     assert engine._action_queue.len() == 0  # pyright: ignore[reportPrivateUsage]
     assert context.done().is_set()
     assert not engine._runs.is_current(run_id)  # pyright: ignore[reportPrivateUsage]
-    replacement.append(machine.Message(role=machine.ROLE_USER, content="caller mutation"))
+    replacement.append(Message(role=ROLE_USER, content="caller mutation"))
     assert [message.content for message in engine.messages()] == ["replacement"]
 
     await engine.run_turn(live_context(), machine.UserMessageSubmitted(content="continue"), None, None)

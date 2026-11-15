@@ -20,8 +20,9 @@ import pytest
 
 from super_agent.runtime import machine
 from super_agent.runtime.engine import Engine, new_engine
+from super_agent.runtime.permission.types import Request as PermissionRequest
 from super_agent.runtime.protocol.run_context import live_context
-from super_agent.runtime.protocol.types import ModelResponse, StreamChunk, ToolSpec
+from super_agent.runtime.protocol.types import Message, ModelResponse, StreamChunk, ToolCall, ToolSpec
 from super_agent.runtime.session import (
     NOTIFICATIONS_CLOSED,
     QueuedInputAccepted,
@@ -94,7 +95,7 @@ def test_a_queued_input_cannot_ask_for_a_turn_of_its_own(state: machine.State) -
 
 
 def _snapshot_in(state: machine.State) -> machine.MachineSnapshot:
-    call = machine.ToolCall(id="call-1", name="bash", input="pwd")
+    call = ToolCall(id="call-1", name="bash", input="pwd")
     if state == machine.STATE_ADVANCING_QUEUE:
         data = machine.RuntimeData(
             state=state, step=machine.Step(index=1), tool_batch=machine.ToolCallBatch(calls=[call])
@@ -104,7 +105,7 @@ def _snapshot_in(state: machine.State) -> machine.MachineSnapshot:
             state=state,
             step=machine.Step(index=1),
             pending_tool=call,
-            pending_permission=machine.PermissionRequest(),
+            pending_permission=PermissionRequest(),
             tool_batch=machine.ToolCallBatch(calls=[call], index=1),
         )
     elif state == machine.STATE_RUNNING_TOOL:
@@ -126,7 +127,7 @@ def _snapshot_in(state: machine.State) -> machine.MachineSnapshot:
 
 def test_the_next_turn_takes_the_input_up_and_names_itself() -> None:
     """Starting a turn with the input's id is what accepts it."""
-    data = apply(queued_pending(), machine.AssistantMessageReceived(response=machine.ModelResponse(content="done")))
+    data = apply(queued_pending(), machine.AssistantMessageReceived(response=ModelResponse(content="done")))
 
     # The first turn ended, and the input is still waiting: it belongs to the next
     # turn, not to the one that just finished.
@@ -146,7 +147,7 @@ def test_the_next_turn_takes_the_input_up_and_names_itself() -> None:
 
 def test_acceptance_removes_only_the_input_that_turn_carries() -> None:
     data = apply(queued_pending(), machine.InputQueued(content="and update the docs", input_id="queue-2"))
-    data = apply(data, machine.AssistantMessageReceived(response=machine.ModelResponse(content="done")))
+    data = apply(data, machine.AssistantMessageReceived(response=ModelResponse(content="done")))
 
     data = apply(data, machine.UserMessageSubmitted(content=QUEUED_TEXT, input_id="queue-1"))
 
@@ -155,7 +156,7 @@ def test_acceptance_removes_only_the_input_that_turn_carries() -> None:
 
 def test_an_id_that_names_nothing_still_starts_a_turn() -> None:
     """The input may have been discarded a moment earlier; the turn stands alone."""
-    data = apply(queued_pending(), machine.AssistantMessageReceived(response=machine.ModelResponse(content="done")))
+    data = apply(queued_pending(), machine.AssistantMessageReceived(response=ModelResponse(content="done")))
 
     data = apply(data, machine.UserMessageSubmitted(content="something else", input_id="queue-未"))
 
@@ -164,7 +165,7 @@ def test_an_id_that_names_nothing_still_starts_a_turn() -> None:
 
 
 def test_a_turn_submitted_without_an_id_leaves_the_queue_alone() -> None:
-    data = apply(queued_pending(), machine.AssistantMessageReceived(response=machine.ModelResponse(content="done")))
+    data = apply(queued_pending(), machine.AssistantMessageReceived(response=ModelResponse(content="done")))
 
     data = apply(data, machine.UserMessageSubmitted(content="unrelated"))
 
@@ -223,12 +224,12 @@ class QueueingModel:
         self.responses: list[ModelResponse] = list(responses)
         self.submit_on_call = submit_on_call
         self.submit = submit
-        self.inputs: list[tuple[machine.Message, ...]] = []
+        self.inputs: list[tuple[Message, ...]] = []
 
     async def next(
         self,
         ctx: object,
-        messages: list[machine.Message],
+        messages: list[Message],
         tools: list[ToolSpec],
         on_stream_chunk: Callable[[StreamChunk], None],
     ) -> ModelResponse:
@@ -316,7 +317,7 @@ class BlockingModel:
     async def next(
         self,
         ctx: object,
-        messages: list[machine.Message],
+        messages: list[Message],
         tools: list[ToolSpec],
         on_stream_chunk: Callable[[StreamChunk], None],
     ) -> ModelResponse:

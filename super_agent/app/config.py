@@ -28,18 +28,18 @@ from collections.abc import Callable, Mapping
 from typing import Any, Final, cast
 
 from super_agent import jsonutil, project
-from super_agent.app.extensions import Extensions, ExtensionSettings, loadExtensions
+from super_agent.app.extensions import ExtensionSettings, loadExtensions
 from super_agent.app.instructions import Bundle, load as loadInstructions
-from super_agent.application.values import MCPServerSettings as MCPServerSettings
+from super_agent.application.values import Extensions, MCPServerSettings as MCPServerSettings
 from super_agent.jsonutil import json_field
 from super_agent.llm import ProviderConfig
-from super_agent.runtime import (
+from super_agent.runtime.execution import (
     PERMISSION_MODE_BYPASS,
+    ZERO_PERMISSION_MODE,
     PermissionMode,
     PermissionRules,
     valid_permission_mode,
 )
-from super_agent.runtime.execution import ZERO_PERMISSION_MODE
 from super_agent.tools.lsp import ServerConfig as LSPServerConfig
 from super_agent.tools.mcp import ServerConfig as MCPServerConfig
 from super_agent.tools.sandbox import (

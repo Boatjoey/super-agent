@@ -12,16 +12,18 @@ import pytest
 
 from super_agent.runtime import machine
 from super_agent.runtime.machine.transition import handle_engine_ready
+from super_agent.runtime.permission.types import Request as PermissionRequest
+from super_agent.runtime.protocol.types import ROLE_TOOL, ModelResponse, ToolCall
 
 
-def sample_tool_call() -> machine.ToolCall:
-    return machine.ToolCall(id="call-1", name="bash", input="pwd")
+def sample_tool_call() -> ToolCall:
+    return ToolCall(id="call-1", name="bash", input="pwd")
 
 
-def sample_tool_calls() -> tuple[machine.ToolCall, ...]:
+def sample_tool_calls() -> tuple[ToolCall, ...]:
     return (
-        machine.ToolCall(id="call-1", name="first", input="a"),
-        machine.ToolCall(id="call-2", name="second", input="b"),
+        ToolCall(id="call-1", name="first", input="a"),
+        ToolCall(id="call-2", name="second", input="b"),
     )
 
 
@@ -31,7 +33,7 @@ def transition_snapshot(
     """Runtime data that satisfies ``state``'s invariants and ``event``'s guards."""
     call = sample_tool_call()
     candidate = getattr(event, "call", None)
-    if isinstance(candidate, machine.ToolCall):
+    if isinstance(candidate, ToolCall):
         call = candidate
 
     data = machine.RuntimeData(state=state)
@@ -42,7 +44,7 @@ def transition_snapshot(
         data.tool_batch = machine.ToolCallBatch(calls=[call])
     elif state == machine.STATE_WAITING_APPROVAL:
         data.pending_tool = call
-        data.pending_permission = machine.PermissionRequest()
+        data.pending_permission = PermissionRequest()
         data.tool_batch = machine.ToolCallBatch(calls=[call], index=1)
     elif state == machine.STATE_RUNNING_TOOL:
         data.current_tool = call
@@ -183,14 +185,14 @@ def _cases() -> list[TransitionCase]:
         # --- AssistantMessageReceived ---
         TransitionCase(
             state=machine.STATE_WAITING_LLM,
-            event=machine.AssistantMessageReceived(response=machine.ModelResponse(content="hi")),
+            event=machine.AssistantMessageReceived(response=ModelResponse(content="hi")),
             want_state=machine.STATE_IDLE,
             runtime_data_change_count=2,
             runtime_data_change_types=(machine.AppendAssistantMessage, machine.CloseStep),
         ),
         TransitionCase(
             state=machine.STATE_IDLE,
-            event=machine.AssistantMessageReceived(response=machine.ModelResponse(content="hi")),
+            event=machine.AssistantMessageReceived(response=ModelResponse(content="hi")),
             want_state=machine.STATE_IDLE,
             want_error=True,
         ),
@@ -578,7 +580,7 @@ def test_a_final_answer_with_waiting_steering_starts_the_next_step() -> None:
     data, not on the state alone, which is why the table records the no-steering
     destination and this test pins the other branch.
     """
-    event = machine.AssistantMessageReceived(response=machine.ModelResponse(content="done"))
+    event = machine.AssistantMessageReceived(response=ModelResponse(content="done"))
 
     result = machine.transition(transition_snapshot(machine.STATE_WAITING_LLM, event, pending_steering=1), event)
 
@@ -634,7 +636,7 @@ def test_batch_settles_each_call_before_checking_next_permission_and_resumes_mod
             )
             expected_results.append("denied by permission policy: protected")
         elif outcome == "approval_denied":
-            request = machine.PermissionRequest(reason="risky")
+            request = PermissionRequest(reason="risky")
             approval = apply(machine.ToolCallNeedsApproval(call=call, request=request))
             assert approval.next_state == machine.STATE_WAITING_APPROVAL
             assert approval.action_plan.schedule == (machine.AwaitApproval(call=call, request=request),)
@@ -672,7 +674,7 @@ def test_batch_settles_each_call_before_checking_next_permission_and_resumes_mod
             assert settled.action_plan.schedule == (machine.CallModel(),)
             assert data.step == machine.Step(index=2)
     assert data.tool_batch is None
-    results = [message for message in data.messages if message.role == machine.ROLE_TOOL]
+    results = [message for message in data.messages if message.role == ROLE_TOOL]
     assert [message.tool_call_id for message in results] == [call.id for call in calls]
     assert [message.content for message in results] == expected_results
 

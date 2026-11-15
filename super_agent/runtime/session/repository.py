@@ -13,7 +13,8 @@ from datetime import datetime
 from typing import Final, Protocol
 
 from super_agent.jsonutil import json_field
-from super_agent.runtime.machine import ApprovalDecision, Message, ToolCall
+from super_agent.runtime.machine import ApprovalDecision
+from super_agent.runtime.protocol.types import Message, ToolCall
 
 
 class SessionID(str):

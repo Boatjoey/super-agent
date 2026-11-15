@@ -42,7 +42,16 @@ from super_agent.runtime.execution import (
     new_default_policy,
 )
 from super_agent.runtime.protocol.run_context import live_context
-from super_agent.runtime.protocol.types import ModelResponse, ToolCall, ToolSpec
+from super_agent.runtime.protocol.types import (
+    ROLE_ASSISTANT,
+    ROLE_SYSTEM,
+    ROLE_TOOL,
+    ROLE_USER,
+    Message,
+    ModelResponse,
+    ToolCall,
+    ToolSpec,
+)
 from tests.fakes.execution import (
     DenyNthPolicy,
     FailingOnceExecutor,
@@ -124,7 +133,7 @@ async def test_session_run_produces_content() -> None:
 
     assert engine.state() == machine.STATE_IDLE
     got = engine.messages()[1]
-    assert got.role == machine.ROLE_ASSISTANT
+    assert got.role == ROLE_ASSISTANT
     assert got.content == "hello"
     assert got.reasoning_content == "thinking"
 
@@ -147,7 +156,7 @@ async def test_cancel_flushes_streaming_assistant_message() -> None:
     messages = engine.messages()
     assert len(messages) == 2
     got = messages[1]
-    assert got.role == machine.ROLE_ASSISTANT
+    assert got.role == ROLE_ASSISTANT
     assert got.content == "partial"
     assert got.reasoning_content == "thinking"
     assert got.interrupted is True
@@ -184,14 +193,14 @@ async def test_model_failure_leaves_no_fabricated_tool_message() -> None:
     # the provider on the next request, and the transcript is persisted.
     messages = engine.messages()
     assert len(messages) == 1
-    assert messages[0].role == machine.ROLE_USER
+    assert messages[0].role == ROLE_USER
 
     await run_turn(engine, "continue")
 
     assert executor.calls == 2
     assert len(executor.seen) == 2
     for message in executor.seen:
-        assert message.role != machine.ROLE_TOOL
+        assert message.role != ROLE_TOOL
 
 
 @pytest.mark.asyncio
@@ -219,7 +228,7 @@ async def test_failed_tool_batch_answers_every_tool_call() -> None:
     answered: list[str] = []
     denied = ""
     for message in engine.messages():
-        if message.role == machine.ROLE_TOOL:
+        if message.role == ROLE_TOOL:
             answered.append(message.tool_call_id)
             if message.tool_call_id == "call-2":
                 denied = message.content
@@ -267,7 +276,7 @@ async def test_tool_call_feeds_result_back_to_model() -> None:
     assert engine.state() == machine.STATE_IDLE
     assert [call.name for call in tools.calls] == ["bash"]
     last_model_input = model.calls[1]
-    assert last_model_input.role == machine.ROLE_TOOL
+    assert last_model_input.role == ROLE_TOOL
     assert last_model_input.content == "pong"
 
 
@@ -297,13 +306,13 @@ async def test_multiple_tool_calls_feed_all_results_back_to_model() -> None:
     messages = engine.messages()
     assert len(messages) >= 4
     assistant = messages[1]
-    assert assistant.role == machine.ROLE_ASSISTANT
+    assert assistant.role == ROLE_ASSISTANT
     assert assistant.tool_calls is not None
     assert len(assistant.tool_calls) == 2
-    assert messages[2].role == machine.ROLE_TOOL
+    assert messages[2].role == ROLE_TOOL
     assert messages[2].content == "one"
     assert messages[2].tool_call_id == "call-1"
-    assert messages[3].role == machine.ROLE_TOOL
+    assert messages[3].role == ROLE_TOOL
     assert messages[3].content == "two"
     assert messages[3].tool_call_id == "call-2"
 
@@ -326,7 +335,7 @@ async def test_tool_call_assistant_content_is_preserved() -> None:
     await run_turn(engine, "use bash")
 
     got = engine.messages()[1]
-    assert got.role == machine.ROLE_ASSISTANT
+    assert got.role == ROLE_ASSISTANT
     assert got.content == "I will inspect the files."
 
 
@@ -695,11 +704,11 @@ async def test_reset_drops_stale_model_result_and_clears_messages() -> None:
 @pytest.mark.asyncio
 async def test_reset_preserves_system_messages_and_drops_conversation_messages() -> None:
     initial = [
-        machine.Message(role=machine.ROLE_SYSTEM, content="project instructions"),
-        machine.Message(role=machine.ROLE_USER, content="old user"),
-        machine.Message(role=machine.ROLE_ASSISTANT, content="old assistant"),
-        machine.Message(role=machine.ROLE_TOOL, content="old tool", tool_call_id="call-1", tool_name="bash"),
-        machine.Message(role=machine.ROLE_SYSTEM, content="security rules"),
+        Message(role=ROLE_SYSTEM, content="project instructions"),
+        Message(role=ROLE_USER, content="old user"),
+        Message(role=ROLE_ASSISTANT, content="old assistant"),
+        Message(role=ROLE_TOOL, content="old tool", tool_call_id="call-1", tool_name="bash"),
+        Message(role=ROLE_SYSTEM, content="security rules"),
     ]
     engine = new_engine(ScriptedModel([]), FakeToolRunner(), initial)
     await engine.ready()
@@ -707,8 +716,8 @@ async def test_reset_preserves_system_messages_and_drops_conversation_messages()
     await engine.reset()
 
     assert engine.messages() == [
-        machine.Message(role=machine.ROLE_SYSTEM, content="project instructions"),
-        machine.Message(role=machine.ROLE_SYSTEM, content="security rules"),
+        Message(role=ROLE_SYSTEM, content="project instructions"),
+        Message(role=ROLE_SYSTEM, content="security rules"),
     ]
 
 
@@ -746,7 +755,7 @@ async def test_invalid_second_turn_does_not_cancel_active_run() -> None:
 
     messages = engine.messages()
     assert len(messages) == 2
-    assert messages[1].role == machine.ROLE_ASSISTANT
+    assert messages[1].role == ROLE_ASSISTANT
     assert messages[1].content == "stale"
 
 
@@ -802,7 +811,7 @@ def test_transition_produces_runtime_data_changes_and_scheduled_actions() -> Non
 
 
 def test_approval_granted_runs_pending_local_tool() -> None:
-    call = machine.ToolCall(id="call-1", name="bash", input="pwd")
+    call = ToolCall(id="call-1", name="bash", input="pwd")
     event = machine.ApprovalGranted(call=call)
     decision = machine.transition(transition_snapshot(machine.STATE_WAITING_APPROVAL, event), event)
 
@@ -816,7 +825,7 @@ def test_approval_granted_runs_pending_local_tool() -> None:
 
 
 def test_tool_result_advances_queue_through_engine() -> None:
-    call = machine.ToolCall(id="call-1", name="bash", input="pwd")
+    call = ToolCall(id="call-1", name="bash", input="pwd")
     event = machine.ToolResultReceived(call=call, result="ok")
     decision = machine.transition(transition_snapshot(machine.STATE_RUNNING_TOOL, event), event)
 
@@ -826,7 +835,7 @@ def test_tool_result_advances_queue_through_engine() -> None:
 
 
 def test_denial_advances_queue_through_engine() -> None:
-    call = machine.ToolCall(id="call-1", name="bash", input="rm -rf /")
+    call = ToolCall(id="call-1", name="bash", input="rm -rf /")
     event = machine.ApprovalDenied(call=call)
     decision = machine.transition(transition_snapshot(machine.STATE_WAITING_APPROVAL, event), event)
 
@@ -929,8 +938,8 @@ async def test_cancelled_run_cannot_write_into_the_next_run() -> None:
     await stale_turn
 
     pairs = [(message.role, message.content) for message in engine.messages()]
-    assert (machine.ROLE_ASSISTANT, "stale") not in pairs
-    assert (machine.ROLE_ASSISTANT, "fresh") in pairs
+    assert (ROLE_ASSISTANT, "stale") not in pairs
+    assert (ROLE_ASSISTANT, "fresh") in pairs
     assert engine.state() == machine.STATE_IDLE
 
 
@@ -974,7 +983,7 @@ async def test_tool_exception_is_settled_and_next_call_runs_before_model_resumes
     await run_turn(engine, "run both")
 
     assert tools.calls == list(calls)
-    results = [message for message in engine.messages() if message.role == machine.ROLE_TOOL]
+    results = [message for message in engine.messages() if message.role == ROLE_TOOL]
     assert [(message.tool_call_id, message.content) for message in results] == [
         ("a", "Error: unavailable"),
         ("b", "ok"),
@@ -996,7 +1005,7 @@ async def test_tool_cancellation_stops_batch_and_does_not_resume_model(failure: 
         await run_turn(engine, "run both")
 
     assert tools.calls == [calls[0]]
-    results = [message for message in engine.messages() if message.role == machine.ROLE_TOOL]
+    results = [message for message in engine.messages() if message.role == ROLE_TOOL]
     assert [(message.tool_call_id, message.content) for message in results] == [
         ("a", "cancelled"),
         ("b", "not executed: cancelled"),

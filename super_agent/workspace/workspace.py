@@ -18,10 +18,10 @@ import os
 import tempfile
 import threading
 
+from super_agent.runtime.protocol.types import Attachment
 from super_agent.runtime.session import (
     WORKSPACE_ACCESS_READ,
     WORKSPACE_ACCESS_READ_WRITE,
-    Attachment,
     FileSnapshot,
     WorkspaceAccessMode,
     WorkspaceRootSpec,

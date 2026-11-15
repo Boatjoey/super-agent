@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from super_agent.runtime.machine import ROLE_SYSTEM, ROLE_TOOL, Message
 from super_agent.runtime.protocol.run_context import RunContext
+from super_agent.runtime.protocol.types import ROLE_SYSTEM, ROLE_TOOL, Message
 from super_agent.runtime.session.memory import Memory, MemoryDisabled, withMemoryContext
 from super_agent.runtime.session.repository import (
     WORKSPACE_ACCESS_READ_WRITE,

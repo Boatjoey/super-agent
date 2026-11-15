@@ -17,14 +17,9 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, ClassVar, Final
 
-from super_agent.runtime.machine import (
-    Message,
-    PermissionRequest,
-    State,
-    StreamChunk,
-    ToolCall,
-)
-from super_agent.runtime.protocol.types import Usage
+from super_agent.runtime.machine import State
+from super_agent.runtime.permission.types import Request as PermissionRequest
+from super_agent.runtime.protocol.types import Message, StreamChunk, ToolCall, Usage
 
 
 class SessionNotification:

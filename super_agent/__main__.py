@@ -33,9 +33,11 @@ from typing import TYPE_CHECKING, Final
 from dotenv import load_dotenv
 
 from super_agent import app, cli, llm, web
+from super_agent.application.agent_application import new_agent_application
 
 if TYPE_CHECKING:
-    from super_agent import frontend, runtime
+    from super_agent import frontend
+    from super_agent.runtime.session import Session
 
 #: The web interface's defaults. Every request is authenticated whatever the
 #: address, but the transport is plain HTTP: another address would put the token
@@ -84,7 +86,7 @@ async def run(cfg: app.Config, flags: app.Flags, *, port: int = DEFAULT_PORT) ->
     except Exception as error:
         print(error, file=sys.stderr)
         return 1
-    frontend_ports = app.new_agent_application(
+    frontend_ports = new_agent_application(
         session, mcp_controller, agent_controller, memory_controller, sandbox_downgraded=cfg.sandbox_downgraded
     )
     workspace = cfg.workspace
@@ -122,7 +124,7 @@ def select_front_end(flags: app.Flags, platform: str) -> str:
 
 async def _run_terminal(
     cfg: app.Config,
-    session: runtime.Session,
+    session: Session,
     frontend_ports: frontend.FrontendPorts,
     agent_controller: app.AgentController,
     cwd: str,

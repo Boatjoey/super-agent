@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, cast
 
-from super_agent.runtime.machine import ToolCall
+from super_agent.runtime.protocol.types import ToolCall
 from super_agent.runtime.session.repository import FileSnapshot
 
 if TYPE_CHECKING:

@@ -13,10 +13,11 @@ from __future__ import annotations
 import pytest
 
 from super_agent.runtime import machine
+from super_agent.runtime.protocol.types import ROLE_TOOL, ModelResponse, ToolCall
 
 
-def sample_call() -> machine.ToolCall:
-    return machine.ToolCall(id="call-1", name="bash", input="pwd")
+def sample_call() -> ToolCall:
+    return ToolCall(id="call-1", name="bash", input="pwd")
 
 
 def applier() -> machine.DefaultRuntimeDataChangeApplier:
@@ -46,7 +47,7 @@ def test_a_turn_opens_the_first_step() -> None:
 def test_a_final_answer_closes_the_last_step() -> None:
     data = idle_turn_started()
 
-    data = apply(data, machine.AssistantMessageReceived(response=machine.ModelResponse(content="done")))
+    data = apply(data, machine.AssistantMessageReceived(response=ModelResponse(content="done")))
 
     assert data.state == machine.STATE_IDLE
     assert data.step is None
@@ -106,7 +107,7 @@ def test_cancelling_while_a_tool_runs_still_closes_the_step() -> None:
     data = apply(data, machine.CancelRequested())
 
     assert data.step is None
-    assert [message.content for message in data.messages if message.role == machine.ROLE_TOOL] == ["cancelled"]
+    assert [message.content for message in data.messages if message.role == ROLE_TOOL] == ["cancelled"]
 
 
 def test_cancelling_an_idle_engine_needs_no_step_to_close() -> None:

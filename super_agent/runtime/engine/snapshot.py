@@ -6,13 +6,12 @@ import dataclasses
 
 from super_agent.runtime.machine import (
     STATE_INITIALIZING,
-    Message,
-    PermissionRequest,
     QueuedInput,
     State,
     SteeringInput,
-    ToolCall,
 )
+from super_agent.runtime.permission.types import Request as PermissionRequest
+from super_agent.runtime.protocol.types import Message, ToolCall
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

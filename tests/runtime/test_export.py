@@ -14,8 +14,7 @@ import pytest
 from super_agent import store, workspace
 from super_agent.runtime.engine import new_engine_with_executor
 from super_agent.runtime.execution import DefaultScheduledActionExecutor
-from super_agent.runtime.machine import ROLE_SYSTEM, ROLE_USER, ToolCall
-from super_agent.runtime.protocol.types import Message
+from super_agent.runtime.protocol.types import ROLE_SYSTEM, ROLE_USER, Message, ToolCall
 from super_agent.runtime.session import Metadata, SessionID, new_persistent_session
 
 

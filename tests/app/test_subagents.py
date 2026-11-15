@@ -20,11 +20,12 @@ from typing import Any
 import pytest
 
 from super_agent import llm
-from super_agent.app.agents import AgentProfile
 from super_agent.app.subagents import subagentTool
-from super_agent.runtime import PermissionRules, ToolCall
+from super_agent.application.values import AgentProfile
 from super_agent.runtime.engine import new_engine_with_executor
+from super_agent.runtime.execution import PermissionRules
 from super_agent.runtime.protocol.run_context import live_context
+from super_agent.runtime.protocol.types import ToolCall
 from super_agent.runtime.session import Session, new_session
 from super_agent.tools.sandbox import SANDBOX_MODE_OFF, default_sandbox_config
 from super_agent.workspace import new as newWorkspace, new_default_context

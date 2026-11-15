@@ -28,7 +28,9 @@ import contextlib
 from collections import deque
 
 from super_agent.runtime.engine import EngineView
-from super_agent.runtime.machine import STATE_IDLE, PermissionRequest, ToolCall
+from super_agent.runtime.machine import STATE_IDLE
+from super_agent.runtime.permission.types import Request as PermissionRequest
+from super_agent.runtime.protocol.types import ToolCall
 from super_agent.runtime.session.notifications import (
     MessageAppended,
     QueuedInputAccepted,

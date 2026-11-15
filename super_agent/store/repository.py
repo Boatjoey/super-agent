@@ -11,16 +11,13 @@ from __future__ import annotations
 import sys
 
 from super_agent import timeutil
+from super_agent.runtime.protocol.types import ROLE_TOOL, Message, ToolCall
 from super_agent.runtime.session import (
-    ROLE_TOOL,
-    ApprovalDecision,
     AuditEvent,
     FileSnapshot,
-    Message,
     Metadata,
     SessionID,
     Summary,
-    ToolCall,
     WorkspaceAccessMode,
     WorkspaceRootSpec,
     WorkspaceSpec,
@@ -80,7 +77,9 @@ class Repository:
             logPersistenceFailure("save message", session_id, error)
             raise
 
-    def save_approval(self, session_id: SessionID, decision: ApprovalDecision, call: ToolCall | None) -> None:
+    def save_approval(self, session_id: SessionID, decision: str, call: ToolCall | None) -> None:
+        # ``decision`` is the port's ApprovalDecision, a StrEnum owned by runtime/machine,
+        # which this adapter may not import; only its string value is stored.
         record = Record(type=EVENT_APPROVAL_DECISION, decision=str(decision), tool_call=call)
         try:
             self.store.append(StoreSessionID(session_id), record)

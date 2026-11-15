@@ -19,6 +19,8 @@ from pathlib import Path
 import pytest
 
 from super_agent.runtime import machine
+from super_agent.runtime.permission.types import Request as PermissionRequest
+from super_agent.runtime.protocol.types import ModelResponse, ToolCall
 
 #: The document that owns the transition graph.
 SPEC_DOCUMENT = "docs/spec/machine.md"
@@ -124,14 +126,14 @@ def parse_state_diagram(document: str) -> list[DocumentedEdge]:
     return edges
 
 
-def sample_tool_call() -> machine.ToolCall:
-    return machine.ToolCall(id="call-1", name="bash", input="pwd")
+def sample_tool_call() -> ToolCall:
+    return ToolCall(id="call-1", name="bash", input="pwd")
 
 
-def sample_tool_calls() -> tuple[machine.ToolCall, ...]:
+def sample_tool_calls() -> tuple[ToolCall, ...]:
     return (
-        machine.ToolCall(id="call-1", name="first", input="a"),
-        machine.ToolCall(id="call-2", name="second", input="b"),
+        ToolCall(id="call-1", name="first", input="a"),
+        ToolCall(id="call-2", name="second", input="b"),
     )
 
 
@@ -151,7 +153,7 @@ def well_formed_event(prototype: machine.Event) -> machine.Event:
     if isinstance(prototype, machine.InputQueued):
         return machine.InputQueued(content="then run the tests", input_id="queue-1")
     if isinstance(prototype, machine.AssistantMessageReceived):
-        return machine.AssistantMessageReceived(response=machine.ModelResponse(content="hi"))
+        return machine.AssistantMessageReceived(response=ModelResponse(content="hi"))
     if isinstance(prototype, machine.ToolBatchReceived):
         return machine.ToolBatchReceived(content="thinking", calls=sample_tool_calls())
     if isinstance(prototype, machine.ToolCallNeedsApproval):
@@ -185,7 +187,7 @@ def state_snapshot(state_name: str, event: machine.Event, *, has_remaining: bool
     call = sample_tool_call()
     for attribute in ("Call",):
         candidate = getattr(event, attribute, None)
-        if isinstance(candidate, machine.ToolCall):
+        if isinstance(candidate, ToolCall):
             call = candidate
 
     data = machine.RuntimeData(state=machine.State(state_name))
@@ -194,10 +196,10 @@ def state_snapshot(state_name: str, event: machine.Event, *, has_remaining: bool
     if data.state == machine.STATE_ADVANCING_QUEUE:
         data.tool_batch = machine.ToolCallBatch(calls=[call])
         if has_remaining:
-            data.tool_batch.calls.append(machine.ToolCall(id="call-2", name="next"))
+            data.tool_batch.calls.append(ToolCall(id="call-2", name="next"))
     elif data.state == machine.STATE_WAITING_APPROVAL:
         data.pending_tool = call
-        data.pending_permission = machine.PermissionRequest()
+        data.pending_permission = PermissionRequest()
         data.tool_batch = machine.ToolCallBatch(calls=[call], index=1)
     elif data.state == machine.STATE_RUNNING_TOOL:
         data.current_tool = call
@@ -205,7 +207,7 @@ def state_snapshot(state_name: str, event: machine.Event, *, has_remaining: bool
 
     if has_remaining and data.state in (machine.STATE_WAITING_APPROVAL, machine.STATE_RUNNING_TOOL):
         assert data.tool_batch is not None
-        data.tool_batch.calls.append(machine.ToolCall(id="call-2", name="next"))
+        data.tool_batch.calls.append(ToolCall(id="call-2", name="next"))
 
     try:
         return machine.snapshot_from(data)

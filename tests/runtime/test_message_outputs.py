@@ -12,13 +12,13 @@ from super_agent.errors import JoinedError
 from super_agent.runtime import machine
 from super_agent.runtime.engine import new_engine
 from super_agent.runtime.protocol.run_context import live_context
-from super_agent.runtime.protocol.types import ToolSpec
+from super_agent.runtime.protocol.types import ROLE_ASSISTANT, ROLE_USER, Message, ModelResponse, ToolCall, ToolSpec
 from super_agent.runtime.session import MessageAppended, Metadata, Session, SessionID, SessionNotification, StateChanged
 from tests.fakes.execution import FakeToolRunner
 from tests.fakes.model import ScriptedModel
 
 
-def outputs(tmp_path: Path, messages: list[machine.Message]) -> tuple[Session, store.Repository, Metadata]:
+def outputs(tmp_path: Path, messages: list[Message]) -> tuple[Session, store.Repository, Metadata]:
     repository = store.new_repository(store.new(str(tmp_path / "store")))
     meta = repository.create(Metadata(), [])
     engine = new_engine(None, None, messages)
@@ -29,12 +29,12 @@ def outputs(tmp_path: Path, messages: list[machine.Message]) -> tuple[Session, s
 @pytest.mark.parametrize("with_tool", [False, True])
 async def test_full_notification_queue_does_not_block_commits_or_persistence(tmp_path: Path, with_tool: bool) -> None:
     session, repository, meta = outputs(tmp_path, [])
-    responses = [machine.ModelResponse(content="done")]
+    responses = [ModelResponse(content="done")]
     expected = ["hello", "done"]
     if with_tool:
         responses.insert(
             0,
-            machine.ModelResponse(tool_calls=(machine.ToolCall(id="call-1", name="bash", input='{"command":"pwd"}'),)),
+            ModelResponse(tool_calls=(ToolCall(id="call-1", name="bash", input='{"command":"pwd"}'),)),
         )
         expected = ["hello", "", "tool output", "done"]
     tools = FakeToolRunner(results={"bash": "tool output"}, specs=(ToolSpec(name="bash"),))
@@ -72,14 +72,14 @@ async def test_full_notification_queue_does_not_block_commits_or_persistence(tmp
 async def test_uncertain_message_write_is_reconciled_without_duplicate_append(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, after_append: bool
 ) -> None:
-    messages = [machine.Message(role=machine.ROLE_USER, content="same")] * 2
-    messages.append(machine.Message(role=machine.ROLE_ASSISTANT, content="done"))
+    messages = [Message(role=ROLE_USER, content="same")] * 2
+    messages.append(Message(role=ROLE_ASSISTANT, content="done"))
     session, repository, meta = outputs(tmp_path, messages)
     save = repository.save_message
     attempts = 0
     failure = OSError("uncertain append")
 
-    def flaky_save(session_id: SessionID, message: machine.Message) -> None:
+    def flaky_save(session_id: SessionID, message: Message) -> None:
         nonlocal attempts
         attempts += 1
         if attempts == 2:
@@ -111,19 +111,19 @@ async def test_uncertain_message_write_is_reconciled_without_duplicate_append(
 async def test_failed_reconciliation_never_blindly_retries_uncertain_append(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    message = machine.Message(role=machine.ROLE_USER, content="hello")
+    message = Message(role=ROLE_USER, content="hello")
     session, repository, meta = outputs(tmp_path, [message])
     save = repository.save_message
     load = repository.load
     attempts = 0
 
-    def uncertain_save(session_id: SessionID, value: machine.Message) -> None:
+    def uncertain_save(session_id: SessionID, value: Message) -> None:
         nonlocal attempts
         attempts += 1
         save(session_id, value)
         raise OSError("append acknowledged late")
 
-    def broken_load(session_id: SessionID) -> tuple[list[machine.Message], Metadata]:
+    def broken_load(session_id: SessionID) -> tuple[list[Message], Metadata]:
         raise OSError("reconciliation unavailable")
 
     monkeypatch.setattr(repository, "save_message", uncertain_save)
@@ -151,7 +151,7 @@ class BrokenNotificationQueue(asyncio.Queue[SessionNotification]):
 
 @pytest.mark.asyncio
 async def test_notification_failure_does_not_repeat_persisted_messages(tmp_path: Path) -> None:
-    messages = [machine.Message(role=machine.ROLE_USER, content="hello")]
+    messages = [Message(role=ROLE_USER, content="hello")]
     session, repository, meta = outputs(tmp_path, messages)
     failure = RuntimeError("notification consumer failed")
     with pytest.raises(RuntimeError) as raised:
@@ -169,11 +169,11 @@ async def test_notification_failure_does_not_repeat_persisted_messages(tmp_path:
 async def test_message_and_notification_failures_are_both_reported(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    session, repository, _meta = outputs(tmp_path, [machine.Message(role=machine.ROLE_USER, content="hello")])
+    session, repository, _meta = outputs(tmp_path, [Message(role=ROLE_USER, content="hello")])
     persistence_failure = OSError("repository failed")
     notification_failure = RuntimeError("notification failed")
 
-    def fail_save(session_id: SessionID, message: machine.Message) -> None:
+    def fail_save(session_id: SessionID, message: Message) -> None:
         raise persistence_failure
 
     monkeypatch.setattr(repository, "save_message", fail_save)
@@ -184,7 +184,7 @@ async def test_message_and_notification_failures_are_both_reported(
 
 @pytest.mark.asyncio
 async def test_background_delivery_failure_keeps_pending_messages_for_retry(tmp_path: Path) -> None:
-    messages = [machine.Message(role=machine.ROLE_USER, content="hello")]
+    messages = [Message(role=ROLE_USER, content="hello")]
     session, repository, meta = outputs(tmp_path, messages)
     failure = RuntimeError("delivery failed after congestion")
 
@@ -210,9 +210,9 @@ async def test_background_delivery_failure_keeps_pending_messages_for_retry(tmp_
 async def test_history_mismatch_blocks_retry_instead_of_duplicating_messages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    session, repository, meta = outputs(tmp_path, [machine.Message(role=machine.ROLE_USER, content="hello")])
+    session, repository, meta = outputs(tmp_path, [Message(role=ROLE_USER, content="hello")])
 
-    def failed_save(session_id: SessionID, message: machine.Message) -> None:
+    def failed_save(session_id: SessionID, message: Message) -> None:
         raise OSError("save failed")
 
     save = repository.save_message
@@ -220,7 +220,7 @@ async def test_history_mismatch_blocks_retry_instead_of_duplicating_messages(
     queue: asyncio.Queue[SessionNotification] = asyncio.Queue()
     with pytest.raises(OSError):
         await session.emitSnapshot(queue)
-    save(meta.id, machine.Message(role=machine.ROLE_USER, content="different history"))
+    save(meta.id, Message(role=ROLE_USER, content="different history"))
     monkeypatch.setattr(repository, "save_message", save)
     with pytest.raises(ValueError, match="stored message history"):
         await session.emitSnapshot(queue)

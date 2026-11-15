@@ -34,8 +34,18 @@ from super_agent.runtime.execution import (
     ScheduledActionResult,
     new_approval_key,
 )
+from super_agent.runtime.permission.types import Request as PermissionRequest
 from super_agent.runtime.protocol.run_context import RunContext, live_context
-from super_agent.runtime.protocol.types import ModelResponse, StreamChunk, ToolCall, ToolSpec, Usage
+from super_agent.runtime.protocol.types import (
+    ROLE_TOOL,
+    ROLE_USER,
+    Message,
+    ModelResponse,
+    StreamChunk,
+    ToolCall,
+    ToolSpec,
+    Usage,
+)
 from tests.fakes.execution import FakeToolRunner, ScriptedApprovalWaiter
 from tests.fakes.model import ScriptedModel
 
@@ -66,7 +76,7 @@ class YieldingModel:
     async def next(
         self,
         ctx: RunContext,
-        messages: list[machine.Message],
+        messages: list[Message],
         tools: list[ToolSpec],
         on_stream_chunk: Callable[[StreamChunk], None],
     ) -> ModelResponse:
@@ -191,7 +201,7 @@ async def test_a_cancel_that_lands_first_never_leaves_a_stale_reply() -> None:
             async def next(
                 self,
                 ctx: RunContext,
-                messages: list[machine.Message],
+                messages: list[Message],
                 tools: list[ToolSpec],
                 on_stream_chunk: Callable[[StreamChunk], None],
             ) -> ModelResponse:
@@ -239,7 +249,7 @@ async def test_reset_during_a_streaming_turn_is_not_written_into() -> None:
             async def next(
                 self,
                 ctx: RunContext,
-                messages: list[machine.Message],
+                messages: list[Message],
                 tools: list[ToolSpec],
                 on_stream_chunk: Callable[[StreamChunk], None],
             ) -> ModelResponse:
@@ -279,7 +289,7 @@ async def test_approval_and_cancel_racing_leaves_exactly_one_answer_per_call() -
                 self._queue = queue
 
             async def wait_approval(
-                self, ctx: RunContext, call: ToolCall, request: machine.PermissionRequest
+                self, ctx: RunContext, call: ToolCall, request: PermissionRequest
             ) -> machine.ApprovalDecision:
                 await yield_repeatedly()
                 return await self._queue.get()
@@ -290,7 +300,7 @@ async def test_approval_and_cancel_racing_leaves_exactly_one_answer_per_call() -
         )
         await settle()
 
-        tool_messages = [message for message in engine.messages() if message.role == machine.ROLE_TOOL]
+        tool_messages = [message for message in engine.messages() if message.role == ROLE_TOOL]
         assert len(tool_messages) == 1, f"round {round_number}: {[m.content for m in tool_messages]}"
         assert tool_messages[0].tool_call_id == "call-1", f"round {round_number}"
         assert tools.ran == ["bash"], f"round {round_number}"
@@ -421,9 +431,7 @@ async def test_result_invalidated_while_waiting_for_commit_lock_is_discarded(
             elif control == "reset":
                 command = asyncio.create_task(engine.reset())
             else:
-                command = asyncio.create_task(
-                    engine.replace_messages([machine.Message(role=machine.ROLE_USER, content="replacement")])
-                )
+                command = asyncio.create_task(engine.replace_messages([Message(role=ROLE_USER, content="replacement")]))
             assert await contenders.get() is command
             observed.clear()
         await asyncio.gather(turn, command)
@@ -441,7 +449,7 @@ async def test_result_invalidated_while_waiting_for_commit_lock_is_discarded(
         assert engine.state() == machine.STATE_IDLE
         if control == "cancel" and action_type is not machine.CallModel:
             expected = "cancelled" if action_type is machine.RunTool else "not executed: cancelled"
-            assert [message.content for message in engine.messages() if message.role == machine.ROLE_TOOL] == [expected]
+            assert [message.content for message in engine.messages() if message.role == ROLE_TOOL] == [expected]
         elif control == "reset":
             assert engine.messages() == []
         elif control == "replace":

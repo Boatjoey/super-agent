@@ -7,7 +7,7 @@ import posixpath
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from super_agent import jsonutil
-from super_agent.runtime.machine import Message
+from super_agent.runtime.protocol.types import Message
 from super_agent.runtime.session.repository import AuditEvent, Metadata
 from super_agent.timeutil import format_rfc3339
 

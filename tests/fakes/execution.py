@@ -19,7 +19,6 @@ from super_agent.runtime.execution import (
     DefaultScheduledActionExecutor,
     ModelReplied,
     PermissionChecked,
-    PermissionRequest,
     QueuedAction,
     ScheduledActionInput,
     ScheduledActionResult,
@@ -34,6 +33,7 @@ from super_agent.runtime.machine import (
     RunTool,
     ScheduledAction,
 )
+from super_agent.runtime.permission.types import Request as PermissionRequest
 from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import (
     Message,

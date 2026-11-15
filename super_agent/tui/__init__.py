@@ -28,7 +28,6 @@ import os
 from super_agent.tui import approval as approval_feature, attachments, commands, composer, runtime, transcript
 from super_agent.tui.actions import (
     ClipboardDone as ClipboardDone,
-    extract_code_blocks as extract_code_blocks,
     finishCopy as finishCopy,
 )
 from super_agent.tui.app import (
@@ -117,7 +116,11 @@ from super_agent.tui.styles import (
     default_styles as default_styles,
 )
 from super_agent.tui.terminal import TUIAdapter as TUIAdapter
-from super_agent.tui.transcript import MarkdownRenderer as TranscriptMarkdownRenderer, Styles as TranscriptStyles
+from super_agent.tui.transcript import (
+    MarkdownRenderer as TranscriptMarkdownRenderer,
+    Styles as TranscriptStyles,
+    extract_code_blocks as extract_code_blocks,
+)
 from super_agent.tui.update import (
     finishSubmit as finishSubmit,
     pendingAttachments as pendingAttachments,

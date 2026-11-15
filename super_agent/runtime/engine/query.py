@@ -12,15 +12,13 @@ from typing import TYPE_CHECKING
 
 from super_agent.runtime.engine.snapshot import EngineView
 from super_agent.runtime.machine import (
-    ROLE_ASSISTANT,
     STATE_ADVANCING_QUEUE,
     STATE_RUNNING_TOOL,
     STATE_WAITING_APPROVAL,
     STATE_WAITING_LLM,
-    Message,
     State,
-    ToolCall,
 )
+from super_agent.runtime.protocol.types import ROLE_ASSISTANT, Message, ToolCall
 
 if TYPE_CHECKING:
     from super_agent.runtime.machine import RuntimeData

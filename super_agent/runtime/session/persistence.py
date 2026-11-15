@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from super_agent.runtime.machine import ApprovalDecision, Message, ToolCall
+from super_agent.runtime.machine import ApprovalDecision
+from super_agent.runtime.protocol.types import Message, ToolCall
 
 if TYPE_CHECKING:
     from super_agent.runtime.session.repository import Repository, SessionID

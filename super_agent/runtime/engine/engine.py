@@ -41,11 +41,10 @@ from super_agent.runtime.execution import (
 from super_agent.runtime.machine import (
     STATE_INITIALIZING,
     DefaultRuntimeDataChangeApplier,
-    Message,
     RuntimeData,
     RuntimeDataChangeApplier,
 )
-from super_agent.runtime.protocol.types import Model, ToolRunner, Usage
+from super_agent.runtime.protocol.types import Message, Model, ToolRunner, Usage
 
 #: A per-turn observer. It runs outside the engine lock so it can read snapshots.
 StateObserver = Callable[[], Awaitable[None]]

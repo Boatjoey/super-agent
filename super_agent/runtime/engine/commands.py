@@ -27,19 +27,17 @@ from super_agent.runtime.execution import (
     valid_permission_mode,
 )
 from super_agent.runtime.machine import (
-    ROLE_USER,
     STATE_IDLE,
     CallModel,
     CancelRequested,
     EngineReady,
     Event,
-    Message,
     ResetRequested,
     clone_runtime_data,
     validate_runtime_data,
 )
 from super_agent.runtime.protocol.run_context import RunContext, live_context
-from super_agent.runtime.protocol.types import StreamChunk
+from super_agent.runtime.protocol.types import ROLE_USER, Message, StreamChunk
 
 if TYPE_CHECKING:
     from super_agent.runtime.machine import RuntimeData

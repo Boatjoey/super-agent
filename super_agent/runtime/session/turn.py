@@ -14,14 +14,12 @@ from typing import TYPE_CHECKING
 
 from super_agent.errors import Cancelled, JoinedError
 from super_agent.runtime.engine import Engine, EngineView
-from super_agent.runtime.execution import (
-    ERR_APPROVAL_DISMISSED,
-    ApprovalWaiter,
-    PermissionRequest,
-)
-from super_agent.runtime.machine import ApprovalDecision, StreamChunk, ToolCall, UserMessageSubmitted
+from super_agent.runtime.execution import ERR_APPROVAL_DISMISSED, ApprovalWaiter
+from super_agent.runtime.machine import ApprovalDecision, UserMessageSubmitted
+from super_agent.runtime.permission.types import Request as PermissionRequest
+from super_agent.runtime.protocol import telemetry
 from super_agent.runtime.protocol.run_context import RunContext
-from super_agent.runtime.protocol.types import Attachment, Usage
+from super_agent.runtime.protocol.types import Attachment, StreamChunk, ToolCall, Usage
 from super_agent.runtime.session.notifications import (
     NOTIFICATIONS_CLOSED,
     SessionError,
@@ -30,7 +28,6 @@ from super_agent.runtime.session.notifications import (
     UsageReported,
 )
 from super_agent.runtime.session.persistence import ErrorPersistenceFailed
-from super_agent.runtime.telemetry import telemetry
 
 if TYPE_CHECKING:
     from super_agent.runtime.session.repository import Repository, SessionID

@@ -18,11 +18,20 @@ import pytest
 
 from super_agent.runtime import machine
 from super_agent.runtime.engine import new_engine
+from super_agent.runtime.machine import ApprovalDecision
 from super_agent.runtime.protocol.run_context import live_context
-from super_agent.runtime.protocol.types import ModelResponse, StreamChunk, ToolCall, ToolSpec, Usage
+from super_agent.runtime.protocol.types import (
+    ROLE_ASSISTANT,
+    ROLE_USER,
+    Message,
+    ModelResponse,
+    StreamChunk,
+    ToolCall,
+    ToolSpec,
+    Usage,
+)
 from super_agent.runtime.session import (
     NOTIFICATIONS_CLOSED,
-    ApprovalDecision,
     ApprovalsClosed,
     MessageAppended,
     SessionNotification,
@@ -44,7 +53,7 @@ class ScriptedModel:
     async def next(
         self,
         ctx: object,
-        messages: list[machine.Message],
+        messages: list[Message],
         tools: list[ToolSpec],
         on_stream_chunk: Callable[[StreamChunk], None],
     ) -> ModelResponse:
@@ -125,11 +134,11 @@ async def test_session_run_emits_state_and_final_message() -> None:
     await session.run_turn(live_context(), "hi", queue, approvals())
 
     states: list[str] = []
-    final: machine.Message | None = None
+    final: Message | None = None
     for item in await drain(queue):
         if isinstance(item, StateChanged):
             states.append(str(item.state))
-        elif isinstance(item, MessageAppended) and item.message.role == machine.ROLE_ASSISTANT:
+        elif isinstance(item, MessageAppended) and item.message.role == ROLE_ASSISTANT:
             final = item.message
 
     assert len(states) >= 2
@@ -152,9 +161,9 @@ async def test_session_run_emits_each_appended_message_once() -> None:
 
     appended = [item.message for item in await drain(queue) if isinstance(item, MessageAppended)]
     assert len(appended) == 2, "user and assistant, each exactly once"
-    assert appended[0].role == machine.ROLE_USER
+    assert appended[0].role == ROLE_USER
     assert appended[0].content == "hi"
-    assert appended[1].role == machine.ROLE_ASSISTANT
+    assert appended[1].role == ROLE_ASSISTANT
     assert appended[1].content == "hello"
 
 
@@ -208,7 +217,7 @@ async def test_turn_reports_provider_usage() -> None:
     assistant_index = next(
         index
         for index, item in enumerate(seen)
-        if isinstance(item, MessageAppended) and item.message.role == machine.ROLE_ASSISTANT
+        if isinstance(item, MessageAppended) and item.message.role == ROLE_ASSISTANT
     )
     assert usage_index < assistant_index
 
@@ -334,7 +343,7 @@ async def test_machine_rejects_disabled_tool_batch_without_unmatched_tool_result
 
     messages = session.snapshot().messages
     assert len(messages) == 1
-    assert messages[0].role == machine.ROLE_USER
+    assert messages[0].role == ROLE_USER
 
 
 @pytest.mark.asyncio

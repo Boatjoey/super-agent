@@ -22,15 +22,15 @@ from super_agent.runtime.execution import (
     jsonStringField,
     toolPaths,
 )
-from super_agent.runtime.machine import (
+from super_agent.runtime.permission.types import (
     COMMAND_CLASS_DESTRUCTIVE,
     COMMAND_CLASS_NETWORK,
     COMMAND_CLASS_READ_ONLY,
     COMMAND_CLASS_UNKNOWN,
     COMMAND_CLASS_WRITE,
-    PermissionRequest,
-    ToolCall,
+    Request as PermissionRequest,
 )
+from super_agent.runtime.protocol.types import ToolCall
 
 
 def classify(command: str) -> tuple[str, str]:

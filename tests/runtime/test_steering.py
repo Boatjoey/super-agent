@@ -18,8 +18,17 @@ import pytest
 
 from super_agent.runtime import machine
 from super_agent.runtime.engine import Engine, new_engine
+from super_agent.runtime.permission.types import Request as PermissionRequest
 from super_agent.runtime.protocol.run_context import RunContext, live_context
-from super_agent.runtime.protocol.types import ModelResponse, StreamChunk, ToolCall, ToolSpec
+from super_agent.runtime.protocol.types import (
+    ROLE_TOOL,
+    ROLE_USER,
+    Message,
+    ModelResponse,
+    StreamChunk,
+    ToolCall,
+    ToolSpec,
+)
 from super_agent.runtime.session import (
     NOTIFICATIONS_CLOSED,
     SessionNotification,
@@ -41,8 +50,8 @@ def apply(data: machine.RuntimeData, event: machine.Event) -> machine.RuntimeDat
     return applier().apply_runtime_data_changes(data, decision).runtime_data
 
 
-def sample_call() -> machine.ToolCall:
-    return machine.ToolCall(id="call-1", name="bash", input="pwd")
+def sample_call() -> ToolCall:
+    return ToolCall(id="call-1", name="bash", input="pwd")
 
 
 def running_turn() -> machine.RuntimeData:
@@ -109,7 +118,7 @@ def _snapshot_in(state: machine.State) -> machine.MachineSnapshot:
             state=state,
             step=machine.Step(index=1),
             pending_tool=call,
-            pending_permission=machine.PermissionRequest(),
+            pending_permission=PermissionRequest(),
             tool_batch=machine.ToolCallBatch(calls=[call], index=1),
         )
     elif state == machine.STATE_RUNNING_TOOL:
@@ -137,7 +146,7 @@ def test_a_tool_batch_accepts_the_waiting_input_before_the_next_request() -> Non
 
     assert data.state == machine.STATE_WAITING_LLM
     assert data.step == machine.Step(index=2)
-    assert data.messages[-1].role == machine.ROLE_USER
+    assert data.messages[-1].role == ROLE_USER
     assert data.messages[-1].content == STEERING_TEXT
     assert data.steering == ()
 
@@ -145,7 +154,7 @@ def test_a_tool_batch_accepts_the_waiting_input_before_the_next_request() -> Non
 def test_a_final_answer_with_a_waiting_input_continues_the_turn() -> None:
     data = steering_pending()
 
-    data = apply(data, machine.AssistantMessageReceived(response=machine.ModelResponse(content="done")))
+    data = apply(data, machine.AssistantMessageReceived(response=ModelResponse(content="done")))
 
     assert data.state == machine.STATE_WAITING_LLM
     assert data.step == machine.Step(index=2)
@@ -154,7 +163,7 @@ def test_a_final_answer_with_a_waiting_input_continues_the_turn() -> None:
 
 def test_a_final_answer_without_a_waiting_input_still_ends_the_turn() -> None:
     """The acceptance request at the boundary is a no-op when nothing waits."""
-    data = apply(running_turn(), machine.AssistantMessageReceived(response=machine.ModelResponse(content="done")))
+    data = apply(running_turn(), machine.AssistantMessageReceived(response=ModelResponse(content="done")))
 
     assert data.state == machine.STATE_IDLE
     assert data.step is None
@@ -164,16 +173,16 @@ def test_a_final_answer_without_a_waiting_input_still_ends_the_turn() -> None:
 def test_several_inputs_are_accepted_in_one_step_in_submission_order() -> None:
     data = apply(steering_pending(), machine.SteeringSubmitted(content="and the docs"))
 
-    data = apply(data, machine.AssistantMessageReceived(response=machine.ModelResponse(content="done")))
+    data = apply(data, machine.AssistantMessageReceived(response=ModelResponse(content="done")))
 
     assert contents(data) == ["hi", "done", STEERING_TEXT, "and the docs"]
     assert data.step == machine.Step(index=2)
 
 
 def test_an_accepted_input_is_never_accepted_twice() -> None:
-    data = apply(steering_pending(), machine.AssistantMessageReceived(response=machine.ModelResponse(content="done")))
+    data = apply(steering_pending(), machine.AssistantMessageReceived(response=ModelResponse(content="done")))
 
-    data = apply(data, machine.AssistantMessageReceived(response=machine.ModelResponse(content="again")))
+    data = apply(data, machine.AssistantMessageReceived(response=ModelResponse(content="again")))
 
     assert contents(data) == ["hi", "done", STEERING_TEXT, "again"]
     assert data.step is None
@@ -232,12 +241,12 @@ class SteeringModel:
         self.responses: list[ModelResponse] = list(responses)
         self.submit_on_call = submit_on_call
         self.submit = submit
-        self.inputs: list[tuple[machine.Message, ...]] = []
+        self.inputs: list[tuple[Message, ...]] = []
 
     async def next(
         self,
         ctx: RunContext,
-        messages: list[machine.Message],
+        messages: list[Message],
         tools: list[ToolSpec],
         on_stream_chunk: Callable[[StreamChunk], None],
     ) -> ModelResponse:
@@ -289,8 +298,8 @@ async def test_an_input_during_a_tool_run_reaches_the_next_request() -> None:
     assert engine.state() == machine.STATE_IDLE
     assert tools.calls == ["bash"]
     second_request = model.inputs[1]
-    assert second_request[-2].role == machine.ROLE_TOOL
-    assert second_request[-1].role == machine.ROLE_USER
+    assert second_request[-2].role == ROLE_TOOL
+    assert second_request[-1].role == ROLE_USER
     assert second_request[-1].content == STEERING_TEXT
     assert [message.content for message in engine.messages()] == ["use bash", "", "ok", STEERING_TEXT, "done"]
 
@@ -480,7 +489,7 @@ class FailingAfterSteeringModel:
     async def next(
         self,
         ctx: RunContext,
-        messages: list[machine.Message],
+        messages: list[Message],
         tools: list[ToolSpec],
         on_stream_chunk: Callable[[StreamChunk], None],
     ) -> ModelResponse:

@@ -20,9 +20,9 @@ from super_agent.runtime.execution import (
     ModelReplied,
     ScheduledActionInput,
 )
-from super_agent.runtime.machine import ModelResponse, ScheduledAction
+from super_agent.runtime.machine import ScheduledAction
 from super_agent.runtime.protocol.run_context import live_context
-from super_agent.runtime.protocol.types import ToolSpec
+from super_agent.runtime.protocol.types import ModelResponse, ToolSpec
 from super_agent.runtime.session import Metadata, new_persistent_session
 
 NOTIFICATION_CAPACITY = 20

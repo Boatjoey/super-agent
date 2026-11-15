@@ -13,8 +13,9 @@ from super_agent.errors import JoinedError, errors_is
 from super_agent.runtime import machine
 from super_agent.runtime.engine import new_engine, new_engine_with_executor
 from super_agent.runtime.execution import DefaultScheduledActionExecutor, ScheduledActionInput, ScheduledActionResult
+from super_agent.runtime.protocol import telemetry
 from super_agent.runtime.protocol.run_context import RunContext, live_context
-from super_agent.runtime.protocol.types import ModelResponse, StreamChunk, ToolSpec
+from super_agent.runtime.protocol.types import ModelResponse, StreamChunk, ToolCall, ToolSpec
 from super_agent.runtime.session import (
     ErrorPersistenceFailed,
     Metadata,
@@ -24,7 +25,6 @@ from super_agent.runtime.session import (
     SessionNotification,
     StateChanged,
 )
-from super_agent.runtime.telemetry import telemetry
 from super_agent.store import telemetry as store_telemetry
 from tests.fakes.execution import FakeToolRunner
 from tests.fakes.model import ScriptedModel
@@ -158,9 +158,7 @@ async def test_tool_action_failure_is_saved_and_returned_when_notifications_are_
 
     repository = store.new_repository(store.new(str(tmp_path / "store")))
     meta = repository.create(Metadata(), [])
-    model = ScriptedModel(
-        [ModelResponse(tool_calls=(machine.ToolCall(id="call-1", name="bash", input='{"command":"pwd"}'),))]
-    )
+    model = ScriptedModel([ModelResponse(tool_calls=(ToolCall(id="call-1", name="bash", input='{"command":"pwd"}'),))])
     tools = FakeToolRunner(specs=(ToolSpec(name="bash"),))
     engine = new_engine_with_executor(FaultingExecutor(model, tools), None)
     await engine.ready()

@@ -11,8 +11,9 @@ import os
 from collections.abc import Mapping, Sequence
 
 from super_agent import tools
-from super_agent.app.config import MCPServerSettings, load_settings_file, save_settings_file
+from super_agent.app.config import load_settings_file, save_settings_file
 from super_agent.application.mcp import MCPController as ApplicationMCPController, MCPServerSummary as MCPServerSummary
+from super_agent.application.values import MCPServerSettings
 from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import ToolRunner
 from super_agent.tools import mcp as mcptools

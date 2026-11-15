@@ -45,7 +45,6 @@ from super_agent.runtime.machine import (
     InputQueued,
     InvariantViolationError,
     MachineSnapshot,
-    Message,
     RuntimeData,
     RunTool,
     State,
@@ -56,9 +55,10 @@ from super_agent.runtime.machine import (
     transition,
     validate_runtime_data,
 )
+from super_agent.runtime.protocol import telemetry
 from super_agent.runtime.protocol.run_context import RunContext
-from super_agent.runtime.protocol.types import Attachment, ToolSpec, Usage
-from super_agent.runtime.telemetry import telemetry
+from super_agent.runtime.protocol.types import Attachment, Message, ToolSpec, Usage
+from super_agent.runtime.telemetry import with_i_ds
 
 if TYPE_CHECKING:
     from super_agent.runtime.machine import RuntimeDataChangeApplier
@@ -351,7 +351,7 @@ class ActionLoopMixin:
             tool_specs=tuple(self._tool_specs()),
             approval_waiter=approval_waiter,
         )
-        action_ctx = telemetry.with_i_ds(ctx, str(action.run_id), str(action.action_id))
+        action_ctx = with_i_ds(ctx, str(action.run_id), str(action.action_id))
         try:
             completion = await self._runner.run(action_ctx, action, env, stream)  # type: ignore[arg-type]
         except BaseException as error:

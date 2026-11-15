@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from super_agent.runtime.machine import ROLE_SYSTEM, Message
+from super_agent.runtime.protocol.types import ROLE_SYSTEM, Message
 
 __all__ = [
     "MEMORY_SYSTEM_PREFIX",

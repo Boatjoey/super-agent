@@ -25,9 +25,8 @@ from super_agent.runtime.execution import (
     PermissionRules,
     valid_permission_mode,
 )
-from super_agent.runtime.machine import Message
 from super_agent.runtime.protocol.run_context import live_context
-from super_agent.runtime.protocol.types import Attachment
+from super_agent.runtime.protocol.types import Attachment, Message
 from super_agent.runtime.session.attachments import AttachmentsMixin
 from super_agent.runtime.session.checkpoint import CheckpointMixin
 from super_agent.runtime.session.export import ExportMixin

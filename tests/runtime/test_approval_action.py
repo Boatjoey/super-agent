@@ -19,6 +19,7 @@ from super_agent.runtime.execution import (
     DefaultScheduledActionExecutor,
     ScheduledActionInput,
 )
+from super_agent.runtime.permission.types import Request as PermissionRequest
 from super_agent.runtime.protocol.run_context import live_context
 from super_agent.runtime.protocol.types import ToolCall
 
@@ -28,13 +29,13 @@ class RecordingWaiter:
 
     def __init__(self, decision: machine.ApprovalDecision) -> None:
         self.decision = decision
-        self.calls: list[tuple[ToolCall, machine.PermissionRequest]] = []
+        self.calls: list[tuple[ToolCall, PermissionRequest]] = []
 
     async def wait_approval(
         self,
         ctx: object,
         call: ToolCall,
-        request: machine.PermissionRequest,
+        request: PermissionRequest,
     ) -> machine.ApprovalDecision:
         self.calls.append((call, request))
         return self.decision
@@ -45,7 +46,7 @@ class DismissingWaiter:
         self,
         ctx: object,
         call: ToolCall,
-        request: machine.PermissionRequest,
+        request: PermissionRequest,
     ) -> machine.ApprovalDecision:
         raise ERR_APPROVAL_DISMISSED
 
@@ -53,7 +54,7 @@ class DismissingWaiter:
 @pytest.mark.asyncio
 async def test_await_approval_action_uses_injected_waiter() -> None:
     call = ToolCall(id="call-1", name="bash")
-    request = machine.PermissionRequest(tool_name="bash", reason="risky")
+    request = PermissionRequest(tool_name="bash", reason="risky")
     waiter = RecordingWaiter(machine.APPROVE_ALWAYS)
     executor = DefaultScheduledActionExecutor(None, None)
 
@@ -109,7 +110,7 @@ async def test_a_cancelled_waiter_propagates_as_cancellation_not_an_error() -> N
 
     class CancellingWaiter:
         async def wait_approval(
-            self, ctx: object, call: ToolCall, request: machine.PermissionRequest
+            self, ctx: object, call: ToolCall, request: PermissionRequest
         ) -> machine.ApprovalDecision:
             raise asyncio.CancelledError
 

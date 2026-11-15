@@ -25,11 +25,11 @@ from super_agent.runtime.execution import (
     new_policy,
 )
 from super_agent.runtime.protocol.run_context import live_context
-from super_agent.runtime.protocol.types import ToolSpec
+from super_agent.runtime.protocol.types import ROLE_TOOL, ModelResponse, ToolCall, ToolSpec
 from tests.fakes.execution import FakeToolRunner, PermissionGateExecutor
 from tests.fakes.model import ScriptedModel
 
-CALL = machine.ToolCall(id="call-2", name="write_file", input='{"path":"output.txt","content":"ok"}')
+CALL = ToolCall(id="call-2", name="write_file", input='{"path":"output.txt","content":"ok"}')
 
 
 @pytest.mark.asyncio
@@ -94,7 +94,7 @@ async def test_permission_check_requires_policy_and_approval_store() -> None:
 
 @pytest.mark.asyncio
 async def test_cancelled_permission_result_cannot_run_tool_or_change_next_turn() -> None:
-    model = ScriptedModel([machine.ModelResponse(tool_calls=(CALL,)), machine.ModelResponse(content="fresh")])
+    model = ScriptedModel([ModelResponse(tool_calls=(CALL,)), ModelResponse(content="fresh")])
     tools = FakeToolRunner(specs=(ToolSpec(name="write_file", risky=True),))
     executor = PermissionGateExecutor(model, tools)
     engine = new_engine_with_executor_and_policy(executor, new_policy(PERMISSION_MODE_BYPASS, PermissionRules()), None)
@@ -113,8 +113,8 @@ async def test_cancelled_permission_result_cannot_run_tool_or_change_next_turn()
 
     assert tools.calls == []
     assert executor.actions == [machine.CallModel(), machine.CheckToolPermission(call=CALL), machine.CallModel()]
-    assert [
-        (message.tool_call_id, message.content) for message in engine.messages() if message.role == machine.ROLE_TOOL
-    ] == [(CALL.id, "not executed: cancelled")]
+    assert [(message.tool_call_id, message.content) for message in engine.messages() if message.role == ROLE_TOOL] == [
+        (CALL.id, "not executed: cancelled")
+    ]
     assert engine.messages()[-1].content == "fresh"
     assert engine.state() == machine.STATE_IDLE

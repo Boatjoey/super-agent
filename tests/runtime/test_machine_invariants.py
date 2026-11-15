@@ -11,6 +11,8 @@ from typing import cast
 import pytest
 
 from super_agent.runtime import machine
+from super_agent.runtime.permission.types import Request as PermissionRequest
+from super_agent.runtime.protocol.types import ROLE_ASSISTANT, ROLE_SYSTEM, ROLE_USER, Message, StreamChunk, ToolCall
 from tests.runtime.test_transition import sample_tool_call, transition_snapshot
 
 
@@ -28,30 +30,28 @@ def test_snapshot_from_rejects_invalid_runtime_data() -> None:
 
 
 def test_transition_classifies_state_mismatch_as_unexpected_event() -> None:
-    event = machine.ToolResultReceived(call=machine.ToolCall(id="call-1"), result="ok")
+    event = machine.ToolResultReceived(call=ToolCall(id="call-1"), result="ok")
     with pytest.raises(machine.UnexpectedEventError):
         machine.transition(transition_snapshot(machine.STATE_IDLE, event), event)
 
 
 def test_transition_rejects_approval_for_different_call() -> None:
-    pending = machine.ToolCall(id="call-1", name="bash", input="pwd")
+    pending = ToolCall(id="call-1", name="bash", input="pwd")
     data = machine.RuntimeData(
         state=machine.STATE_WAITING_APPROVAL,
         pending_tool=pending,
-        pending_permission=machine.PermissionRequest(),
+        pending_permission=PermissionRequest(),
         tool_batch=machine.ToolCallBatch(calls=[pending], index=1),
         step=machine.Step(index=1),
     )
     snapshot = machine.snapshot_from(data)
     with pytest.raises(machine.ProtocolViolationError) as raised:
-        machine.transition(
-            snapshot, machine.ApprovalGranted(call=machine.ToolCall(id="call-2", name="bash", input="pwd"))
-        )
+        machine.transition(snapshot, machine.ApprovalGranted(call=ToolCall(id="call-2", name="bash", input="pwd")))
     assert raised.value.reason == "approved call does not match pending tool"
 
 
 def test_transition_rejects_result_for_different_current_call() -> None:
-    current = machine.ToolCall(id="call-1", name="bash", input="pwd")
+    current = ToolCall(id="call-1", name="bash", input="pwd")
     data = machine.RuntimeData(
         state=machine.STATE_RUNNING_TOOL,
         current_tool=current,
@@ -60,7 +60,7 @@ def test_transition_rejects_result_for_different_current_call() -> None:
     )
     snapshot = machine.snapshot_from(data)
     with pytest.raises(machine.ProtocolViolationError) as raised:
-        machine.transition(snapshot, machine.ToolResultReceived(call=machine.ToolCall(id="call-2"), result="ok"))
+        machine.transition(snapshot, machine.ToolResultReceived(call=ToolCall(id="call-2"), result="ok"))
     assert raised.value.reason == "result call does not match current tool"
 
 
@@ -74,7 +74,7 @@ def test_transition_rejects_an_empty_tool_batch() -> None:
 
 def test_runtime_data_change_applier_does_not_mutate_original_state_when_validation_fails() -> None:
     """A rejected candidate leaves the committed data untouched."""
-    call = machine.ToolCall(id="call-1")
+    call = ToolCall(id="call-1")
     original = machine.RuntimeData(
         state=machine.STATE_ADVANCING_QUEUE,
         tool_batch=machine.ToolCallBatch(calls=[call]),
@@ -147,13 +147,13 @@ def test_clone_runtime_data_does_not_alias_the_tool_batch() -> None:
 
 def test_reset_conversation_preserves_system_messages() -> None:
     """Project instructions must survive a reset, and replay applies the same rule."""
-    system = machine.Message(role=machine.ROLE_SYSTEM, content="instructions")
+    system = Message(role=ROLE_SYSTEM, content="instructions")
     original = machine.RuntimeData(
         state=machine.STATE_IDLE,
         messages=[
             system,
-            machine.Message(role=machine.ROLE_USER, content="hi"),
-            machine.Message(role=machine.ROLE_ASSISTANT, content="hello"),
+            Message(role=ROLE_USER, content="hi"),
+            Message(role=ROLE_ASSISTANT, content="hello"),
         ],
     )
 
@@ -167,11 +167,11 @@ def test_reset_conversation_preserves_system_messages() -> None:
 
 def test_tool_flow_preserves_machine_invariants() -> None:
     """Walk a whole tool round trip and validate after every commit."""
-    call = machine.ToolCall(id="call-1", name="bash", input="pwd")
+    call = ToolCall(id="call-1", name="bash", input="pwd")
     data = machine.RuntimeData(state=machine.STATE_WAITING_LLM, step=machine.Step(index=1))
     events: tuple[machine.Event, ...] = (
         machine.ToolBatchReceived(calls=(call,)),
-        machine.ToolCallNeedsApproval(call=call, request=machine.PermissionRequest(tool_name="bash")),
+        machine.ToolCallNeedsApproval(call=call, request=PermissionRequest(tool_name="bash")),
         machine.ApprovalGranted(call=call),
         machine.ToolResultReceived(call=call, result="ok"),
     )
@@ -221,7 +221,7 @@ def test_streaming_change_reuses_unchanged_message_history() -> None:
     """A stream chunk must not copy a long transcript it cannot mutate."""
     data = machine.RuntimeData(
         state=machine.STATE_WAITING_LLM,
-        messages=[machine.Message(role=machine.ROLE_USER, content="history")],
+        messages=[Message(role=ROLE_USER, content="history")],
         step=machine.Step(index=1),
     )
 
@@ -229,7 +229,7 @@ def test_streaming_change_reuses_unchanged_message_history() -> None:
         data,
         machine.TransitionResult(
             next_state=machine.STATE_WAITING_LLM,
-            runtime_data_changes=(machine.AppendStreamingAssistant(chunk=machine.StreamChunk(content_delta="piece")),),
+            runtime_data_changes=(machine.AppendStreamingAssistant(chunk=StreamChunk(content_delta="piece")),),
         ),
     )
 
@@ -245,8 +245,8 @@ def test_streaming_chunks_accumulate_and_snapshots_reject_streaming_outside_wait
         machine.TransitionResult(
             next_state=machine.STATE_WAITING_LLM,
             runtime_data_changes=(
-                machine.AppendStreamingAssistant(chunk=machine.StreamChunk(content_delta="a")),
-                machine.AppendStreamingAssistant(chunk=machine.StreamChunk(content_delta="b")),
+                machine.AppendStreamingAssistant(chunk=StreamChunk(content_delta="a")),
+                machine.AppendStreamingAssistant(chunk=StreamChunk(content_delta="b")),
             ),
         ),
     ).runtime_data
