@@ -39,6 +39,7 @@ from super_agent.runtime.execution import (
     new_policy,
 )
 from super_agent.runtime.permission.types import (
+    COMMAND_CLASS_READ_ONLY,
     CommandClass,
     Request as PermissionRequest,
 )
@@ -148,3 +149,39 @@ def test_command_glued_to_an_operator_or_respelled_keeps_its_class(command: str,
 def test_write_and_network_intent_survive_spacing_and_quoting(command: str, baseline: str) -> None:
     """``| tee`` and a package manager's install or push read the same however they are spaced or quoted."""
     assert_not_relaxed(command, baseline)
+
+
+@pytest.mark.parametrize(
+    ("command", "baseline"),
+    [
+        ("git status; touch pwned", "touch pwned"),
+        ("git status && mv a.txt b.txt", "mv a.txt b.txt"),
+        ("git status && git commit -m msg", "git commit -m msg"),
+        ("git log > out.txt", "echo x > out.txt"),
+        ("git log --oneline >> out.txt", "echo x > out.txt"),
+        ("git diff | tee patch.diff", "ls | tee patch.diff"),
+        ('git log "$(touch pwned)"', "touch pwned"),
+        ('git diff HEAD | eval "git log --oneline > out.txt"', "echo x > out.txt"),
+    ],
+    ids=repr,
+)
+def test_read_only_git_exemption_does_not_cover_the_rest_of_the_line(command: str, baseline: str) -> None:
+    """``git status`` is read-only; a write chained to it or redirected out of it is not."""
+    assert_not_relaxed(command, baseline)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git status",
+        "git log --oneline | head -20",
+        "git status && git log",
+        "git status 2>&1",
+        'git log --grep="a; b | c"',
+        "git log --format='%h (%an)'",
+    ],
+    ids=repr,
+)
+def test_read_only_git_exemption_still_covers_a_harmless_line(command: str) -> None:
+    """The exemption stays for git reads piped into readers, descriptor copies, and quoted operators."""
+    assert command_class(command) == COMMAND_CLASS_READ_ONLY

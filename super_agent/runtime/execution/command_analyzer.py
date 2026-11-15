@@ -59,7 +59,7 @@ def analyzeCommandRequest(request: PermissionRequest) -> PermissionRequest:
     elif containsNetworkIntent(command):
         command_class, reason = COMMAND_CLASS_NETWORK, "network-capable shell command"
     elif commandMayWrite(command):
-        if isReadOnlyGitCommand(command):
+        if isReadOnlyGitCommand(command) and not _writes_besides_read_only_git(command):
             command_class, reason = COMMAND_CLASS_READ_ONLY, "read-only git command"
         else:
             command_class, reason = COMMAND_CLASS_WRITE, "shell command may write files"
@@ -81,6 +81,37 @@ def commandMayWrite(command: str) -> bool:
 
 def isReadOnlyGitCommand(command: str) -> bool:
     return any(command.startswith(prefix) for prefix in _READ_ONLY_GIT_PREFIXES)
+
+
+def _writes_besides_read_only_git(command: str) -> bool:
+    """Whether something other than a read-only git invocation may write.
+
+    The exemption covers the ``git`` word of ``git status`` and its kin, not the
+    rest of the line: ``git status; touch x`` and ``git log > out`` still write.
+    """
+    if _redirects_or_substitutes(command):
+        return True
+    read_only = {prefix.split()[1] for prefix in _READ_ONLY_GIT_PREFIXES}
+    words = _shell_words(command)
+    for index, word in enumerate(words):
+        following = words[index + 1] if index + 1 < len(words) else ""
+        if word in _WRITE_TOKENS and not (word == "git" and following in read_only):
+            return True
+    return False
+
+
+#: A descriptor copy (``2>&1``, ``>&2``, ``3>&-``) redirects into no file.
+_DESCRIPTOR_COPY = re.compile(r"[0-9]*>&(?:[0-9]+|-)")
+
+
+def _redirects_or_substitutes(command: str) -> bool:
+    """Whether ``command`` redirects output into a file or runs a substitution.
+
+    Quoted text counts too: ``eval`` or ``bash -c`` may run what is quoted, so a
+    quoted ``>`` cannot be told apart from a live one.
+    """
+    text = _DESCRIPTOR_COPY.sub(" ", command)
+    return any(mark in text for mark in (">", "$(", "`", "<("))
 
 
 def hasAnyToken(command: str, tokens: tuple[str, ...]) -> bool:
