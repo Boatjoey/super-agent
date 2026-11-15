@@ -44,7 +44,7 @@ from super_agent.runtime.execution import DefaultScheduledActionExecutor, new_po
 from super_agent.runtime.protocol.run_context import live_context
 from super_agent.runtime.protocol.types import ToolRunner
 from super_agent.runtime.session import Metadata, Session, create_persistent_session
-from super_agent.runtime.session.memory import withMemoryContext
+from super_agent.runtime.session.memory import with_memory_context
 from super_agent.store import telemetry
 from super_agent.tools import lsp as lsptools, mcp as mcptools
 from super_agent.workspace import Context, new as newWorkspace
@@ -150,7 +150,7 @@ async def new_session_with_extensions(
         # switch, and everything below — this session, the delegated children,
         # the front ends — uses that one port.
         memory = openMemory(cfg.memory, st)
-        initial = withMemoryContext(initial, memory.load())
+        initial = with_memory_context(initial, memory.load())
         engine = new_engine_with_executor_and_policy(
             DefaultScheduledActionExecutor(router, toolRunner),
             new_policy(profile.permission_mode, cfg.permission_rules),

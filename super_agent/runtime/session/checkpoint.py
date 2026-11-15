@@ -19,7 +19,7 @@ class CheckpointMixin:
         repository: Repository | None
         workspace: Workspace | None
 
-        def metaID(self) -> SessionID: ...
+        def meta_id(self) -> SessionID: ...
 
     def checkpoint(self, call: ToolCall) -> None:
         """Record the files ``call`` is about to change.
@@ -29,14 +29,14 @@ class CheckpointMixin:
         """
         if self.repository is None or self.workspace is None:
             return
-        paths = checkpointPaths(call)
+        paths = checkpoint_paths(call)
         if not paths:
             return
         files: list[FileSnapshot] = self.workspace.capture(paths)
-        self.repository.save_checkpoint(self.metaID(), call, files)
+        self.repository.save_checkpoint(self.meta_id(), call, files)
 
 
-def checkpointPaths(call: ToolCall) -> list[str]:
+def checkpoint_paths(call: ToolCall) -> list[str]:
     """Which files a tool call will touch, from its own argument shape.
 
     ``write_file`` and ``apply_patch`` name one ``path``. Anything else leaves

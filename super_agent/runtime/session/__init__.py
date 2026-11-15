@@ -17,27 +17,27 @@ from super_agent.runtime.session.attachments import (
 )
 from super_agent.runtime.session.checkpoint import (
     CheckpointMixin as CheckpointMixin,
-    checkpointPaths as checkpointPaths,
+    checkpoint_paths as checkpoint_paths,
 )
 from super_agent.runtime.session.export import (
     ExportMixin as ExportMixin,
     ExportWriter as ExportWriter,
-    htmlExport as htmlExport,
-    markdownExport as markdownExport,
+    html_export as html_export,
+    markdown_export as markdown_export,
 )
 from super_agent.runtime.session.history import (
     HistoryMixin as HistoryMixin,
-    compactedMessages as compactedMessages,
-    nonSystemMessageCount as nonSystemMessageCount,
-    savedWorkspaceSpec as savedWorkspaceSpec,
+    compacted_messages as compacted_messages,
+    non_system_message_count as non_system_message_count,
+    saved_workspace_spec as saved_workspace_spec,
 )
 from super_agent.runtime.session.memory import (
     MEMORY_SYSTEM_PREFIX as MEMORY_SYSTEM_PREFIX,
     Memory as Memory,
-    MemoryDisabled as MemoryDisabled,
+    MemoryDisabledError as MemoryDisabledError,
     OffMemory as OffMemory,
     Switch as Switch,
-    withMemoryContext as withMemoryContext,
+    with_memory_context as with_memory_context,
 )
 from super_agent.runtime.session.notifications import (
     NOTIFICATIONS_CLOSED as NOTIFICATIONS_CLOSED,
@@ -56,7 +56,7 @@ from super_agent.runtime.session.notifications import (
     UsageReported as UsageReported,
 )
 from super_agent.runtime.session.persistence import (
-    ErrorPersistenceFailed as ErrorPersistenceFailed,
+    ErrorPersistenceError as ErrorPersistenceError,
     PersistenceMixin as PersistenceMixin,
 )
 from super_agent.runtime.session.repository import (
@@ -72,7 +72,7 @@ from super_agent.runtime.session.repository import (
     WorkspaceAccessMode as WorkspaceAccessMode,
     WorkspaceRootSpec as WorkspaceRootSpec,
     WorkspaceSpec as WorkspaceSpec,
-    workspaceSpecPointer as workspaceSpecPointer,
+    workspace_spec_pointer as workspace_spec_pointer,
 )
 from super_agent.runtime.session.session import (
     Closer as Closer,
@@ -90,7 +90,7 @@ from super_agent.runtime.session.turn import (
     APPROVALS_CLOSED as APPROVALS_CLOSED,
     ApprovalsClosed as ApprovalsClosed,
     TurnMixin as TurnMixin,
-    waitApproval as waitApproval,
+    wait_approval as wait_approval,
 )
 
 __all__ = [
@@ -104,13 +104,13 @@ __all__ = [
     "AuditEvent",
     "CheckpointMixin",
     "Closer",
-    "ErrorPersistenceFailed",
+    "ErrorPersistenceError",
     "ExportMixin",
     "ExportWriter",
     "FileSnapshot",
     "HistoryMixin",
     "Memory",
-    "MemoryDisabled",
+    "MemoryDisabledError",
     "MessageAppended",
     "Metadata",
     "NotificationsClosed",
@@ -139,17 +139,17 @@ __all__ = [
     "WorkspaceAccessMode",
     "WorkspaceRootSpec",
     "WorkspaceSpec",
-    "checkpointPaths",
-    "compactedMessages",
+    "checkpoint_paths",
+    "compacted_messages",
     "create_persistent_session",
-    "htmlExport",
-    "markdownExport",
+    "html_export",
+    "markdown_export",
     "new_persistent_session",
     "new_session",
-    "nonSystemMessageCount",
+    "non_system_message_count",
     "permission_request",
-    "savedWorkspaceSpec",
-    "waitApproval",
-    "withMemoryContext",
-    "workspaceSpecPointer",
+    "saved_workspace_spec",
+    "wait_approval",
+    "with_memory_context",
+    "workspace_spec_pointer",
 ]

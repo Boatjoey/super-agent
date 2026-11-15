@@ -40,7 +40,7 @@ from super_agent.runtime.session.repository import (
     SessionID,
     Workspace,
     WorkspaceSpec,
-    workspaceSpecPointer,
+    workspace_spec_pointer,
 )
 from super_agent.runtime.session.snapshot_emitter import SnapshotEmitter
 from super_agent.runtime.session.turn import TurnMixin
@@ -76,8 +76,8 @@ class SessionBase:
         self.workspace = workspace
         self.meta = meta if meta is not None else Metadata()
         self.message_persistence = MessagePersistence(self.meta.id, initial or ())
-        self.permissionMode = PermissionMode("")
-        self.permissionRules = PermissionRules()
+        self._permission_mode = PermissionMode("")
+        self._permission_rules = PermissionRules()
         #: Where the cross-session memory lives. It is a port, not the repository:
         #: the same conversation can be shown to a different memory without
         #: touching the durable records of the conversation itself.
@@ -86,11 +86,11 @@ class SessionBase:
         self._closers: list[Closer] = []
         self._attachments: list[Attachment] = []
         if initial:
-            self.emitter.emittedMessages = len(initial)
+            self.emitter.emitted_messages = len(initial)
 
     # --- the turn lock -------------------------------------------------------
 
-    def _tryLock(self) -> bool:
+    def _try_lock(self) -> bool:
         """Succeed, or report that a turn is already running."""
         if self._turn_active:
             return False
@@ -131,7 +131,7 @@ class SessionBase:
         """Cancel the run, and record that the user asked for it."""
         await self.engine.cancel()
         if self.repository is not None:
-            self.repository.save_cancel(self.metaID())
+            self.repository.save_cancel(self.meta_id())
 
     async def submit_steering(self, content: str, attachments: tuple[Attachment, ...] = (), input_id: str = "") -> None:
         """Accept an input for the next step of the running turn.
@@ -164,17 +164,17 @@ class SessionBase:
         the conversation without racing the turn.
         """
         if self.repository is not None:
-            self.repository.save_reset(self.metaID())
+            self.repository.save_reset(self.meta_id())
         await self.engine.reset()
         self.emitter.reset(len(self.engine.snapshot().messages))
 
     async def replace_conversation(self, messages: list[Message]) -> None:
         """Activate a new system context and clear prior turns."""
-        if not self._tryLock():
+        if not self._try_lock():
             raise RuntimeError("session is already running a turn")
         try:
             if self.repository is not None:
-                self.repository.save_conversation_replacement(self.metaID(), messages)
+                self.repository.save_conversation_replacement(self.meta_id(), messages)
             await self.engine.replace_messages(messages)
             self.emitter.reset(len(messages))
         finally:
@@ -182,7 +182,7 @@ class SessionBase:
 
     # --- metadata and permissions -------------------------------------------
 
-    def metaID(self) -> SessionID:
+    def meta_id(self) -> SessionID:
         """The active session id.
 
         ``cancel`` runs lock-free, so this reads through the same field it would
@@ -197,34 +197,34 @@ class SessionBase:
         return self.engine.snapshot()
 
     def configure_permissions(self, mode: PermissionMode, rules: PermissionRules) -> None:
-        self.permissionMode = mode
-        self.permissionRules = rules
+        self._permission_mode = mode
+        self._permission_rules = rules
 
     def permission_mode(self) -> PermissionMode:
         """The active policy mode, for display and queries."""
-        return self.permissionMode
+        return self._permission_mode
 
     def auto_approve_tools(self) -> bool:
         """Whether the active policy approves tools without prompting.
 
         A runtime decision, not something the interactive CLI derives from the mode string.
         """
-        return self.permissionMode == PERMISSION_MODE_BYPASS
+        return self._permission_mode == PERMISSION_MODE_BYPASS
 
     async def set_permission_mode(self, mode: PermissionMode) -> None:
         if mode == "":
             mode = PERMISSION_MODE_ASK
         if not valid_permission_mode(mode):
             raise ValueError("invalid permission mode: " + str(mode))
-        await self.engine.set_permission_policy(mode, self.permissionRules)
-        self.permissionMode = mode
+        await self.engine.set_permission_policy(mode, self._permission_rules)
+        self._permission_mode = mode
 
-    async def emitSnapshot(self, notifications: asyncio.Queue[SessionNotification]) -> None:
+    async def emit_snapshot(self, notifications: asyncio.Queue[SessionNotification]) -> None:
         """Independently advance persistence and notification output for one snapshot."""
         snapshot = self.snapshot()
         failures: list[Exception] = []
         try:
-            self.message_persistence.persist_new_messages(self.repository, self.metaID(), snapshot.messages)
+            self.message_persistence.persist_new_messages(self.repository, self.meta_id(), snapshot.messages)
         except Exception as failure:
             failures.append(failure)
         try:
@@ -251,7 +251,7 @@ def new_persistent_session(
 ) -> Session:
     """A session over an existing stored conversation."""
     emitter = SnapshotEmitter()
-    emitter.emittedMessages = len(engine.snapshot().messages)
+    emitter.emitted_messages = len(engine.snapshot().messages)
     return Session(
         engine, repository, workspace, meta, emitter, initial=list(engine.snapshot().messages), memory=memory
     )
@@ -292,7 +292,7 @@ def _with_workspace(meta: Metadata, spec: WorkspaceSpec) -> Metadata:
         parent_id=meta.parent_id,
         project_id=meta.project_id,
         config_root=meta.config_root,
-        workspace_spec=workspaceSpecPointer(spec),
+        workspace_spec=workspace_spec_pointer(spec),
     )
 
 

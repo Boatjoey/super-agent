@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from super_agent.runtime.session.repository import Repository, SessionID
 
 
-class ErrorPersistenceFailed(Exception):
+class ErrorPersistenceError(Exception):
     """The execution error could not be saved; its storage cause remains inspectable."""
 
     def __init__(self, failure: Exception) -> None:
@@ -63,23 +63,23 @@ class PersistenceMixin:
     if TYPE_CHECKING:
         repository: Repository | None
 
-        def metaID(self) -> SessionID: ...
+        def meta_id(self) -> SessionID: ...
 
-    def persistTurnBoundary(self) -> None:
+    def persist_turn_boundary(self) -> None:
         """Start a new turn id, so a resumed transcript can be grouped by turn."""
         if self.repository is not None:
-            self.repository.assign_new_turn_id(self.metaID())
+            self.repository.assign_new_turn_id(self.meta_id())
 
-    def persistMessage(self, message: Message) -> None:
+    def persist_message(self, message: Message) -> None:
         if self.repository is not None:
-            self.repository.save_message(self.metaID(), message)
+            self.repository.save_message(self.meta_id(), message)
 
-    def persistApproval(self, decision: ApprovalDecision, call: ToolCall) -> None:
+    def persist_approval(self, decision: ApprovalDecision, call: ToolCall) -> None:
         """Approval decisions are audited and never sent to a model."""
         if self.repository is None:
             return
-        self.repository.save_approval(self.metaID(), decision, call)
+        self.repository.save_approval(self.meta_id(), decision, call)
 
-    def persistError(self, error: BaseException | None) -> None:
+    def persist_error(self, error: BaseException | None) -> None:
         if self.repository is not None and error is not None:
-            self.repository.save_error(self.metaID(), error)
+            self.repository.save_error(self.meta_id(), error)

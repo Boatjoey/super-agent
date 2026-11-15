@@ -111,7 +111,7 @@ class AuditEvent:
     error: str = dataclasses.field(default="", metadata=json_field(name="error", omitempty=True))
 
 
-def workspaceSpecPointer(spec: WorkspaceSpec) -> WorkspaceSpec:
+def workspace_spec_pointer(spec: WorkspaceSpec) -> WorkspaceSpec:
     """A copy of ``spec``, so a caller cannot mutate what was persisted."""
     return WorkspaceSpec(primary_root=spec.primary_root, cwd=spec.cwd, roots=tuple(spec.roots))
 

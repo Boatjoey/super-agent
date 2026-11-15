@@ -26,10 +26,10 @@ from super_agent.runtime.protocol.types import ROLE_SYSTEM, Message
 __all__ = [
     "MEMORY_SYSTEM_PREFIX",
     "Memory",
-    "MemoryDisabled",
+    "MemoryDisabledError",
     "OffMemory",
     "Switch",
-    "withMemoryContext",
+    "with_memory_context",
 ]
 
 #: The prefix that marks the memory system message, so it can be replaced rather
@@ -37,7 +37,7 @@ __all__ = [
 MEMORY_SYSTEM_PREFIX = "Cross-session memory:\n"
 
 
-class MemoryDisabled(Exception):
+class MemoryDisabledError(Exception):
     """The memory is switched off, so there is nothing to write to."""
 
 
@@ -83,7 +83,7 @@ class OffMemory:
         return []
 
     def save(self, items: Sequence[str]) -> None:
-        raise MemoryDisabled("cross-session memory is off")
+        raise MemoryDisabledError("cross-session memory is off")
 
 
 class Switch:
@@ -108,7 +108,7 @@ class Switch:
     def enabled(self) -> bool:
         return self._enabled
 
-    def setEnabled(self, enabled: bool) -> None:
+    def set_enabled(self, enabled: bool) -> None:
         """Turn the memory on or off. The stored lines are untouched either way."""
         self._enabled = enabled
 
@@ -119,11 +119,11 @@ class Switch:
 
     def save(self, items: Sequence[str]) -> None:
         if not self._enabled:
-            raise MemoryDisabled("cross-session memory is off")
+            raise MemoryDisabledError("cross-session memory is off")
         self._memory.save(items)
 
 
-def withMemoryContext(messages: list[Message], items: list[str]) -> list[Message]:
+def with_memory_context(messages: list[Message], items: list[str]) -> list[Message]:
     """Put the cross-session memory at the front, replacing any previous copy."""
     kept = [
         message

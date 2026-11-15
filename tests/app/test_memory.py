@@ -20,7 +20,7 @@ from super_agent.runtime.protocol.types import ROLE_SYSTEM, ROLE_USER, Message
 from super_agent.runtime.session import (
     MEMORY_SYSTEM_PREFIX,
     Memory,
-    MemoryDisabled,
+    MemoryDisabledError,
     Session,
     Switch,
     new_session,
@@ -54,7 +54,7 @@ def test_the_settings_can_switch_the_memory_off(tmp_path: Path) -> None:
 
     assert memory.enabled is False
     assert memory.load() == []
-    with pytest.raises(MemoryDisabled):
+    with pytest.raises(MemoryDisabledError):
         memory.save(["a line"])
 
 
@@ -105,7 +105,7 @@ async def test_the_controller_switches_the_memory_and_rebuilds_the_context(tmp_p
     session = make_session(memory)
     controller = MemoryController(memory, session, str(settings))
 
-    await controller.setEnabled(False)
+    await controller.set_enabled(False)
 
     assert controller.enabled is False
     assert load_settings_file(str(settings)).memory.enabled is False
@@ -122,8 +122,8 @@ async def test_the_controller_keeps_the_lines_when_the_memory_comes_back(tmp_pat
     session = make_session(memory)
     controller = MemoryController(memory, session, str(settings))
 
-    await controller.setEnabled(False)
-    await controller.setEnabled(True)
+    await controller.set_enabled(False)
+    await controller.set_enabled(True)
 
     assert controller.enabled is True
     assert memory.load() == ["a line"]

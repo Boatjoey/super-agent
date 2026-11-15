@@ -38,7 +38,7 @@ async def build_frontend_ports() -> tuple[frontend.FrontendPorts, str]:
     engine = new_engine(model, None, None)
     await engine.ready()
     session = new_session(engine)
-    return new_agent_application(session), str(session.metaID())
+    return new_agent_application(session), str(session.meta_id())
 
 
 @pytest.mark.asyncio

@@ -27,7 +27,7 @@ from super_agent.runtime.session.notifications import (
     StreamChunkReceived,
     UsageReported,
 )
-from super_agent.runtime.session.persistence import ErrorPersistenceFailed
+from super_agent.runtime.session.persistence import ErrorPersistenceError
 
 if TYPE_CHECKING:
     from super_agent.runtime.session.repository import Repository, SessionID
@@ -38,7 +38,7 @@ class ApprovalsClosed:
     """Pushed onto the approvals queue when the interface stops offering decisions.
 
     An :class:`asyncio.Queue` cannot be closed, so the close is delivered as a
-    value; :func:`waitApproval` turns it into
+    value; :func:`wait_approval` turns it into
     :data:`~super_agent.runtime.execution.ERR_APPROVAL_DISMISSED`.
     """
 
@@ -47,7 +47,7 @@ class ApprovalsClosed:
 APPROVALS_CLOSED = ApprovalsClosed()
 
 
-async def waitApproval(
+async def wait_approval(
     ctx: RunContext, approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed]
 ) -> ApprovalDecision:
     """Wait for a decision or for the run to be cancelled, whichever is first.
@@ -86,14 +86,14 @@ class TurnMixin:
         repository: Repository | None
         _attachments: list[Attachment]
 
-        def _tryLock(self) -> bool: ...
+        def _try_lock(self) -> bool: ...
         def _unlock(self) -> None: ...
-        def metaID(self) -> SessionID: ...
+        def meta_id(self) -> SessionID: ...
         def snapshot(self) -> EngineView: ...
-        async def emitSnapshot(self, notifications: asyncio.Queue[SessionNotification]) -> None: ...
-        def persistTurnBoundary(self) -> None: ...
-        def persistApproval(self, decision: ApprovalDecision, call: ToolCall) -> None: ...
-        def persistError(self, error: BaseException | None) -> None: ...
+        async def emit_snapshot(self, notifications: asyncio.Queue[SessionNotification]) -> None: ...
+        def persist_turn_boundary(self) -> None: ...
+        def persist_approval(self, decision: ApprovalDecision, call: ToolCall) -> None: ...
+        def persist_error(self, error: BaseException | None) -> None: ...
 
     async def run_turn(
         self,
@@ -111,13 +111,13 @@ class TurnMixin:
         the text without it still gets its turn, just with no acceptance to report.
         """
         try:
-            if not self._tryLock():
+            if not self._try_lock():
                 raise RuntimeError("session is already running a turn")
             try:
-                self.persistTurnBoundary()
+                self.persist_turn_boundary()
 
                 async def observer() -> None:
-                    await self.emitSnapshot(notifications)  # type: ignore[attr-defined]
+                    await self.emit_snapshot(notifications)  # type: ignore[attr-defined]
 
                 def on_usage(usage: Usage | None) -> None:
                     # The provider's counts for one model call, forwarded as they
@@ -168,7 +168,7 @@ class TurnMixin:
         approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed],
         input_id: str = "",
     ) -> BaseException | None:
-        def onStreamChunk(chunk: StreamChunk) -> None:
+        def on_stream_chunk(chunk: StreamChunk) -> None:
             # A full queue drops this chunk rather than blocking the model. The
             # notification carries the whole accumulated message, so the consumer
             # converges on the same text from the next one.
@@ -176,7 +176,7 @@ class TurnMixin:
             with contextlib.suppress(asyncio.QueueFull):
                 notifications.put_nowait(notification)
 
-        waiter = self._approvalWaiter(approvals)
+        waiter = self._approval_waiter(approvals)
 
         attachments = list(self._attachments)
         self._attachments = []
@@ -185,15 +185,15 @@ class TurnMixin:
             await self.engine.run_turn(
                 ctx,
                 UserMessageSubmitted(content=query, attachments=tuple(attachments), input_id=input_id),
-                onStreamChunk,
+                on_stream_chunk,
                 waiter,
             )
         except Exception as failure:
-            error = self.failTurn(notifications, failure)
+            error = self.fail_turn(notifications, failure)
         else:
             error = None
         try:
-            await self.emitSnapshot(notifications)
+            await self.emit_snapshot(notifications)
         except Exception as failure:
             error = failure if error is None else JoinedError(error, failure)
         try:
@@ -202,7 +202,7 @@ class TurnMixin:
             error = failure if error is None else JoinedError(error, failure)
         return error
 
-    def _approvalWaiter(self, approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed]) -> ApprovalWaiter:
+    def _approval_waiter(self, approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed]) -> ApprovalWaiter:
         """Bridge the queue to the engine's approval port.
 
         The decision is persisted and the emitter re-armed *before* the engine
@@ -211,20 +211,20 @@ class TurnMixin:
         """
 
         async def wait(ctx: RunContext, call: ToolCall, _request: PermissionRequest) -> ApprovalDecision:
-            decision = await waitApproval(ctx, approvals)
-            self.persistApproval(decision, call)
-            self.emitter.markApprovalConsumed()
+            decision = await wait_approval(ctx, approvals)
+            self.persist_approval(decision, call)
+            self.emitter.mark_approval_consumed()
             return decision
 
         return _WaitApprovalFunc(wait)
 
-    def failTurn(self, notifications: asyncio.Queue[SessionNotification], failure: BaseException) -> BaseException:
+    def fail_turn(self, notifications: asyncio.Queue[SessionNotification], failure: BaseException) -> BaseException:
         """Keep the execution error primary while attempting both reporting paths."""
         failures: list[BaseException] = [failure]
         try:
-            self.persistError(failure)
+            self.persist_error(failure)
         except Exception as persistence_error:
-            failures.append(ErrorPersistenceFailed(persistence_error))
+            failures.append(ErrorPersistenceError(persistence_error))
             _record_reporting_failure("error_persistence_failed", persistence_error)
         try:
             notifications.put_nowait(SessionError(err=failure))

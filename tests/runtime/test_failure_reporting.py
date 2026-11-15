@@ -17,7 +17,7 @@ from super_agent.runtime.protocol import telemetry
 from super_agent.runtime.protocol.run_context import RunContext, live_context
 from super_agent.runtime.protocol.types import ModelResponse, StreamChunk, ToolCall, ToolSpec
 from super_agent.runtime.session import (
-    ErrorPersistenceFailed,
+    ErrorPersistenceError,
     Metadata,
     Session,
     SessionError,
@@ -59,7 +59,7 @@ def test_execution_error_is_preserved_when_reporting_fails(
     if full:
         queue.put_nowait(StateChanged(state=machine.STATE_IDLE))
 
-    result = session.failTurn(queue, original)
+    result = session.fail_turn(queue, original)
 
     assert saved == [original]
     assert errors_is(result, original)
@@ -68,7 +68,7 @@ def test_execution_error_is_preserved_when_reporting_fails(
         assert result.members[0] is original
         assert result.__cause__ is original
         secondary = result.members[1]
-        assert isinstance(secondary, ErrorPersistenceFailed)
+        assert isinstance(secondary, ErrorPersistenceError)
         assert secondary.__cause__ is persistence_failure
         assert errors_is(result, persistence_failure)
     else:
@@ -103,11 +103,11 @@ def test_telemetry_failure_cannot_replace_execution_or_persistence_error(
     def record(kind: str, fields: Mapping[str, object]) -> None:
         raise RuntimeError("telemetry unavailable")
 
-    monkeypatch.setattr(session, "persistError", persist)
+    monkeypatch.setattr(session, "persist_error", persist)
     monkeypatch.setattr(telemetry, "record", record)
     queue: asyncio.Queue[SessionNotification] = asyncio.Queue(maxsize=1)
     queue.put_nowait(StateChanged(state=machine.STATE_IDLE))
-    result = session.failTurn(queue, original)
+    result = session.fail_turn(queue, original)
     assert saved == [original]
     assert errors_is(result, original)
     assert errors_is(result, persistence_failure) == persist_fails
@@ -122,13 +122,13 @@ def test_disconnected_notification_sink_is_reported_without_masking_execution_er
     original = RuntimeError("execution failed")
     notification_failure = ConnectionError("frontend disconnected")
     saved: list[BaseException | None] = []
-    monkeypatch.setattr(session, "persistError", saved.append)
+    monkeypatch.setattr(session, "persist_error", saved.append)
 
     class Disconnected(asyncio.Queue[SessionNotification]):
         def put_nowait(self, item: SessionNotification) -> None:
             raise notification_failure
 
-    result = session.failTurn(Disconnected(), original)
+    result = session.fail_turn(Disconnected(), original)
     assert saved == [original]
     assert isinstance(result, JoinedError)
     assert result.members == (original, notification_failure)

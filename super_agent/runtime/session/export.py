@@ -47,7 +47,7 @@ class ExportMixin:
             events = self.repository.load_audit_events(meta.id)
 
         if normalised == "markdown":
-            content = markdownExport(meta, messages, events).encode()
+            content = markdown_export(meta, messages, events).encode()
             extension = ".md"
         elif normalised == "json":
             encoded = jsonutil.dumps(
@@ -61,7 +61,7 @@ class ExportMixin:
             content = (encoded + "\n").encode()
             extension = ".json"
         elif normalised == "html":
-            content = htmlExport(meta, messages, events).encode()
+            content = html_export(meta, messages, events).encode()
             extension = ".html"
         else:
             raise ValueError("export format must be markdown, json, or html")
@@ -70,7 +70,7 @@ class ExportMixin:
         return self.workspace.write_export(target, content)
 
 
-def markdownExport(meta: Metadata, messages: list[Message], events: list[AuditEvent]) -> str:
+def markdown_export(meta: Metadata, messages: list[Message], events: list[AuditEvent]) -> str:
     output = [
         f"# {meta.title}\n\n",
         f"- Session: `{meta.id}`\n",
@@ -79,11 +79,11 @@ def markdownExport(meta: Metadata, messages: list[Message], events: list[AuditEv
     ]
     for message in messages:
         output.append(f"## {_title(str(message.role))}\n\n{message.content}\n\n")
-    output.append(_markdownEvents(events))
+    output.append(_markdown_events(events))
     return "".join(output)
 
 
-def _markdownEvents(events: list[AuditEvent]) -> str:
+def _markdown_events(events: list[AuditEvent]) -> str:
     if not events:
         return ""
     lines = ["## Audit events\n\n"]
@@ -102,7 +102,7 @@ def _markdownEvents(events: list[AuditEvent]) -> str:
     return "".join(lines)
 
 
-def htmlExport(meta: Metadata, messages: list[Message], events: list[AuditEvent]) -> str:
+def html_export(meta: Metadata, messages: list[Message], events: list[AuditEvent]) -> str:
     body: list[str] = []
     for message in messages:
         body.append(

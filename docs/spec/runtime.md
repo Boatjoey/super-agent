@@ -120,7 +120,7 @@ Executor 将普通工具异常作为 `ToolFinished.error` 返回，Resolver 原�
 `runtime/session` 开始轮次并提供端口，从不调度动作。`runtime/session/turn.py` 向 engine 提供四项内容：
 
 - `ApprovalWaiter`：读取审批通道，并持久化每个决定。
-- `onStreamChunk` 回调：将流式输出转发为通知。
+- `on_stream_chunk` 回调：将流式输出转发为通知。
 - 按轮次注册的状态观察者：将 engine 快照转换为 `SessionNotification`。
 - 按轮次注册的用量观察者：以 `UsageReported` 通知报告当前运行中每次已完成模型调用的用量。适配器无法测量的响应不报告用量。
 

@@ -148,7 +148,7 @@ async def _run_terminal(
                 no_tools=cfg.no_tools,
                 cwd=cwd,
                 instruction_paths=tuple(cfg.instruction_sources),
-                session_id=str(session.metaID()),
+                session_id=str(session.meta_id()),
                 sandbox=str(cfg.sandbox.mode),
             ),
         )

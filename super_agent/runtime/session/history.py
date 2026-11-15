@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import ROLE_SYSTEM, ROLE_TOOL, Message
-from super_agent.runtime.session.memory import Memory, MemoryDisabled, withMemoryContext
+from super_agent.runtime.session.memory import Memory, MemoryDisabledError, with_memory_context
 from super_agent.runtime.session.repository import (
     WORKSPACE_ACCESS_READ_WRITE,
     Metadata,
@@ -20,7 +20,7 @@ from super_agent.runtime.session.repository import (
     Summary,
     WorkspaceRootSpec,
     WorkspaceSpec,
-    workspaceSpecPointer,
+    workspace_spec_pointer,
 )
 
 if TYPE_CHECKING:
@@ -40,9 +40,9 @@ class HistoryMixin:
         meta: Metadata
         memory: Memory
 
-        def _tryLock(self) -> bool: ...
+        def _try_lock(self) -> bool: ...
         def _unlock(self) -> None: ...
-        def metaID(self) -> SessionID: ...
+        def meta_id(self) -> SessionID: ...
         def metadata(self) -> Metadata: ...
         def snapshot(self) -> EngineView: ...
 
@@ -55,7 +55,7 @@ class HistoryMixin:
 
     async def fork(self, title: str) -> Metadata:
         """Copy this session's conversation into a new stored session."""
-        if not self._tryLock():
+        if not self._try_lock():
             raise RuntimeError("session is already running a turn")
         try:
             if self.repository is None:
@@ -81,7 +81,7 @@ class HistoryMixin:
             )
             await self.engine.replace_messages(messages)
             self.meta = created
-            self._rearmEmitter(len(messages))
+            self._rearm_emitter(len(messages))
             return created
         finally:
             self._unlock()
@@ -98,8 +98,8 @@ class HistoryMixin:
         if value == "":
             raise ValueError("memory text is required")
         if not self.memory.enabled:
-            raise MemoryDisabled("cross-session memory is off")
-        if not self._tryLock():
+            raise MemoryDisabledError("cross-session memory is off")
+        if not self._try_lock():
             raise RuntimeError("session is already running a turn")
         try:
             items = self.memory.load()
@@ -107,19 +107,19 @@ class HistoryMixin:
                 return
             items.append(value)
             self.memory.save(items)
-            await self._replaceMemoryContext(items)
+            await self._replace_memory_context(items)
         finally:
             self._unlock()
 
     async def forget_memories(self) -> None:
         """Drop every stored line, leaving the memory itself in place."""
         if not self.memory.enabled:
-            raise MemoryDisabled("cross-session memory is off")
-        if not self._tryLock():
+            raise MemoryDisabledError("cross-session memory is off")
+        if not self._try_lock():
             raise RuntimeError("session is already running a turn")
         try:
             self.memory.save([])
-            await self._replaceMemoryContext([])
+            await self._replace_memory_context([])
         finally:
             self._unlock()
 
@@ -130,17 +130,17 @@ class HistoryMixin:
         either carries the memory lines or does not, and the transcript on disk
         agrees with it.
         """
-        if not self._tryLock():
+        if not self._try_lock():
             raise RuntimeError("session is already running a turn")
         try:
-            await self._replaceMemoryContext(self.memory.load())
+            await self._replace_memory_context(self.memory.load())
         finally:
             self._unlock()
 
-    async def _replaceMemoryContext(self, items: list[str]) -> None:
-        kept = withMemoryContext(list(self.snapshot().messages), items)
+    async def _replace_memory_context(self, items: list[str]) -> None:
+        kept = with_memory_context(list(self.snapshot().messages), items)
         if self.repository is not None:
-            self.repository.save_conversation_replacement(self.metaID(), kept)
+            self.repository.save_conversation_replacement(self.meta_id(), kept)
         await self.engine.replace_messages(kept)
         self.emitter.reset(len(kept))
 
@@ -154,7 +154,7 @@ class HistoryMixin:
         falls back to the process working directory: a saved workspace that no
         longer validates is a hard failure.
         """
-        if not self._tryLock():
+        if not self._try_lock():
             raise RuntimeError("session is already running a turn")
         try:
             if self.repository is None:
@@ -162,7 +162,7 @@ class HistoryMixin:
             messages, meta = self.repository.load(session_id)
             if self.workspace is None:
                 raise ValueError("workspace is not configured")
-            spec, legacy = savedWorkspaceSpec(meta)
+            spec, legacy = saved_workspace_spec(meta)
             if legacy:
                 # Sessions written before WorkspaceSpec saved only a cwd and
                 # never promised it was canonical, so upgrade it once:
@@ -184,7 +184,7 @@ class HistoryMixin:
                 except Exception as error:
                     raise ValueError(f"persist migrated workspace: {error}") from error
             memories = self.memory.load()
-            messages = withMemoryContext(messages, memories)
+            messages = with_memory_context(messages, memories)
             self.repository.save_conversation_replacement(session_id, messages)
             try:
                 self.workspace.activate(spec)
@@ -194,7 +194,7 @@ class HistoryMixin:
             meta = _with_workspace(meta, spec)
             await self.engine.replace_messages(messages)
             self.meta = meta
-            self._rearmEmitter(len(messages))
+            self._rearm_emitter(len(messages))
         finally:
             self._unlock()
 
@@ -206,19 +206,19 @@ class HistoryMixin:
     def delete_session(self, session_id: SessionID) -> None:
         if self.repository is None:
             raise ValueError("session store is not configured")
-        if session_id == self.metaID():
+        if session_id == self.meta_id():
             raise ValueError("cannot delete active session")
         self.repository.delete(session_id)
 
     # --- compaction and undo -------------------------------------------------
 
-    async def compact(self, ctx: RunContext, summary: str, keepNewest: int) -> None:
+    async def compact(self, ctx: RunContext, summary: str, keep_newest: int) -> None:
         """Replace older turns with a summary, keeping the newest few.
 
         The compaction record is persisted before the engine is replaced, so the
         in-memory and on-disk transcripts cannot disagree.
         """
-        if not self._tryLock():
+        if not self._try_lock():
             raise RuntimeError("session is already running a turn")
         try:
             if self.repository is None:
@@ -226,21 +226,21 @@ class HistoryMixin:
             snapshot = self.snapshot()
             if not snapshot.messages:
                 return
-            if keepNewest < 1:
-                keepNewest = 4
+            if keep_newest < 1:
+                keep_newest = 4
             current = list(snapshot.messages)
-            if nonSystemMessageCount(current) <= keepNewest:
+            if non_system_message_count(current) <= keep_newest:
                 return
             summary = summary.strip()
             if summary == "":
                 summary = await self.engine.compact_summary(ctx)
-            kept = compactedMessages(current, summary, keepNewest)
+            kept = compacted_messages(current, summary, keep_newest)
             original = list(current)
-            self.repository.save_compaction(self.metaID(), summary, original, kept)
+            self.repository.save_compaction(self.meta_id(), summary, original, kept)
             await self.engine.replace_messages(kept)
             # The kept messages were already emitted and persisted through the
             # compaction record; re-emitting them would duplicate the transcript.
-            self.emitter.emittedMessages = len(kept)
+            self.emitter.emitted_messages = len(kept)
         finally:
             self._unlock()
 
@@ -250,7 +250,7 @@ class HistoryMixin:
         The files are restored first. Only when that succeeds is the transcript
         truncated, so a failed restore cannot lose history for good.
         """
-        if not self._tryLock():
+        if not self._try_lock():
             raise RuntimeError("session is already running a turn")
         try:
             if self.repository is None:
@@ -258,28 +258,28 @@ class HistoryMixin:
             if self.workspace is None:
                 raise ValueError("workspace is not configured")
             try:
-                files, messages, index = self.repository.load_undo_point(self.metaID())
+                files, messages, index = self.repository.load_undo_point(self.meta_id())
             except Exception as error:
                 raise ValueError("no checkpoint to undo") from error
             self.workspace.restore(files)
-            self.repository.truncate_after(self.metaID(), index)
+            self.repository.truncate_after(self.meta_id(), index)
             await self.engine.replace_messages(messages)
-            self.emitter.emittedMessages = len(messages)
+            self.emitter.emitted_messages = len(messages)
         finally:
             self._unlock()
 
-    def _rearmEmitter(self, emitted: int) -> None:
+    def _rearm_emitter(self, emitted: int) -> None:
         from super_agent.runtime.session.snapshot_emitter import SnapshotEmitter
 
         self.emitter = SnapshotEmitter()
-        self.emitter.emittedMessages = emitted
+        self.emitter.emitted_messages = emitted
 
 
-def nonSystemMessageCount(messages: list[Message]) -> int:
+def non_system_message_count(messages: list[Message]) -> int:
     return sum(1 for message in messages if message.role != ROLE_SYSTEM)
 
 
-def compactedMessages(messages: list[Message], summary: str, keepNewest: int) -> list[Message]:
+def compacted_messages(messages: list[Message], summary: str, keep_newest: int) -> list[Message]:
     """Keep every system message, add the summary, and keep the newest turns.
 
     When the kept window would start on a ``tool`` message, it is widened
@@ -288,24 +288,24 @@ def compactedMessages(messages: list[Message], summary: str, keepNewest: int) ->
     """
     system = [message for message in messages if message.role == ROLE_SYSTEM]
     rest = [message for message in messages if message.role != ROLE_SYSTEM]
-    if len(rest) <= keepNewest:
+    if len(rest) <= keep_newest:
         return [*system, *rest]
     kept = [*system, Message(role=ROLE_SYSTEM, content="Conversation summary:\n" + summary)]
-    start = len(rest) - keepNewest
+    start = len(rest) - keep_newest
     if rest[start].role == ROLE_TOOL:
         while start > 0 and rest[start].role == ROLE_TOOL:
             start -= 1
     return [*kept, *rest[start:]]
 
 
-def savedWorkspaceSpec(meta: Metadata) -> tuple[WorkspaceSpec, bool]:
+def saved_workspace_spec(meta: Metadata) -> tuple[WorkspaceSpec, bool]:
     """The durable workspace description a resume must restore.
 
     The second element marks metadata written before ``WorkspaceSpec``: it carries
     only a cwd, which the resume upgrades to a canonical spec exactly once.
     """
     if meta.workspace_spec is not None:
-        return workspaceSpecPointer(meta.workspace_spec), False
+        return workspace_spec_pointer(meta.workspace_spec), False
     if meta.cwd == "":
         raise ValueError("saved workspace is no longer valid: legacy session has no cwd")
     return (
@@ -321,7 +321,7 @@ def savedWorkspaceSpec(meta: Metadata) -> tuple[WorkspaceSpec, bool]:
 def _spec_from_workspace(workspace: Workspace | None) -> WorkspaceSpec | None:
     if workspace is None:
         return None
-    return workspaceSpecPointer(workspace.spec())
+    return workspace_spec_pointer(workspace.spec())
 
 
 def _with_workspace(meta: Metadata, spec: WorkspaceSpec) -> Metadata:
@@ -335,5 +335,5 @@ def _with_workspace(meta: Metadata, spec: WorkspaceSpec) -> Metadata:
         parent_id=meta.parent_id,
         project_id=meta.project_id,
         config_root=meta.config_root,
-        workspace_spec=workspaceSpecPointer(spec),
+        workspace_spec=workspace_spec_pointer(spec),
     )

@@ -37,7 +37,7 @@ from super_agent.runtime.execution import DefaultScheduledActionExecutor, Permis
 from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import Model, ToolCall, ToolSpec
 from super_agent.runtime.session import Metadata, Session, create_persistent_session
-from super_agent.runtime.session.memory import Memory, withMemoryContext
+from super_agent.runtime.session.memory import Memory, with_memory_context
 from super_agent.runtime.session.repository import Repository
 from super_agent.tools.sandbox import SandboxConfig
 from super_agent.workspace import Workspace, new as newWorkspace, new_default_context
@@ -100,7 +100,7 @@ class subagentTool:
         initial, bundle = initialMessagesWithAgent(cwd, profile)
         memory = self.memory
         if memory is not None:
-            initial = withMemoryContext(initial, memory.load())
+            initial = with_memory_context(initial, memory.load())
         sandbox = dataclasses.replace(self.sandbox, workspace=cwd)
         childWorkspace = new_default_context(cwd)
         childWorkspaceRuntime = newWorkspace(childWorkspace)

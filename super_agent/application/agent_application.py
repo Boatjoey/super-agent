@@ -198,7 +198,7 @@ class AgentApplication:
         """
         if self.memory_controller is None:
             raise ValueError("the memory switch is not available")
-        await self.memory_controller.setEnabled(enabled)
+        await self.memory_controller.set_enabled(enabled)
 
     async def export(self, format: str) -> str:
         return self.session.export(format)

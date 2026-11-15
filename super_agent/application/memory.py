@@ -36,9 +36,9 @@ class MemoryController:
         """The stored lines, empty while the memory is off."""
         return self.switch.load()
 
-    async def setEnabled(self, enabled: bool) -> None:
+    async def set_enabled(self, enabled: bool) -> None:
         """Turn the memory on or off, persist it, and rebuild the context."""
-        self.switch.setEnabled(enabled)
+        self.switch.set_enabled(enabled)
         if self._preferences is not None:
             self._preferences.set_enabled(enabled)
         session = self._session

@@ -6,7 +6,7 @@ pending tool even though every snapshot while that tool waits looks identical,
 and an input is reported once when it leaves its queue.
 
 The emitter is the reason a repeated identical tool call in a batch still prompts
-twice: consuming a decision clears ``lastApprovalCall``, so the next snapshot with
+twice: consuming a decision clears ``last_approval_call``, so the next snapshot with
 a pending tool is a new approval even when the call value is equal.
 
 An input leaving a queue is told apart by the queue it left. A held in-turn input
@@ -51,43 +51,43 @@ class SnapshotEmitter:
         "_delivery_failure",
         "_delivery_task",
         "_pending",
-        "emittedMessages",
-        "hasApproval",
-        "lastApprovalCall",
-        "queuedIDs",
-        "steeringIDs",
+        "emitted_messages",
+        "has_approval",
+        "last_approval_call",
+        "queued_ids",
+        "steering_ids",
     )
 
     def __init__(self) -> None:
         self._pending: deque[SessionNotification] = deque()
         self._delivery_task: asyncio.Task[None] | None = None
         self._delivery_failure: Exception | None = None
-        self.emittedMessages = 0
-        self.hasApproval = False
-        self.lastApprovalCall: ToolCall | None = None
-        self.steeringIDs: tuple[str, ...] = ()
-        self.queuedIDs: tuple[str, ...] = ()
+        self.emitted_messages = 0
+        self.has_approval = False
+        self.last_approval_call: ToolCall | None = None
+        self.steering_ids: tuple[str, ...] = ()
+        self.queued_ids: tuple[str, ...] = ()
 
-    def markApprovalConsumed(self) -> None:
+    def mark_approval_consumed(self) -> None:
         """Called once a decision is made, before the engine applies it.
 
-        ``hasApproval`` stays set, so a following snapshot without a pending tool
+        ``has_approval`` stays set, so a following snapshot without a pending tool
         still emits :class:`ToolApprovalCleared`.
         """
-        self.lastApprovalCall = None
+        self.last_approval_call = None
 
-    def reset(self, emittedMessages: int) -> None:
+    def reset(self, emitted_messages: int) -> None:
         """Re-arm after a context reset, keeping the messages the engine still holds."""
         if self._delivery_task is not None:
             self._delivery_task.cancel()
             self._delivery_task = None
         self._pending.clear()
         self._delivery_failure = None
-        self.emittedMessages = emittedMessages
-        self.hasApproval = False
-        self.lastApprovalCall = None
-        self.steeringIDs = ()
-        self.queuedIDs = ()
+        self.emitted_messages = emitted_messages
+        self.has_approval = False
+        self.last_approval_call = None
+        self.steering_ids = ()
+        self.queued_ids = ()
 
     async def emit(self, notifications: asyncio.Queue[SessionNotification], snapshot: EngineView) -> None:
         """Stage a committed snapshot without waiting for the frontend consumer."""
@@ -100,7 +100,7 @@ class SnapshotEmitter:
 
         pending = snapshot.pending_tool
         if pending is not None:
-            if not self.hasApproval or self.lastApprovalCall is None or self.lastApprovalCall != pending:
+            if not self.has_approval or self.last_approval_call is None or self.last_approval_call != pending:
                 notifications.append(
                     ToolApprovalRequested(
                         tool_call=pending,
@@ -110,20 +110,20 @@ class SnapshotEmitter:
                         batch_total=snapshot.pending_tool_batch_total,
                     )
                 )
-                self.lastApprovalCall = pending
-                self.hasApproval = True
+                self.last_approval_call = pending
+                self.has_approval = True
         else:
-            if self.hasApproval:
+            if self.has_approval:
                 notifications.append(ToolApprovalCleared())
-            self.hasApproval = False
-            self.lastApprovalCall = None
+            self.has_approval = False
+            self.last_approval_call = None
 
         messages = snapshot.messages
-        if self.emittedMessages > len(messages):
-            self.emittedMessages = 0
-        for message in messages[self.emittedMessages :]:
+        if self.emitted_messages > len(messages):
+            self.emitted_messages = 0
+        for message in messages[self.emitted_messages :]:
             notifications.append(MessageAppended(message=message))
-        self.emittedMessages = len(messages)
+        self.emitted_messages = len(messages)
 
         # Last, so a consumer that renders as it reads already has the message an
         # accepted input became before it is told the input landed.
@@ -177,8 +177,8 @@ class SnapshotEmitter:
     def _emit_steering(self, notifications: deque[SessionNotification], snapshot: EngineView) -> None:
         """Report each held input that left the queue since the last snapshot."""
         current = tuple(item.id for item in snapshot.steering if item.id)
-        gone = tuple(input_id for input_id in self.steeringIDs if input_id not in current)
-        self.steeringIDs = current
+        gone = tuple(input_id for input_id in self.steering_ids if input_id not in current)
+        self.steering_ids = current
         if snapshot.state == STATE_IDLE:
             for input_id in gone:
                 notifications.append(SteeringWithdrawn(input_id=input_id))
@@ -189,8 +189,8 @@ class SnapshotEmitter:
     def _emit_queued(self, notifications: deque[SessionNotification], snapshot: EngineView) -> None:
         """Report each queued input that left the queue since the last snapshot."""
         current = tuple(item.id for item in snapshot.queued if item.id)
-        gone = tuple(input_id for input_id in self.queuedIDs if input_id not in current)
-        self.queuedIDs = current
+        gone = tuple(input_id for input_id in self.queued_ids if input_id not in current)
+        self.queued_ids = current
         if snapshot.state == STATE_IDLE:
             for input_id in gone:
                 notifications.append(QueuedInputWithdrawn(input_id=input_id))

@@ -17,12 +17,12 @@ from super_agent.runtime.protocol.types import ROLE_SYSTEM, ROLE_USER, Message
 from super_agent.runtime.session import (
     MEMORY_SYSTEM_PREFIX,
     Memory,
-    MemoryDisabled,
+    MemoryDisabledError,
     OffMemory,
     Session,
     Switch,
     new_session,
-    withMemoryContext,
+    with_memory_context,
 )
 from tests.fakes.execution import StaticReplyExecutor
 
@@ -67,8 +67,8 @@ def test_the_context_replaces_the_previous_copy_instead_of_stacking() -> None:
         Message(role=ROLE_USER, content="hello"),
     ]
 
-    once = withMemoryContext(messages, ["new"])
-    twice = withMemoryContext(once, ["newer"])
+    once = with_memory_context(messages, ["new"])
+    twice = with_memory_context(once, ["newer"])
 
     assert len(twice) == 2
     assert twice[0].content.startswith(MEMORY_SYSTEM_PREFIX)
@@ -83,7 +83,7 @@ def test_an_empty_memory_removes_the_context_entirely() -> None:
         Message(role=ROLE_USER, content="hi"),
     ]
 
-    assert withMemoryContext(messages, []) == [Message(role=ROLE_USER, content="hi")]
+    assert with_memory_context(messages, []) == [Message(role=ROLE_USER, content="hi")]
 
 
 def test_a_switched_off_memory_reads_nothing_and_refuses_writes() -> None:
@@ -94,7 +94,7 @@ def test_a_switched_off_memory_reads_nothing_and_refuses_writes() -> None:
     assert switch.load() == []
     assert switch.enabled is False
     assert switch.name == "list"
-    with pytest.raises(MemoryDisabled):
+    with pytest.raises(MemoryDisabledError):
         switch.save(["another line"])
     # The backend was never asked to write: nothing was lost, nothing was kept.
     assert backend.writes == []
@@ -105,7 +105,7 @@ def test_a_switched_off_memory_keeps_what_was_already_stored() -> None:
     backend = ListMemory(["a line"])
     switch = Switch(backend, enabled=False)
 
-    switch.setEnabled(True)
+    switch.set_enabled(True)
 
     assert switch.load() == ["a line"]
 
@@ -117,7 +117,7 @@ def test_a_memory_with_no_backend_at_all_refuses_writes() -> None:
     assert memory.enabled is False
     assert memory.load() == []
     assert memory.name == "off"
-    with pytest.raises(MemoryDisabled):
+    with pytest.raises(MemoryDisabledError):
         memory.save(["a line"])
 
 
@@ -141,7 +141,7 @@ async def test_the_session_refuses_to_remember_when_the_memory_is_off() -> None:
     backend = ListMemory()
     session = await session_with(Switch(backend, enabled=False))
 
-    with pytest.raises(MemoryDisabled):
+    with pytest.raises(MemoryDisabledError):
         await session.remember("Prefer concise answers")
 
     assert backend.writes == []
@@ -156,12 +156,12 @@ async def test_the_context_follows_the_switch_in_both_directions() -> None:
 
     assert "Prefer concise answers" not in session.snapshot().messages[0].content
 
-    switch.setEnabled(False)
+    switch.set_enabled(False)
     await session.refresh_memory()
     off = session.snapshot().messages
     assert all(not message.content.startswith(MEMORY_SYSTEM_PREFIX) for message in off)
 
-    switch.setEnabled(True)
+    switch.set_enabled(True)
     await session.refresh_memory()
     on = session.snapshot().messages
     assert on[0].content.startswith(MEMORY_SYSTEM_PREFIX)

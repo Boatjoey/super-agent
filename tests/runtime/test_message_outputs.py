@@ -91,17 +91,17 @@ async def test_uncertain_message_write_is_reconciled_without_duplicate_append(
     monkeypatch.setattr(repository, "save_message", flaky_save)
     queue: asyncio.Queue[SessionNotification] = asyncio.Queue()
     with pytest.raises(OSError) as raised:
-        await session.emitSnapshot(queue)
+        await session.emit_snapshot(queue)
     assert raised.value is failure
     assert session.message_persistence.persisted_count == 1
-    assert session.emitter.emittedMessages == 3
+    assert session.emitter.emitted_messages == 3
     assert len(repository.load(meta.id)[0]) == (2 if after_append else 1)
 
-    await session.emitSnapshot(queue)
+    await session.emit_snapshot(queue)
     assert repository.load(meta.id)[0] == messages
     assert session.message_persistence.persisted_count == 3
     saved_attempts = attempts
-    await session.emitSnapshot(queue)
+    await session.emit_snapshot(queue)
     assert attempts == saved_attempts
     seen = [queue.get_nowait() for _ in range(queue.qsize())]
     assert [item.message for item in seen if isinstance(item, MessageAppended)] == messages
@@ -129,13 +129,13 @@ async def test_failed_reconciliation_never_blindly_retries_uncertain_append(
     monkeypatch.setattr(repository, "save_message", uncertain_save)
     queue: asyncio.Queue[SessionNotification] = asyncio.Queue()
     with pytest.raises(OSError, match="append acknowledged late"):
-        await session.emitSnapshot(queue)
+        await session.emit_snapshot(queue)
     monkeypatch.setattr(repository, "load", broken_load)
     with pytest.raises(OSError, match="reconciliation unavailable"):
-        await session.emitSnapshot(queue)
+        await session.emit_snapshot(queue)
     assert attempts == 1
     monkeypatch.setattr(repository, "load", load)
-    await session.emitSnapshot(queue)
+    await session.emit_snapshot(queue)
     assert attempts == 1
     assert load(meta.id)[0] == [message]
 
@@ -155,11 +155,11 @@ async def test_notification_failure_does_not_repeat_persisted_messages(tmp_path:
     session, repository, meta = outputs(tmp_path, messages)
     failure = RuntimeError("notification consumer failed")
     with pytest.raises(RuntimeError) as raised:
-        await session.emitSnapshot(BrokenNotificationQueue(failure))
+        await session.emit_snapshot(BrokenNotificationQueue(failure))
     assert raised.value is failure
     assert repository.load(meta.id)[0] == messages
     queue: asyncio.Queue[SessionNotification] = asyncio.Queue()
-    await session.emitSnapshot(queue)
+    await session.emit_snapshot(queue)
     assert repository.load(meta.id)[0] == messages
     seen = [queue.get_nowait() for _ in range(queue.qsize())]
     assert [item.message for item in seen if isinstance(item, MessageAppended)] == messages
@@ -178,7 +178,7 @@ async def test_message_and_notification_failures_are_both_reported(
 
     monkeypatch.setattr(repository, "save_message", fail_save)
     with pytest.raises(JoinedError) as raised:
-        await session.emitSnapshot(BrokenNotificationQueue(notification_failure))
+        await session.emit_snapshot(BrokenNotificationQueue(notification_failure))
     assert raised.value.members == (persistence_failure, notification_failure)
 
 
@@ -194,13 +194,13 @@ async def test_background_delivery_failure_keeps_pending_messages_for_retry(tmp_
 
     queue = FailedDelivery(maxsize=1)
     queue.put_nowait(StateChanged(state=machine.STATE_IDLE))
-    await session.emitSnapshot(queue)
+    await session.emit_snapshot(queue)
     assert repository.load(meta.id)[0] == messages
     with pytest.raises(RuntimeError) as raised:
         await session.emitter.flush(queue)
     assert raised.value is failure
     retry: asyncio.Queue[SessionNotification] = asyncio.Queue()
-    await session.emitSnapshot(retry)
+    await session.emit_snapshot(retry)
     assert repository.load(meta.id)[0] == messages
     seen = [retry.get_nowait() for _ in range(retry.qsize())]
     assert [item.message for item in seen if isinstance(item, MessageAppended)] == messages
@@ -219,9 +219,9 @@ async def test_history_mismatch_blocks_retry_instead_of_duplicating_messages(
     monkeypatch.setattr(repository, "save_message", failed_save)
     queue: asyncio.Queue[SessionNotification] = asyncio.Queue()
     with pytest.raises(OSError):
-        await session.emitSnapshot(queue)
+        await session.emit_snapshot(queue)
     save(meta.id, Message(role=ROLE_USER, content="different history"))
     monkeypatch.setattr(repository, "save_message", save)
     with pytest.raises(ValueError, match="stored message history"):
-        await session.emitSnapshot(queue)
+        await session.emit_snapshot(queue)
     assert [message.content for message in repository.load(meta.id)[0]] == ["different history"]
