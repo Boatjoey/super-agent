@@ -22,11 +22,23 @@ jobs:
       # The strict sandbox is the Linux default; these are its declared system
       # dependencies, and verify.sh refuses to run without them.
       - run: sudo apt-get update && sudo apt-get install -y bubblewrap util-linux
+      # Ubuntu 24.04 confines unprivileged user namespaces with AppArmor, which
+      # stops bwrap from configuring loopback in its network namespace, so the
+      # strict sandbox tests could only skip. Lift the restriction where the
+      # kernel has it.
+      - run: |
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - run: uv sync
       - run: npm ci
       - run: npm run build:web
       - run: git diff --exit-code -- super_agent/web/static/app.js
+      # With the restriction lifted, a strict sandbox test that still cannot run
+      # fails here instead of skipping.
       - run: ./scripts/verify.sh
+        env:
+          SUPER_AGENT_TEST_REQUIRE_SANDBOX: "1"
       # Metrics are reported, never gated: this step fails only when the script
       # cannot measure. It reads the coverage data verify.sh just wrote, so the
       # suite does not run a second time.

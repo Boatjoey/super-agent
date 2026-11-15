@@ -158,6 +158,7 @@ Web 交互源码使用 TypeScript，样式与页面结构保持原生 CSS 和 HT
 - 解析文档或源码的测试必须在格式改变时明确失败，不能悄悄匹配不到任何内容。
 - 共享的测试替身放在 `tests/fakes/`；测试作为子进程启动的辅助程序放在 `tests/helpers/`，通过 `python -m tests.helpers.<name>` 运行。
 - `tests/web/test_static_ui.py` 校验页面地标、控件名称、状态区域、TypeScript 服务端路径与安全 DOM 约束；修改 Web 静态文件后需先执行 `npm run build:web`，其中 `node --check` 一项在未安装 Node.js 时跳过并在输出中注明。
+- Linux 严格沙箱的集成用例在环境无法运行它们时（内核不允许 bubblewrap 创建命名空间，或账户没有可写的 home 目录）跳过并注明原因；设置环境变量 `SUPER_AGENT_TEST_REQUIRE_SANDBOX=1` 后改为失败，持续集成以此保证这些用例实际运行。
 
 使用 `./scripts/verify.sh` 执行全部检查，包括格式、静态检查、严格类型检查、测试、在 `python -X dev` 下运行的并发测试子集，以及覆盖率。GitHub Actions 在每次推送和变更审阅记录时运行该脚本。
 

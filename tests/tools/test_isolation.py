@@ -18,7 +18,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Final
+from typing import Final, NoReturn
 
 import pytest
 
@@ -201,13 +201,29 @@ async def test_strict_sandbox_requires_bubblewrap(tmp_path: Path, monkeypatch: p
     assert "sandbox.mode to off" in str(excinfo.value)
 
 
+#: Set to ``1`` where the strict sandbox must be able to run, as CI does after
+#: lifting the runner's restriction on unprivileged user namespaces. A strict
+#: sandbox test the environment cannot run then fails instead of skipping, so
+#: these tests cannot quietly stop running.
+REQUIRE_SANDBOX_ENV: Final[str] = "SUPER_AGENT_TEST_REQUIRE_SANDBOX"
+
+
+def _skip_or_fail(reason: str) -> NoReturn:
+    """Skip a strict sandbox test this environment cannot run, or fail where it must."""
+    if os.environ.get(REQUIRE_SANDBOX_ENV) == "1":
+        pytest.fail(f"{reason} ({REQUIRE_SANDBOX_ENV}=1 requires the strict sandbox tests to run)")
+    pytest.skip(reason)
+
+
 def _namespace_refusal() -> str:
     """Why this kernel cannot start bubblewrap, or an empty string when it can.
 
-    Hosted CI runs inside a container whose policy may forbid unprivileged user
-    namespaces. That is an environment limit, not a sandbox regression: probe
-    the capability directly and let the integration tests skip. A missing binary
-    stays a failure, because it is a declared dependency.
+    A kernel or security policy may forbid unprivileged user namespaces; Ubuntu
+    24.04's AppArmor restriction, for one, stops bwrap from configuring loopback
+    in its network namespace. That is an environment limit, not a sandbox
+    regression: probe the capability directly and let the integration tests
+    skip, unless ``REQUIRE_SANDBOX_ENV`` says this environment must allow it. A
+    missing binary stays a failure, because it is a declared dependency.
     """
     bwrap = shutil.which("bwrap")
     if bwrap is None:
@@ -227,10 +243,10 @@ def _namespace_refusal() -> str:
 
 
 def _require_namespaces() -> None:
-    """Skip when this kernel cannot start bubblewrap."""
+    """Skip, or fail, when this kernel cannot start bubblewrap."""
     refusal = _namespace_refusal()
     if refusal:
-        pytest.skip(f"kernel namespaces unavailable: {refusal}")
+        _skip_or_fail(f"kernel namespaces unavailable: {refusal}")
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
@@ -300,9 +316,9 @@ def _account_home() -> str:
     try:
         home = os.path.realpath(pwd.getpwuid(os.getuid()).pw_dir)
     except KeyError:
-        pytest.skip("this account has no entry in the user database")
+        _skip_or_fail("this account has no entry in the user database")
     if home == os.sep or not os.path.isdir(home) or not os.access(home, os.W_OK):
-        pytest.skip(f"the account's home directory {home} cannot hold test files")
+        _skip_or_fail(f"the account's home directory {home} cannot hold test files")
     return home
 
 
