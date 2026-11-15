@@ -47,7 +47,7 @@ __all__ = [
     "pendingAttachments",
     "queueInput",
     "resize",
-    "runTurn",
+    "run_turn",
     "steerInput",
     "submitPrompt",
     "submitText",
@@ -363,11 +363,11 @@ def submitPrompt(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], 
     app.turn += 1
     return app, (
         waitForNotification(notifications, app.turn),
-        runTurn(app, text, notifications, cancellation),
+        run_turn(app, text, notifications, cancellation),
     )
 
 
-def runTurn(
+def run_turn(
     app: App,
     text: str,
     notifications: Channel[ConversationNotification],

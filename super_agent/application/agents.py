@@ -23,7 +23,7 @@ from super_agent.runtime.protocol.types import (
 from super_agent.runtime.session import Session
 
 
-class filteredToolRunner:
+class FilteredToolRunner:
     """A runner that advertises and accepts only the active profile's tools.
 
     ``allowed`` is ``None`` when nothing is restricting the tool set. A profile
@@ -49,12 +49,12 @@ class filteredToolRunner:
             raise ValueError("tool is not enabled for active agent: " + call.name)
         return await self._runner.run(ctx, call)
 
-    def setAllowed(self, names: Sequence[str]) -> None:
+    def set_allowed(self, names: Sequence[str]) -> None:
         """Restrict the visible tools, or lift the restriction for an empty list."""
         self._allowed = None if not names else frozenset(names)
 
 
-class routedModel:
+class RoutedModel:
     """The model the engine calls, which :meth:`AgentController.use` swaps.
 
     The engine holds this one object for its whole life, so a profile switch
@@ -106,11 +106,11 @@ class AgentController:
         self,
         *,
         session: Session,
-        model: routedModel,
+        model: RoutedModel,
         profiles: dict[str, AgentProfile],
         providers: dict[str, ProviderConfig],
         workflows: WorkflowController,
-        tools: filteredToolRunner | None,
+        tools: FilteredToolRunner | None,
         base: str,
         current: str,
         models: ModelResolver,
@@ -181,7 +181,7 @@ class AgentController:
         if profile.model != "":
             config = dataclasses.replace(config, model=profile.model)
         model = self.models.model(profile.provider, config)
-        messages = withAgentProfile(self.instructions.messages(self.base), profile)
+        messages = with_agent_profile(self.instructions.messages(self.base), profile)
         memories = self.session.memories()
         if memories:
             messages = [
@@ -192,7 +192,7 @@ class AgentController:
         await self.session.set_permission_mode(profile.permission_mode)
         self.model.set(model)
         if self.tools is not None:
-            self.tools.setAllowed(profile.tools)
+            self.tools.set_allowed(profile.tools)
         self.current = name
 
     # --- provider configuration ---------------------------------------------
@@ -233,7 +233,7 @@ class AgentController:
             self.model.set(self.models.model(provider, config))
 
 
-def withAgentProfile(messages: list[Message], profile: AgentProfile) -> list[Message]:
+def with_agent_profile(messages: list[Message], profile: AgentProfile) -> list[Message]:
     """Append the selected profile to the initial system context."""
     messages = list(messages)
     if profile.prompt != "":

@@ -46,7 +46,7 @@ class MCPController:
             try:
                 self.backend.save(name, settings)
             except BaseException:
-                self.backend.uninstall(toolNames(added))
+                self.backend.uninstall(tool_names(added))
                 await self.backend.disconnect(name)
                 raise
             self.configs[name] = settings
@@ -66,13 +66,13 @@ class MCPController:
             try:
                 self.backend.save(name, None)
             except BaseException as error:
-                reconnectError: BaseException | None = None
+                reconnect_error: BaseException | None = None
                 try:
                     added = await self.backend.connect(live_context(), name, settings)
                     self.backend.install(added)
                 except BaseException as failure:
-                    reconnectError = failure
-                raise JoinedError(error, reconnectError) from None
+                    reconnect_error = failure
+                raise JoinedError(error, reconnect_error) from None
             del self.configs[name]
 
     async def restart(self, ctx: RunContext, name: str) -> None:
@@ -81,5 +81,5 @@ class MCPController:
             await self.backend.restart(ctx, name)
 
 
-def toolNames(items: Sequence[ToolRunner]) -> list[str]:
+def tool_names(items: Sequence[ToolRunner]) -> list[str]:
     return [specs[0].name for item in items if (specs := item.specs())]

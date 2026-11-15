@@ -24,15 +24,15 @@ from super_agent.runtime.session import (
 )
 
 #: How many levels of delegation are allowed. The first child runs at depth 1.
-maxSubagentDepth: Final[int] = 3
+MAX_SUBAGENT_DEPTH: Final[int] = 3
 
 #: The run-context key carrying the current depth. An object identity is the
 #: private-type equivalent.
-subagentDepthKey: Final[object] = object()
+SUBAGENT_DEPTH_KEY: Final[object] = object()
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class subagentInput:
+class SubagentInput:
     """The ``delegate`` tool's arguments."""
 
     prompt: str = dataclasses.field(default="", metadata=json_field(name="prompt"))
@@ -48,12 +48,12 @@ class Delegation:
 
     async def run(self, ctx: RunContext, call: ToolCall) -> str:
         """Run one delegation and return the child's final result."""
-        rawDepth = ctx.value(subagentDepthKey)
-        depth = rawDepth if isinstance(rawDepth, int) else 0
-        if depth >= maxSubagentDepth:
+        raw_depth = ctx.value(SUBAGENT_DEPTH_KEY)
+        depth = raw_depth if isinstance(raw_depth, int) else 0
+        if depth >= MAX_SUBAGENT_DEPTH:
             raise ValueError("maximum subagent depth reached")
         try:
-            input = jsonutil.loads(call.input, subagentInput)
+            input = jsonutil.loads(call.input, SubagentInput)
         except (ValueError, TypeError) as error:
             raise ValueError(f"decode delegate input: {error}") from error
         prompt = input.prompt.strip()
@@ -70,17 +70,17 @@ class Delegation:
         # The worktree is not removed, on any path: the result names it precisely
         # so the work can be inspected afterwards, and deleting it would take the
         # evidence away. Cleanup is the user's call, not the delegation's.
-        return await self.runChild(ctx, profile, prompt, cwd, model, depth)
+        return await self.run_child(ctx, profile, prompt, cwd, model, depth)
 
-    async def runChild(
+    async def run_child(
         self, ctx: RunContext, profile: AgentProfile, prompt: str, cwd: str, model: Model, depth: int
     ) -> str:
         """Build the child session, run one turn, and return its final result."""
         child = await self.environment.child(profile, prompt, cwd, model)
         result = ""
         try:
-            await self.runTurn(ctx, child, prompt, depth)
-            result = finalAssistantContent(child.snapshot().messages)
+            await self.run_turn(ctx, child, prompt, depth)
+            result = final_assistant_content(child.snapshot().messages)
         finally:
             with contextlib.suppress(Exception):
                 await child.close()
@@ -88,7 +88,7 @@ class Delegation:
             raise ValueError("subagent returned no assistant result")
         return f"Child session: {child.metadata().id}\nWorkspace: {cwd}\n\n{result}"
 
-    async def runTurn(self, ctx: RunContext, child: Session, prompt: str, depth: int) -> None:
+    async def run_turn(self, ctx: RunContext, child: Session, prompt: str, depth: int) -> None:
         """Run one child turn, denying every approval it asks for.
 
         The denial runs on its own task while the turn blocks, so the same
@@ -98,7 +98,7 @@ class Delegation:
         notifications: asyncio.Queue[SessionNotification] = asyncio.Queue(maxsize=100)
         approvals: asyncio.Queue[ApprovalDecision | ApprovalsClosed] = asyncio.Queue(maxsize=1)
 
-        async def denyApprovals() -> None:
+        async def deny_approvals() -> None:
             while True:
                 notification = await notifications.get()
                 if isinstance(notification, NotificationsClosed):
@@ -106,16 +106,16 @@ class Delegation:
                 if isinstance(notification, ToolApprovalRequested):
                     await approvals.put(DENY_APPROVAL)
 
-        denier = asyncio.create_task(denyApprovals())
+        denier = asyncio.create_task(deny_approvals())
         try:
-            await child.run_turn(ctx.with_value(subagentDepthKey, depth + 1), prompt, notifications, approvals)
+            await child.run_turn(ctx.with_value(SUBAGENT_DEPTH_KEY, depth + 1), prompt, notifications, approvals)
         finally:
             denier.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await denier
 
 
-def finalAssistantContent(messages: Sequence[Message]) -> str:
+def final_assistant_content(messages: Sequence[Message]) -> str:
     """The newest assistant message's text, or the empty string."""
     for index in range(len(messages) - 1, -1, -1):
         if messages[index].role == ROLE_ASSISTANT:

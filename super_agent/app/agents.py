@@ -18,9 +18,9 @@ from super_agent.app.instructions import Bundle, load as loadInstructions
 from super_agent.app.system_prompt import SYSTEM_PROMPT
 from super_agent.application.agents import (
     AgentController as ApplicationAgentController,
-    filteredToolRunner,
-    routedModel,
-    withAgentProfile,
+    FilteredToolRunner,
+    RoutedModel,
+    with_agent_profile,
 )
 from super_agent.application.values import AgentProfile
 from super_agent.application.workflows import WorkflowController
@@ -74,11 +74,11 @@ class AgentController(ApplicationAgentController):
         self,
         *,
         session: Session,
-        model: routedModel,
+        model: RoutedModel,
         profiles: dict[str, AgentProfile],
         providers: dict[str, llm.ProviderConfig],
         workflows: WorkflowController,
-        tools: filteredToolRunner | None,
+        tools: FilteredToolRunner | None,
         base: str,
         current: str,
         settings_path: str = "",
@@ -171,4 +171,4 @@ def initialMessagesWithAgent(cwd: str, profile: AgentProfile) -> tuple[list[Mess
     place.
     """
     messages, bundle = initialMessages(cwd)
-    return withAgentProfile(messages, profile), bundle
+    return with_agent_profile(messages, profile), bundle

@@ -64,7 +64,7 @@
 | 出站 | `application/workflows.Runner`（工具端口的扩展：支持绕过钩子的直接调用） | `application/workflows.py` | 工具注册表与钩子包装 |
 | 出站 | `runtime/protocol/telemetry.Recorder` | `runtime/engine` 经遥测路由 | `store/telemetry.py` 的 JSONL 后端 |
 
-`ModelResolver`、`InstructionSource` 和 `ProviderPreferences` 是三个独立契约，由同一个设施对象实现；模型与指令返回内侧值，不返回服务商 SDK 或磁盘文件对象。档案提示词的上下文组装由 `application/agents.withAgentProfile` 拥有；指令适配器返回基础指令消息。MCP 事务编排归 `application/mcp.py`，连接、目录更新与配置文件 I/O 归其后端。`DelegationEnvironment.child` 是可在运行期间调用的组合工厂，返回已构造的内侧会话服务；委派执行规则归应用层。遥测使用进程级路由，组合根安装后端。
+`ModelResolver`、`InstructionSource` 和 `ProviderPreferences` 是三个独立契约，由同一个设施对象实现；模型与指令返回内侧值，不返回服务商 SDK 或磁盘文件对象。档案提示词的上下文组装由 `application/agents.with_agent_profile` 拥有；指令适配器返回基础指令消息。MCP 事务编排归 `application/mcp.py`，连接、目录更新与配置文件 I/O 归其后端。`DelegationEnvironment.child` 是可在运行期间调用的组合工厂，返回已构造的内侧会话服务；委派执行规则归应用层。遥测使用进程级路由，组合根安装后端。
 
 业务行为分别见[运行时配置](config.md#运行时配置)、[MCP](tools.md#mcp)、[委派](session.md#委派)与[遥测](runtime.md#遥测)。
 

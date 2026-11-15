@@ -29,7 +29,7 @@ from collections.abc import Iterator
 from super_agent import jsonutil, llm, tools
 from super_agent.app.agents import initialMessagesWithAgent
 from super_agent.app.config import instructionSourcePaths
-from super_agent.application.agents import filteredToolRunner
+from super_agent.application.agents import FilteredToolRunner
 from super_agent.application.delegation import Delegation, truncate
 from super_agent.application.values import AgentProfile
 from super_agent.runtime.engine import new_engine_with_executor_and_policy
@@ -107,8 +107,8 @@ class subagentTool:
         registry = tools.sandboxed_registry(sandbox, childWorkspaceRuntime)
         childDelegate = dataclasses.replace(self, base=cwd, workspace=childWorkspaceRuntime)
         registry.add(childDelegate)
-        filtered = filteredToolRunner(registry)
-        filtered.setAllowed(profile.tools)
+        filtered = FilteredToolRunner(registry)
+        filtered.set_allowed(profile.tools)
         engine = new_engine_with_executor_and_policy(
             DefaultScheduledActionExecutor(model, filtered),
             new_policy(profile.permission_mode, self.rules),

@@ -109,7 +109,7 @@ class WorkflowController:
         return template
 
 
-class toolHooks:
+class ToolHooks:
     """Runs the ``pre_tool`` and ``post_tool`` extension hooks around a call.
 
     The observer port is a synchronous callable while a hook runs a command, which
@@ -152,9 +152,9 @@ class toolHooks:
         if workflows is not None:
             try:
                 await workflows.run_hook(ctx, "post_tool")
-            except Exception as hookError:
+            except Exception as hook_error:
                 if error is None:
-                    result += "\n[post_tool hook failed: " + str(hookError) + "]"
+                    result += "\n[post_tool hook failed: " + str(hook_error) + "]"
         if error is not None:
             raise error
         return result

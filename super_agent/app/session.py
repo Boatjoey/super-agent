@@ -10,7 +10,7 @@ Three shapes are worth naming:
 * an asynchronous ``close`` is adapted to the session's synchronous
   :class:`~super_agent.runtime.session.Closer` port by :class:`asyncCloser`, whose
   coroutine :func:`waitPendingClosers` awaits after ``session.close()``;
-* the tool hooks are a runner wrapping the registry (:class:`toolHooks`) rather
+* the tool hooks are a runner wrapping the registry (:class:`ToolHooks`) rather
   than a registry observer, because the observer port is synchronous and a hook
   runs a command.
 """
@@ -36,8 +36,8 @@ from super_agent.app.config import (
 from super_agent.app.mcp import MCPController, new_mcp_controller
 from super_agent.app.memory import MemoryController, openMemory
 from super_agent.app.subagents import subagentTool
-from super_agent.application.agents import filteredToolRunner, routedModel
-from super_agent.application.workflows import WorkflowController, toolHooks
+from super_agent.application.agents import FilteredToolRunner, RoutedModel
+from super_agent.application.workflows import ToolHooks, WorkflowController
 from super_agent.errors import JoinedError
 from super_agent.runtime.engine import new_engine_with_executor_and_policy
 from super_agent.runtime.execution import DefaultScheduledActionExecutor, new_policy
@@ -109,12 +109,12 @@ async def new_session_with_extensions(
         if profile.model != "":
             providerConfig = dataclasses.replace(providerConfig, model=profile.model)
         model = llm.new_model(profile.provider, providerConfig)
-        router = routedModel(model)
+        router = RoutedModel(model)
         toolRunner: ToolRunner
         registry: tools.Registry | None = None
-        hooks: toolHooks | None = None
+        hooks: ToolHooks | None = None
         controller: MCPController | None = None
-        toolFilter: filteredToolRunner | None = None
+        toolFilter: FilteredToolRunner | None = None
         if cfg.no_tools:
             toolRunner = tools.NoTools()
         else:
@@ -139,9 +139,9 @@ async def new_session_with_extensions(
                         await lspManager.close()
                     raise
                 lspCloser = lspManager
-            hooks = toolHooks(registry)
-            toolFilter = filteredToolRunner(hooks)
-            toolFilter.setAllowed(profile.tools)
+            hooks = ToolHooks(registry)
+            toolFilter = FilteredToolRunner(hooks)
+            toolFilter.set_allowed(profile.tools)
             toolRunner = toolFilter
         initial, bundle = initialMessagesWithAgent(configRoot, profile)
         st = store.open_default()

@@ -22,7 +22,7 @@ __all__ = [
     "MCPController",
     "cloneMCPSettings",
     "new_mcp_controller",
-    "toolNames",
+    "tool_names",
 ]
 
 
@@ -112,7 +112,7 @@ def cloneMCPSettings(configs: Mapping[str, MCPServerSettings] | None) -> dict[st
     return {} if configs is None else dict(configs)
 
 
-def toolNames(items: Sequence[mcptools.RemoteTool]) -> list[str]:
+def tool_names(items: Sequence[mcptools.RemoteTool]) -> list[str]:
     """The spec names a batch of discovered tools registers under."""
     names: list[str] = []
     for item in items:

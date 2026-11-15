@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from super_agent.application.delegation import Delegation, maxSubagentDepth, subagentDepthKey
+from super_agent.application.delegation import MAX_SUBAGENT_DEPTH, SUBAGENT_DEPTH_KEY, Delegation
 from super_agent.application.mcp import MCPController
 from super_agent.application.values import AgentProfile
 from super_agent.errors import Cancelled, JoinedError
@@ -77,7 +77,7 @@ async def test_delegation_denies_child_approval_and_closes_the_child() -> None:
 async def test_delegation_depth_limit_prevents_external_operations() -> None:
     environment = DelegationEnvironment(ScriptedModel([]))
     delegation = Delegation({"build": AgentProfile(name="build")}, "/parent", environment)
-    ctx = live_context().with_value(subagentDepthKey, maxSubagentDepth)
+    ctx = live_context().with_value(SUBAGENT_DEPTH_KEY, MAX_SUBAGENT_DEPTH)
 
     with pytest.raises(ValueError, match="maximum subagent depth"):
         await delegation.run(ctx, ToolCall(input='{"prompt":"inspect"}'))
