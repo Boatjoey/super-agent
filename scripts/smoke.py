@@ -642,8 +642,31 @@ class EventStream:
             self.connection.close()
 
 
+def run_access_checks(port: int, cookie: str) -> None:
+    """What the web interface refuses, through the real process.
+
+    The rules are asserted precisely by the web tests; this proves the console
+    script serves with them on, rather than through some path that skips them.
+    """
+    status, _ = http_request(port, "GET", "/api/snapshot")
+    assert status == 401, f"a snapshot without the cookie got {status}, want 401"
+    status, page = http_request(port, "GET", "/")
+    assert status == 401, f"the page without the cookie got {status}, want 401"
+    assert b"/app.js" not in page, "the page without the cookie served the interface"
+    status, headers, _ = http_exchange(port, "GET", "/?token=not-the-token")
+    assert status == 401, f"a wrong token got {status}, want 401"
+    assert headers.get("Set-Cookie") is None, "a wrong token was given a cookie"
+
+    status, _ = http_request(
+        port, "POST", "/api/turns", {"text": "forged"}, cookie=cookie, headers={"Origin": "http://evil.example"}
+    )
+    assert status == 403, f"a foreign origin got {status}, want 403"
+    status, _ = http_request(port, "GET", "/api/snapshot", cookie=cookie, headers={"Host": f"attacker.example:{port}"})
+    assert status == 403, f"a rebinding host got {status}, want 403"
+
+
 def run_web_checks(home: Path, workspace: Path) -> None:
-    """The web interface: its printed address, page, snapshot, a streamed turn, the single-turn slot, cancel."""
+    """The web interface: its printed address, access refusals, page, snapshot, a streamed turn, cancel."""
     port = free_port()
     process = spawn_front_end(["--web", "--port", str(port)], home, workspace)
     output = StartupOutput(process)
@@ -651,6 +674,7 @@ def run_web_checks(home: Path, workspace: Path) -> None:
     try:
         signed_port, cookie = sign_in(output.address())
         assert signed_port == port, f"the printed address names port {signed_port}, want {port}"
+        run_access_checks(port, cookie)
 
         status, page = http_request(port, "GET", "/", cookie=cookie)
         assert status == 200, f"index status {status}"
@@ -750,7 +774,7 @@ def main() -> int:
                 print("ok   terminal: prompt, streaming reply, resize, mid-turn cancel, /clear, /compact, /undo, /quit")
         if "web" in wants:
             run_web_checks(home, workspace)
-            print("ok   web: printed address, token exchange, page, snapshot, streamed turn, single-turn slot, cancel")
+            print("ok   web: printed address, token exchange, access refusals, page, snapshot, streamed turn, cancel")
     finally:
         server.shutdown()
         shutil.rmtree(root, ignore_errors=True)
