@@ -131,3 +131,20 @@ def test_command_glued_to_an_operator_or_respelled_keeps_its_class(command: str,
     """A command name touching ``;``, ``|``, ``&``, ``$(`` or a backtick, quoted in pieces,
     escaped, or bound to a variable is still that command."""
     assert_not_relaxed(command, baseline)
+
+
+@pytest.mark.parametrize(
+    ("command", "baseline"),
+    [
+        ("ls|tee out.txt", "ls | tee out.txt"),
+        ("ls |& tee out.txt", "ls 2>&1 | tee out.txt"),
+        ('ls | "tee" out.txt', "ls | tee out.txt"),
+        ("git\tpush origin main", "git push origin main"),
+        ('git "push" origin main', "git push origin main"),
+        ("npm\tinstall left-pad", "npm install left-pad"),
+    ],
+    ids=repr,
+)
+def test_write_and_network_intent_survive_spacing_and_quoting(command: str, baseline: str) -> None:
+    """``| tee`` and a package manager's install or push read the same however they are spaced or quoted."""
+    assert_not_relaxed(command, baseline)

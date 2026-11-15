@@ -33,7 +33,7 @@ _NETWORK_PACKAGE_MANAGERS = ("pip", "npm", "go", "git")
 
 _DESTRUCTIVE_TOKENS = ("rm", "rmdir", "shred", "mkfs", "dd", "chmod", "chown", "sudo")
 
-_WRITE_TOKENS = ("touch", "mkdir", "mv", "cp", "sed", "perl", "git")
+_WRITE_TOKENS = ("touch", "mkdir", "mv", "cp", "sed", "perl", "git", "tee")
 
 _READ_ONLY_GIT_PREFIXES = ("git status", "git diff", "git show", "git log", "git branch")
 
@@ -123,7 +123,12 @@ def containsNetworkIntent(command: str) -> bool:
         return True
     if not hasAnyToken(command, _NETWORK_PACKAGE_MANAGERS):
         return False
-    return any(needle in command for needle in (" install", " get ", " clone ", " push", " pull", "fetch"))
+    # The words joined by single spaces as well, so ``git\tpush`` and
+    # ``git "push"`` say what ``git push`` says.
+    spoken = " " + " ".join(_shell_words(command)) + " "
+    return any(
+        needle in command or needle in spoken for needle in (" install", " get ", " clone ", " push", " pull", "fetch")
+    )
 
 
 def commandPaths(command: str) -> tuple[str, ...]:
