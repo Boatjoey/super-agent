@@ -37,7 +37,7 @@ from super_agent.app.mcp import MCPController, new_mcp_controller
 from super_agent.app.memory import MemoryController, openMemory
 from super_agent.app.subagents import subagentTool
 from super_agent.application.agents import filteredToolRunner, routedModel
-from super_agent.application.workflows import WorkflowController, toolHooks as toolHooks
+from super_agent.application.workflows import WorkflowController, toolHooks
 from super_agent.errors import JoinedError
 from super_agent.runtime.engine import new_engine_with_executor_and_policy
 from super_agent.runtime.execution import DefaultScheduledActionExecutor, new_policy
@@ -56,7 +56,6 @@ __all__ = [
     "new_session",
     "new_session_with_extensions",
     "new_session_with_mcp",
-    "toolHooks",
     "waitPendingClosers",
 ]
 

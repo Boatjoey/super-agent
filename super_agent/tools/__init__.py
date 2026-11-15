@@ -3,8 +3,8 @@
 The tools package surface: everything callers write as ``tools.X`` is re-exported
 here.
 
-Tools are outbound adapters. They may import ``runtime/protocol`` but not the
-root ``runtime`` facade — see ``docs/spec/packages.md``.
+Tools are outbound adapters. Of the runtime they may import only
+``runtime/protocol`` — see ``docs/spec/packages.md``.
 """
 
 from __future__ import annotations

@@ -30,7 +30,7 @@ from typing import Any, Final, cast
 from super_agent import jsonutil, project
 from super_agent.app.extensions import ExtensionSettings, loadExtensions
 from super_agent.app.instructions import Bundle, load as loadInstructions
-from super_agent.application.values import Extensions, MCPServerSettings as MCPServerSettings
+from super_agent.application.values import Extensions, MCPServerSettings
 from super_agent.jsonutil import json_field
 from super_agent.llm import ProviderConfig
 from super_agent.runtime.execution import (
@@ -57,7 +57,6 @@ __all__ = [
     "Flags",
     "LSPServerSettings",
     "Lookup",
-    "MCPServerSettings",
     "PermissionSettings",
     "SandboxSettings",
     "Settings",

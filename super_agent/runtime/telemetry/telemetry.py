@@ -1,9 +1,11 @@
-"""Process-wide telemetry routing and run correlation, without file I/O."""
+"""Run correlation for telemetry records, without file I/O.
+
+Routing a record to the installed recorder is ``runtime/protocol/telemetry.py``.
+"""
 
 from typing import Final
 
 from super_agent.runtime.protocol.run_context import RunContext
-from super_agent.runtime.protocol.telemetry import Fields as Fields, install as install, record as record
 
 
 class IDs:

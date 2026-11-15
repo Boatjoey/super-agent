@@ -4,8 +4,8 @@ These three protocols cannot live in ``engine.py``: it imports the mixins that
 need to check them, so the protocols need a home that imports nothing from the
 engine.
 
-``runtime/engine/__init__.py`` and ``engine.py`` both re-export them, so
-``engine.PolicySetter`` is reachable from either.
+``runtime/engine/__init__.py`` re-exports them, so callers outside the package
+write ``engine.PolicySetter``.
 """
 
 from __future__ import annotations

@@ -30,14 +30,7 @@ from super_agent import jsonutil, llm, tools
 from super_agent.app.agents import initialMessagesWithAgent
 from super_agent.app.config import instructionSourcePaths
 from super_agent.application.agents import filteredToolRunner
-from super_agent.application.delegation import (
-    Delegation,
-    finalAssistantContent as finalAssistantContent,
-    maxSubagentDepth as maxSubagentDepth,
-    subagentDepthKey as subagentDepthKey,
-    subagentInput as subagentInput,
-    truncate as truncate,
-)
+from super_agent.application.delegation import Delegation, truncate
 from super_agent.application.values import AgentProfile
 from super_agent.runtime.engine import new_engine_with_executor_and_policy
 from super_agent.runtime.execution import DefaultScheduledActionExecutor, PermissionRules, new_policy
@@ -50,12 +43,7 @@ from super_agent.tools.sandbox import SandboxConfig
 from super_agent.workspace import Workspace, new as newWorkspace, new_default_context
 
 __all__ = [
-    "finalAssistantContent",
-    "maxSubagentDepth",
-    "subagentDepthKey",
-    "subagentInput",
     "subagentTool",
-    "truncate",
 ]
 
 

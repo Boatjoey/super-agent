@@ -11,26 +11,6 @@ namespace: everything written as ``machine.X`` is re-exported here.
 from __future__ import annotations
 
 from super_agent.runtime.machine.action_plan import ActionPlan as ActionPlan
-from super_agent.runtime.machine.aliases import (
-    COMMAND_CLASS_DESTRUCTIVE as COMMAND_CLASS_DESTRUCTIVE,
-    COMMAND_CLASS_NETWORK as COMMAND_CLASS_NETWORK,
-    COMMAND_CLASS_READ_ONLY as COMMAND_CLASS_READ_ONLY,
-    COMMAND_CLASS_UNKNOWN as COMMAND_CLASS_UNKNOWN,
-    COMMAND_CLASS_WRITE as COMMAND_CLASS_WRITE,
-    ROLE_ASSISTANT as ROLE_ASSISTANT,
-    ROLE_SYSTEM as ROLE_SYSTEM,
-    ROLE_TOOL as ROLE_TOOL,
-    ROLE_USER as ROLE_USER,
-    ZERO_COMMAND_CLASS as ZERO_COMMAND_CLASS,
-    Attachment as Attachment,
-    CommandClass as CommandClass,
-    Message as Message,
-    ModelResponse as ModelResponse,
-    PermissionRequest as PermissionRequest,
-    Role as Role,
-    StreamChunk as StreamChunk,
-    ToolCall as ToolCall,
-)
 from super_agent.runtime.machine.approval import (
     APPROVE_ALWAYS as APPROVE_ALWAYS,
     APPROVE_ONCE as APPROVE_ONCE,

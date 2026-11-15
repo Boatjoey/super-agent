@@ -17,7 +17,7 @@ import os
 from typing import Final
 
 from super_agent import jsonutil
-from super_agent.application.values import Extensions as Extensions
+from super_agent.application.values import Extensions
 from super_agent.jsonutil import json_field
 
 #: The largest extension file that is read, in bytes.
@@ -249,7 +249,6 @@ __all__ = [
     "RESERVED_COMMAND_NAMES",
     "USER_CONFIG_DIRECTORY",
     "ExtensionSettings",
-    "Extensions",
     "PluginManifest",
     "cloneHooks",
     "cloneStringMap",

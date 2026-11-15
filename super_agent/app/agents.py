@@ -18,11 +18,11 @@ from super_agent.app.instructions import Bundle, load as loadInstructions
 from super_agent.app.system_prompt import SYSTEM_PROMPT
 from super_agent.application.agents import (
     AgentController as ApplicationAgentController,
-    filteredToolRunner as filteredToolRunner,
-    routedModel as routedModel,
+    filteredToolRunner,
+    routedModel,
     withAgentProfile,
 )
-from super_agent.application.values import AgentProfile as AgentProfile
+from super_agent.application.values import AgentProfile
 from super_agent.application.workflows import WorkflowController
 from super_agent.runtime.execution import PERMISSION_MODE_PLAN, PermissionMode, valid_permission_mode
 from super_agent.runtime.protocol.types import ROLE_SYSTEM, Message, Model
@@ -30,12 +30,9 @@ from super_agent.runtime.session import Session
 
 __all__ = [
     "AgentController",
-    "AgentProfile",
     "buildAgentProfiles",
-    "filteredToolRunner",
     "initialMessages",
     "initialMessagesWithAgent",
-    "routedModel",
 ]
 
 

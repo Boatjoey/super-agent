@@ -6,7 +6,7 @@ import dataclasses
 from collections.abc import Callable, Sequence
 
 from super_agent.application.ports import InstructionSource, ModelResolver, ProviderPreferences
-from super_agent.application.values import AgentProfile as AgentProfile
+from super_agent.application.values import AgentProfile
 from super_agent.application.workflows import WorkflowController
 from super_agent.runtime.protocol.provider import ProviderConfig
 from super_agent.runtime.protocol.run_context import RunContext

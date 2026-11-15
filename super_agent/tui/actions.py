@@ -1,4 +1,4 @@
-"""Clipboard, code-block extraction, and turn cancellation.
+"""Clipboard writes and turn cancellation.
 
 The clipboard write is the one child process this package starts, so it runs as a
 command: copying a large block must never stall rendering.
@@ -21,7 +21,6 @@ import sys
 from typing import TYPE_CHECKING
 
 from super_agent.tui import runtime
-from super_agent.tui.transcript import extract_code_blocks as extract_code_blocks
 
 if TYPE_CHECKING:
     from super_agent.tui.app import App, Msg
@@ -31,7 +30,6 @@ __all__ = [
     "cancelRun",
     "copyCommand",
     "defaultClipboardWrite",
-    "extract_code_blocks",
     "finishCopy",
     "osc52",
 ]
