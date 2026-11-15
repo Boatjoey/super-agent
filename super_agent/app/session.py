@@ -8,8 +8,8 @@ Three shapes are worth naming:
 
 * the constructor is a coroutine, since connecting MCP and LSP servers is;
 * an asynchronous ``close`` is adapted to the session's synchronous
-  :class:`~super_agent.runtime.session.Closer` port by :class:`asyncCloser`, whose
-  coroutine :func:`waitPendingClosers` awaits after ``session.close()``;
+  :class:`~super_agent.runtime.session.Closer` port by :class:`AsyncCloser`, whose
+  coroutine :func:`wait_pending_closers` awaits after ``session.close()``;
 * the tool hooks are a runner wrapping the registry (:class:`ToolHooks`) rather
   than a registry observer, because the observer port is synchronous and a hook
   runs a command.
@@ -25,17 +25,17 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from super_agent import llm, store, tools
-from super_agent.app.agents import AgentController, buildAgentProfiles, initialMessagesWithAgent
+from super_agent.app.agents import AgentController, build_agent_profiles, initial_messages_with_agent
 from super_agent.app.config import (
     Config,
     first_non_empty,
-    instructionSourcePaths,
+    instruction_source_paths,
+    settings_map,
     settings_path,
-    settingsMap,
 )
 from super_agent.app.mcp import MCPController, new_mcp_controller
-from super_agent.app.memory import MemoryController, openMemory
-from super_agent.app.subagents import subagentTool
+from super_agent.app.memory import MemoryController, open_memory
+from super_agent.app.subagents import SubagentTool
 from super_agent.application.agents import FilteredToolRunner, RoutedModel
 from super_agent.application.workflows import ToolHooks, WorkflowController
 from super_agent.errors import JoinedError
@@ -47,16 +47,16 @@ from super_agent.runtime.session import Metadata, Session, create_persistent_ses
 from super_agent.runtime.session.memory import with_memory_context
 from super_agent.store import telemetry
 from super_agent.tools import lsp as lsptools, mcp as mcptools
-from super_agent.workspace import Context, new as newWorkspace
+from super_agent.workspace import Context, new as new_workspace
 
 __all__ = [
-    "asyncCloser",
-    "closerFunc",
-    "contextForConfig",
+    "AsyncCloser",
+    "CloserFunc",
+    "context_for_config",
     "new_session",
     "new_session_with_extensions",
     "new_session_with_mcp",
-    "waitPendingClosers",
+    "wait_pending_closers",
 ]
 
 
@@ -82,15 +82,15 @@ async def new_session_with_extensions(
     the template placeholder whenever the credential came from the environment,
     and sending ``sk-...`` as a bearer token is the bug this port fixes.
     """
-    workspaceContext = contextForConfig(cfg)
-    cwd = workspaceContext.get_cwd()
-    configRoot = first_non_empty(cfg.config_root, cfg.project.root, cwd)
-    workspaceRuntime = newWorkspace(workspaceContext)
-    cfg.sandbox.workspace = workspaceContext.get_primary_root()
+    workspace_context = context_for_config(cfg)
+    cwd = workspace_context.get_cwd()
+    config_root = first_non_empty(cfg.config_root, cfg.project.root, cwd)
+    workspace_runtime = new_workspace(workspace_context)
+    cfg.sandbox.workspace = workspace_context.get_primary_root()
     telemetry.configure(cfg.telemetry_path)
-    telemetryOwned = True
+    telemetry_owned = True
     extension: mcptools.Manager | None = None
-    lspCloser: lsptools.Manager | None = None
+    lsp_closer: lsptools.Manager | None = None
     try:
         providers = dict(cfg.provider_configs)
         if not providers:
@@ -100,25 +100,25 @@ async def new_session_with_extensions(
             # profile naming the default provider gets the resolved credential and
             # a profile naming another provider still gets its own entry.
             providers[cfg.provider] = cfg.model_config
-        profiles = buildAgentProfiles(cfg, providers)
-        agentName = first_non_empty(cfg.agent, "build")
-        profile = profiles.get(agentName)
+        profiles = build_agent_profiles(cfg, providers)
+        agent_name = first_non_empty(cfg.agent, "build")
+        profile = profiles.get(agent_name)
         if profile is None:
-            raise ValueError("unknown configured agent: " + agentName)
-        providerConfig = providers[profile.provider]
+            raise ValueError("unknown configured agent: " + agent_name)
+        provider_config = providers[profile.provider]
         if profile.model != "":
-            providerConfig = dataclasses.replace(providerConfig, model=profile.model)
-        model = llm.new_model(profile.provider, providerConfig)
+            provider_config = dataclasses.replace(provider_config, model=profile.model)
+        model = llm.new_model(profile.provider, provider_config)
         router = RoutedModel(model)
-        toolRunner: ToolRunner
+        tool_runner: ToolRunner
         registry: tools.Registry | None = None
         hooks: ToolHooks | None = None
         controller: MCPController | None = None
-        toolFilter: FilteredToolRunner | None = None
+        tool_filter: FilteredToolRunner | None = None
         if cfg.no_tools:
-            toolRunner = tools.NoTools()
+            tool_runner = tools.NoTools()
         else:
-            registry = tools.sandboxed_registry(cfg.sandbox, workspaceRuntime)
+            registry = tools.sandboxed_registry(cfg.sandbox, workspace_runtime)
             manager = await mcptools.connect(live_context(), cfg.mcp_servers)
             try:
                 registry.add(*manager.tools())
@@ -126,33 +126,33 @@ async def new_session_with_extensions(
                 with contextlib.suppress(Exception):
                     await manager.close()
                 raise
-            controller = new_mcp_controller(manager, registry, settings_path(), cwd, settingsMap(cfg.mcp_servers))
+            controller = new_mcp_controller(manager, registry, settings_path(), cwd, settings_map(cfg.mcp_servers))
             # The runtime session owns extension process lifetime after creation.
             extension = manager
             if cfg.lsp_servers:
-                lspManager = await lsptools.connect(live_context(), workspaceRuntime, cfg.lsp_servers)
+                lsp_manager = await lsptools.connect(live_context(), workspace_runtime, cfg.lsp_servers)
                 try:
-                    for lspTool in lspManager.tools():
-                        registry.add(lspTool)
+                    for lsp_tool in lsp_manager.tools():
+                        registry.add(lsp_tool)
                 except BaseException:
                     with contextlib.suppress(Exception):
-                        await lspManager.close()
+                        await lsp_manager.close()
                     raise
-                lspCloser = lspManager
+                lsp_closer = lsp_manager
             hooks = ToolHooks(registry)
-            toolFilter = FilteredToolRunner(hooks)
-            toolFilter.set_allowed(profile.tools)
-            toolRunner = toolFilter
-        initial, bundle = initialMessagesWithAgent(configRoot, profile)
+            tool_filter = FilteredToolRunner(hooks)
+            tool_filter.set_allowed(profile.tools)
+            tool_runner = tool_filter
+        initial, bundle = initial_messages_with_agent(config_root, profile)
         st = store.open_default()
         repository = store.new_repository(st)
         # The memory is chosen here, once: the settings name the backend and the
         # switch, and everything below — this session, the delegated children,
         # the front ends — uses that one port.
-        memory = openMemory(cfg.memory, st)
+        memory = open_memory(cfg.memory, st)
         initial = with_memory_context(initial, memory.load())
         engine = new_engine_with_executor_and_policy(
-            DefaultScheduledActionExecutor(router, toolRunner),
+            DefaultScheduledActionExecutor(router, tool_runner),
             new_policy(profile.permission_mode, cfg.permission_rules),
             initial,
         )
@@ -160,22 +160,22 @@ async def new_session_with_extensions(
         session = create_persistent_session(
             engine,
             repository,
-            workspaceRuntime,
+            workspace_runtime,
             Metadata(
                 provider=profile.provider,
                 model=profile.model,
                 cwd=cwd,
                 title=os.path.basename(cwd),
-                instruction_sources=instructionSourcePaths(bundle),
+                instruction_sources=instruction_source_paths(bundle),
                 project_id=cfg.project.id,
-                config_root=configRoot,
+                config_root=config_root,
             ),
             initial,
             memory=memory,
         )
         if registry is not None and hooks is not None:
             registry.set_checkpoint_callback(session.checkpoint)
-            delegate = subagentTool(
+            delegate = SubagentTool(
                 parent=session,
                 repository=repository,
                 profiles=profiles,
@@ -183,7 +183,7 @@ async def new_session_with_extensions(
                 sandbox=cfg.sandbox,
                 rules=cfg.permission_rules,
                 base=cwd,
-                workspace=workspaceRuntime,
+                workspace=workspace_runtime,
                 memory=memory,
             )
             try:
@@ -194,13 +194,13 @@ async def new_session_with_extensions(
                 raise
         session.configure_permissions(profile.permission_mode, cfg.permission_rules)
         if extension is not None:
-            session.add_closer(asyncCloser(extension.close))
+            session.add_closer(AsyncCloser(extension.close))
             extension = None
-        if lspCloser is not None:
-            session.add_closer(asyncCloser(lspCloser.close))
-            lspCloser = None
-        session.add_closer(closerFunc(telemetry.close))
-        telemetryOwned = False
+        if lsp_closer is not None:
+            session.add_closer(AsyncCloser(lsp_closer.close))
+            lsp_closer = None
+        session.add_closer(CloserFunc(telemetry.close))
+        telemetry_owned = False
         workflows = WorkflowController(registry=hooks, extensions=cfg.extensions)
         if hooks is not None:
             hooks.set_workflows(workflows)
@@ -216,7 +216,7 @@ async def new_session_with_extensions(
             profiles=profiles,
             providers=providers,
             workflows=workflows,
-            tools=toolFilter,
+            tools=tool_filter,
             base=cwd,
             current=profile.name,
             settings_path=settings_path(),
@@ -230,22 +230,22 @@ async def new_session_with_extensions(
         if extension is not None:
             with contextlib.suppress(Exception):
                 await extension.close()
-        if lspCloser is not None:
+        if lsp_closer is not None:
             with contextlib.suppress(Exception):
-                await lspCloser.close()
-        if telemetryOwned:
+                await lsp_closer.close()
+        if telemetry_owned:
             telemetry.close()
         raise
 
 
-def contextForConfig(cfg: Config) -> Context:
+def context_for_config(cfg: Config) -> Context:
     """The workspace context, which a bare :class:`Config` may not carry."""
     if cfg.workspace is not None:
         return cfg.workspace
     raise ValueError("workspace context is required")
 
 
-class closerFunc:
+class CloserFunc:
     """A plain callable adapted to the session's :class:`Closer` port.
 
     The telemetry sink closes synchronously and needs no adapter beyond this one.
@@ -260,17 +260,17 @@ class closerFunc:
         self._close()
 
 
-#: The closes :class:`asyncCloser` scheduled that nothing has awaited yet.
-_pendingCloses: list[asyncio.Task[None]] = []
+#: The closes :class:`AsyncCloser` scheduled that nothing has awaited yet.
+_pending_closes: list[asyncio.Task[None]] = []
 
 
-class asyncCloser:
+class AsyncCloser:
     """An asynchronous ``close`` adapted to the session's synchronous port.
 
     Each extension process hands the session a closer that wants to close
     asynchronously — killing a child and waiting for it — while the session's close
     loop calls each closer synchronously. The coroutine is therefore scheduled on
-    the running loop and kept, and :func:`waitPendingClosers` awaits it once
+    the running loop and kept, and :func:`wait_pending_closers` awaits it once
     ``session.close()`` has returned.
     """
 
@@ -286,14 +286,14 @@ class asyncCloser:
             # No loop is running, so nothing can be scheduled: run it here.
             asyncio.run(self._close())
             return
-        _pendingCloses.append(loop.create_task(self._close()))
+        _pending_closes.append(loop.create_task(self._close()))
 
 
-async def waitPendingClosers() -> None:
-    """Await the closes :class:`asyncCloser` scheduled, joining the failures."""
+async def wait_pending_closers() -> None:
+    """Await the closes :class:`AsyncCloser` scheduled, joining the failures."""
     failures: list[BaseException] = []
-    while _pendingCloses:
-        task = _pendingCloses.pop()
+    while _pending_closes:
+        task = _pending_closes.pop()
         try:
             await task
         except Exception as error:

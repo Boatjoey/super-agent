@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from super_agent.app.config import MemorySettings, load_settings_file, save_settings_file
-from super_agent.app.memory import MemoryController, openMemory, setMemoryEnabled
+from super_agent.app.memory import MemoryController, open_memory, set_memory_enabled
 from super_agent.runtime.engine import new_engine_with_executor
 from super_agent.runtime.protocol.types import ROLE_SYSTEM, ROLE_USER, Message
 from super_agent.runtime.session import (
@@ -40,7 +40,7 @@ def make_session(memory: Memory) -> Session:
 
 def test_the_default_backend_keeps_the_memory_beside_the_sessions(tmp_path: Path) -> None:
     """The default is the store the sessions already live in."""
-    memory = openMemory(MemorySettings(), store.new(str(tmp_path / "store")))
+    memory = open_memory(MemorySettings(), store.new(str(tmp_path / "store")))
 
     assert memory.name == "store"
     assert memory.enabled is True
@@ -50,7 +50,7 @@ def test_the_default_backend_keeps_the_memory_beside_the_sessions(tmp_path: Path
 
 def test_the_settings_can_switch_the_memory_off(tmp_path: Path) -> None:
     """The switch is read at startup, so a memory turned off stays off."""
-    memory = openMemory(MemorySettings(enabled=False), store.new(str(tmp_path / "store")))
+    memory = open_memory(MemorySettings(enabled=False), store.new(str(tmp_path / "store")))
 
     assert memory.enabled is False
     assert memory.load() == []
@@ -61,7 +61,7 @@ def test_the_settings_can_switch_the_memory_off(tmp_path: Path) -> None:
 def test_the_file_backend_keeps_the_memory_where_the_user_says(tmp_path: Path) -> None:
     """A second backend is the point of the port: the same memory, elsewhere."""
     path = tmp_path / "shared" / "memory.json"
-    memory = openMemory(MemorySettings(backend="file", path=str(path)), None)
+    memory = open_memory(MemorySettings(backend="file", path=str(path)), None)
 
     memory.save(["a line"])
 
@@ -73,13 +73,13 @@ def test_the_file_backend_keeps_the_memory_where_the_user_says(tmp_path: Path) -
 def test_the_file_backend_needs_a_path() -> None:
     """A backend that cannot say where it writes is a startup failure."""
     with pytest.raises(ValueError, match="needs a path"):
-        openMemory(MemorySettings(backend="file"), None)
+        open_memory(MemorySettings(backend="file"), None)
 
 
 def test_an_unknown_backend_is_a_startup_failure(tmp_path: Path) -> None:
     """Silently keeping the memory somewhere else is worse than not keeping it."""
     with pytest.raises(ValueError, match="unknown memory backend"):
-        openMemory(MemorySettings(backend="elsewhere"), store.new(str(tmp_path / "store")))
+        open_memory(MemorySettings(backend="elsewhere"), store.new(str(tmp_path / "store")))
 
 
 def test_the_switch_is_written_into_the_settings_file(tmp_path: Path) -> None:
@@ -87,7 +87,7 @@ def test_the_switch_is_written_into_the_settings_file(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     save_settings_file(str(path), load_settings_file(str(path)))
 
-    setMemoryEnabled(False, str(path))
+    set_memory_enabled(False, str(path))
 
     settings = load_settings_file(str(path))
     assert settings.memory.enabled is False
@@ -100,7 +100,7 @@ async def test_the_controller_switches_the_memory_and_rebuilds_the_context(tmp_p
     """Turning the memory off takes effect at once, not at the next restart."""
     settings = tmp_path / "settings.json"
     save_settings_file(str(settings), load_settings_file(str(settings)))
-    memory = openMemory(MemorySettings(), store.new(str(tmp_path / "store")))
+    memory = open_memory(MemorySettings(), store.new(str(tmp_path / "store")))
     memory.save(["a line"])
     session = make_session(memory)
     controller = MemoryController(memory, session, str(settings))
@@ -117,7 +117,7 @@ async def test_the_controller_keeps_the_lines_when_the_memory_comes_back(tmp_pat
     """Switching off stops the memory being used, not the memory being kept."""
     settings = tmp_path / "settings.json"
     save_settings_file(str(settings), load_settings_file(str(settings)))
-    memory = openMemory(MemorySettings(), store.new(str(tmp_path / "store")))
+    memory = open_memory(MemorySettings(), store.new(str(tmp_path / "store")))
     memory.save(["a line"])
     session = make_session(memory)
     controller = MemoryController(memory, session, str(settings))
@@ -132,8 +132,8 @@ async def test_the_controller_keeps_the_lines_when_the_memory_comes_back(tmp_pat
 
 def test_the_switch_is_the_same_whatever_is_behind_it(tmp_path: Path) -> None:
     """The switch is an object, not a setting the backends each understand."""
-    store_memory = openMemory(MemorySettings(), store.new(str(tmp_path / "store")))
-    file_memory = openMemory(MemorySettings(backend="file", path=str(tmp_path / "m.json")), None)
+    store_memory = open_memory(MemorySettings(), store.new(str(tmp_path / "store")))
+    file_memory = open_memory(MemorySettings(backend="file", path=str(tmp_path / "m.json")), None)
 
     assert isinstance(store_memory, Switch)
     assert isinstance(file_memory, Switch)

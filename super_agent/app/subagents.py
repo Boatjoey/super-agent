@@ -27,8 +27,8 @@ import time
 from collections.abc import Iterator
 
 from super_agent import jsonutil, llm, tools
-from super_agent.app.agents import initialMessagesWithAgent
-from super_agent.app.config import instructionSourcePaths
+from super_agent.app.agents import initial_messages_with_agent
+from super_agent.app.config import instruction_source_paths
 from super_agent.application.agents import FilteredToolRunner
 from super_agent.application.delegation import Delegation, truncate
 from super_agent.application.values import AgentProfile
@@ -40,15 +40,15 @@ from super_agent.runtime.session import Metadata, Session, create_persistent_ses
 from super_agent.runtime.session.memory import Memory, with_memory_context
 from super_agent.runtime.session.repository import Repository
 from super_agent.tools.sandbox import SandboxConfig
-from super_agent.workspace import Workspace, new as newWorkspace, new_default_context
+from super_agent.workspace import Workspace, new as new_workspace, new_default_context
 
 __all__ = [
-    "subagentTool",
+    "SubagentTool",
 ]
 
 
 @dataclasses.dataclass(slots=True)
-class subagentTool:
+class SubagentTool:
     """One level of delegation, bound to the parent session."""
 
     parent: Session
@@ -93,20 +93,20 @@ class subagentTool:
         return llm.new_model(profile.provider, config)
 
     async def worktree(self, ctx: RunContext) -> str:
-        return await self.createWorktree(ctx)
+        return await self.create_worktree(ctx)
 
     async def child(self, profile: AgentProfile, prompt: str, cwd: str, model: Model) -> Session:
         """Build the child session, run one turn, and return its final result."""
-        initial, bundle = initialMessagesWithAgent(cwd, profile)
+        initial, bundle = initial_messages_with_agent(cwd, profile)
         memory = self.memory
         if memory is not None:
             initial = with_memory_context(initial, memory.load())
         sandbox = dataclasses.replace(self.sandbox, workspace=cwd)
-        childWorkspace = new_default_context(cwd)
-        childWorkspaceRuntime = newWorkspace(childWorkspace)
-        registry = tools.sandboxed_registry(sandbox, childWorkspaceRuntime)
-        childDelegate = dataclasses.replace(self, base=cwd, workspace=childWorkspaceRuntime)
-        registry.add(childDelegate)
+        child_workspace = new_default_context(cwd)
+        child_workspace_runtime = new_workspace(child_workspace)
+        registry = tools.sandboxed_registry(sandbox, child_workspace_runtime)
+        child_delegate = dataclasses.replace(self, base=cwd, workspace=child_workspace_runtime)
+        registry.add(child_delegate)
         filtered = FilteredToolRunner(registry)
         filtered.set_allowed(profile.tools)
         engine = new_engine_with_executor_and_policy(
@@ -115,19 +115,19 @@ class subagentTool:
             initial,
         )
         await engine.ready()
-        parentMeta = self.parent.metadata()
+        parent_meta = self.parent.metadata()
         child = create_persistent_session(
             engine,
             self.repository,
-            childWorkspaceRuntime,
+            child_workspace_runtime,
             Metadata(
-                parent_id=parentMeta.id,
+                parent_id=parent_meta.id,
                 provider=profile.provider,
                 model=profile.model,
                 cwd=cwd,
                 title="subagent: " + truncate(prompt, 48),
-                instruction_sources=instructionSourcePaths(bundle),
-                project_id=parentMeta.project_id,
+                instruction_sources=instruction_source_paths(bundle),
+                project_id=parent_meta.project_id,
                 config_root=cwd,
             ),
             initial,
@@ -135,7 +135,7 @@ class subagentTool:
         )
         return child
 
-    async def createWorktree(self, ctx: RunContext) -> str:
+    async def create_worktree(self, ctx: RunContext) -> str:
         """Create a detached worktree through the sandboxed ``run_command`` tool."""
         if self.workspace is None:
             raise ValueError("workspace context is required")

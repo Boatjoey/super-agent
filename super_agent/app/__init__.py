@@ -39,7 +39,7 @@ from super_agent.app.mcp import (
 )
 from super_agent.app.memory import (
     MemoryController as MemoryController,
-    openMemory as openMemory,
+    open_memory as open_memory,
 )
 
 # --- the session constructors ------------------------------------------------
@@ -50,7 +50,7 @@ from super_agent.app.session import (
     new_session as new_session,
     new_session_with_extensions as new_session_with_extensions,
     new_session_with_mcp as new_session_with_mcp,
-    waitPendingClosers as waitPendingClosers,
+    wait_pending_closers as wait_pending_closers,
 )
 from super_agent.app.system_prompt import SYSTEM_PROMPT as SYSTEM_PROMPT
 
@@ -82,5 +82,5 @@ __all__ = [
     "new_session_with_mcp",
     "save_settings_file",
     "settings_path",
-    "waitPendingClosers",
+    "wait_pending_closers",
 ]

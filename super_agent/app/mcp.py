@@ -20,24 +20,24 @@ from super_agent.tools import mcp as mcptools
 
 __all__ = [
     "MCPController",
-    "cloneMCPSettings",
+    "clone_mcp_settings",
     "new_mcp_controller",
     "tool_names",
 ]
 
 
 class MCPBackendAdapter:
-    def __init__(self, manager: mcptools.Manager, registry: tools.Registry, settingsPath: str, workspace: str) -> None:
+    def __init__(self, manager: mcptools.Manager, registry: tools.Registry, settings_path: str, workspace: str) -> None:
         self.manager = manager
         self.registry = registry
-        self.settingsPath = settingsPath
+        self.settings_path = settings_path
         self.workspace = workspace
 
     def servers(self) -> list[MCPServerSummary]:
         return [MCPServerSummary(name=server.name, tools=tuple(server.tools)) for server in self.manager.servers()]
 
     async def connect(self, ctx: RunContext, name: str, settings: MCPServerSettings) -> Sequence[ToolRunner]:
-        return await self.manager.add(ctx, self.serverConfig(name, settings))
+        return await self.manager.add(ctx, self.server_config(name, settings))
 
     async def disconnect(self, name: str) -> Sequence[str]:
         return await self.manager.remove(name)
@@ -56,15 +56,15 @@ class MCPBackendAdapter:
 
     def persist(self, name: str, server: MCPServerSettings | None) -> None:
         """Write one server's settings, or forget it, without touching the rest."""
-        settings = load_settings_file(self.settingsPath)
+        settings = load_settings_file(self.settings_path)
         servers = dict(settings.mcp_servers)
         if server is None:
             servers.pop(name, None)
         else:
             servers[name] = server
-        save_settings_file(self.settingsPath, dataclasses.replace(settings, mcp_servers=servers))
+        save_settings_file(self.settings_path, dataclasses.replace(settings, mcp_servers=servers))
 
-    def serverConfig(self, name: str, settings: MCPServerSettings) -> mcptools.ServerConfig:
+    def server_config(self, name: str, settings: MCPServerSettings) -> mcptools.ServerConfig:
         """The connect-time configuration for one server, with its cwd resolved."""
         cwd = settings.cwd
         if cwd == "":
@@ -89,25 +89,25 @@ class MCPController(ApplicationMCPController):
         self,
         manager: mcptools.Manager,
         registry: tools.Registry,
-        settingsPath: str,
+        settings_path: str,
         workspace: str,
         configs: Mapping[str, MCPServerSettings] | None,
     ) -> None:
-        super().__init__(MCPBackendAdapter(manager, registry, settingsPath, workspace), configs)
+        super().__init__(MCPBackendAdapter(manager, registry, settings_path, workspace), configs)
 
 
 def new_mcp_controller(
     manager: mcptools.Manager,
     registry: tools.Registry,
-    settingsPath: str,
+    settings_path: str,
     workspace: str,
     configs: Mapping[str, MCPServerSettings] | None,
 ) -> MCPController:
     """The controller over ``manager``."""
-    return MCPController(manager, registry, settingsPath, workspace, configs)
+    return MCPController(manager, registry, settings_path, workspace, configs)
 
 
-def cloneMCPSettings(configs: Mapping[str, MCPServerSettings] | None) -> dict[str, MCPServerSettings]:
+def clone_mcp_settings(configs: Mapping[str, MCPServerSettings] | None) -> dict[str, MCPServerSettings]:
     """A mutable copy, so the controller never writes through a caller's map."""
     return {} if configs is None else dict(configs)
 

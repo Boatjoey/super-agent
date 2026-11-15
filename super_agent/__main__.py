@@ -107,7 +107,7 @@ async def run(cfg: app.Config, flags: app.Flags, *, port: int = DEFAULT_PORT) ->
         with contextlib.suppress(Exception):
             await session.close()
         with contextlib.suppress(Exception):
-            await app.waitPendingClosers()
+            await app.wait_pending_closers()
     return 0
 
 

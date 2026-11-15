@@ -28,8 +28,8 @@ from collections.abc import Callable, Mapping
 from typing import Any, Final, cast
 
 from super_agent import jsonutil, project
-from super_agent.app.extensions import ExtensionSettings, loadExtensions
-from super_agent.app.instructions import Bundle, load as loadInstructions
+from super_agent.app.extensions import ExtensionSettings, load_extensions
+from super_agent.app.instructions import Bundle, load as load_instructions
 from super_agent.application.values import Extensions, MCPServerSettings
 from super_agent.jsonutil import json_field
 from super_agent.llm import ProviderConfig
@@ -62,16 +62,16 @@ __all__ = [
     "Settings",
     "TelemetrySettings",
     "TerminalSettings",
-    "apikeyPlaceholder",
-    "decodeExtensions",
+    "apikey_placeholder",
+    "decode_extensions",
     "default_settings",
-    "envTrue",
+    "env_true",
     "first_non_empty",
     "load_config",
     "load_settings",
     "load_settings_file",
-    "normalizeSettings",
-    "resolveProviderConfig",
+    "normalize_settings",
+    "resolve_provider_config",
     "resolve_status_line",
     "save_settings_file",
     "settings_path",
@@ -321,17 +321,17 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
         lookup = os.environ.get
     settings = load_settings()
     provider = settings.provider
-    processCWD = os.getcwd()
-    selectedProject = project.resolve(flags.cwd, processCWD)
-    workspaceContext = new_default_context(selectedProject.root)
-    cwd = workspaceContext.get_cwd()
-    telemetryPath = settings.telemetry.log_path
-    if telemetryPath == "":
-        telemetryPath = os.path.join(os.path.expanduser("~"), USER_CONFIG_DIRECTORY, "telemetry.jsonl")
-    elif not os.path.isabs(telemetryPath):
-        telemetryPath = os.path.join(cwd, telemetryPath)
-    bundle = loadInstructions(cwd)
-    extensions = loadExtensions(settings.extensions, cwd)
+    process_cwd = os.getcwd()
+    selected_project = project.resolve(flags.cwd, process_cwd)
+    workspace_context = new_default_context(selected_project.root)
+    cwd = workspace_context.get_cwd()
+    telemetry_path = settings.telemetry.log_path
+    if telemetry_path == "":
+        telemetry_path = os.path.join(os.path.expanduser("~"), USER_CONFIG_DIRECTORY, "telemetry.jsonl")
+    elif not os.path.isabs(telemetry_path):
+        telemetry_path = os.path.join(cwd, telemetry_path)
+    bundle = load_instructions(cwd)
+    extensions = load_extensions(settings.extensions, cwd)
     mode = PermissionMode(first_non_empty(flags.permission_mode, settings.permissions.mode, "ask"))
     # The YOLO environment variable is a fallback for when no explicit mode was
     # requested; an explicit --approval-mode flag always wins so a checked-in
@@ -340,11 +340,11 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
         raise ValueError(
             "--yolo and --approval-mode are mutually exclusive; use --approval-mode bypass instead of --yolo"
         )
-    if flags.auto_approve_tools or (flags.permission_mode == "" and envTrue(lookup, "YOLO")):
+    if flags.auto_approve_tools or (flags.permission_mode == "" and env_true(lookup, "YOLO")):
         mode = PERMISSION_MODE_BYPASS
     if not valid_permission_mode(mode):
         raise ValueError("invalid permission mode: " + str(mode))
-    sandboxMode, sandboxDowngraded = resolve_sandbox_mode(settings.sandbox.mode)
+    sandbox_mode, sandbox_downgraded = resolve_sandbox_mode(settings.sandbox.mode)
     status_line = resolve_status_line(settings.tui.status_line)
     rules = PermissionRules(
         allow_tools=settings.permissions.allow_tools,
@@ -359,26 +359,26 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
     )
     # Settings come from JSON, where object key order is not meaningful, so the
     # server names are sorted to make the resolved order deterministic.
-    mcpServers: list[MCPServerConfig] = []
+    mcp_servers: list[MCPServerConfig] = []
     for name in sorted(settings.mcp_servers):
         server = settings.mcp_servers[name]
-        serverCWD = server.cwd
-        if serverCWD == "":
-            serverCWD = cwd
-        elif not os.path.isabs(serverCWD):
-            serverCWD = os.path.join(cwd, serverCWD)
-        mcpServers.append(
+        server_cwd = server.cwd
+        if server_cwd == "":
+            server_cwd = cwd
+        elif not os.path.isabs(server_cwd):
+            server_cwd = os.path.join(cwd, server_cwd)
+        mcp_servers.append(
             MCPServerConfig(
                 name=name,
                 command=server.command,
                 args=list(server.args),
                 env=dict(server.env),
-                cwd=serverCWD,
+                cwd=server_cwd,
                 connect_timeout=float(server.connect_timeout_seconds),
                 call_timeout=float(server.call_timeout_seconds),
             )
         )
-    lspServers: list[LSPServerConfig] = [
+    lsp_servers: list[LSPServerConfig] = [
         LSPServerConfig(
             name=name,
             command=server.command,
@@ -389,47 +389,47 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
         )
         for name, server in sorted(settings.lsp_servers.items())
     ]
-    providerConfig = resolveProviderConfig(settings, provider, lookup)
-    credentialMissing = providerConfig.api_key == ""
+    provider_config = resolve_provider_config(settings, provider, lookup)
+    credential_missing = provider_config.api_key == ""
     return Config(
         provider=provider,
-        no_tools=flags.no_tools or envTrue(lookup, "NO_TOOLS"),
+        no_tools=flags.no_tools or env_true(lookup, "NO_TOOLS"),
         permission_mode=mode,
         permission_rules=rules,
         sandbox=SandboxConfig(
-            mode=sandboxMode,
+            mode=sandbox_mode,
             workspace=cwd,
             allow_network=rules.network == "allow",
             cpu_seconds=settings.sandbox.cpu_seconds,
             memory_bytes=settings.sandbox.memory_mb << 20,
             max_processes=settings.sandbox.max_processes,
             max_open_files=settings.sandbox.max_open_files,
-            downgraded=sandboxDowngraded,
+            downgraded=sandbox_downgraded,
         ),
-        mcp_servers=mcpServers,
-        lsp_servers=lspServers,
-        model_config=providerConfig,
+        mcp_servers=mcp_servers,
+        lsp_servers=lsp_servers,
+        model_config=provider_config,
         provider_configs=settings.providers,
         instructions=bundle,
-        instruction_sources=instructionSourcePaths(bundle),
+        instruction_sources=instruction_source_paths(bundle),
         agents=settings.agents,
         agent=first_non_empty(settings.agent, "build"),
         extensions=extensions,
-        telemetry_path=telemetryPath,
+        telemetry_path=telemetry_path,
         memory=dataclasses.replace(
             settings.memory,
             backend=settings.memory.backend or "store",
         ),
         status_line=status_line,
-        project=selectedProject,
-        workspace=workspaceContext,
-        config_root=selectedProject.root,
-        credential_missing=credentialMissing,
-        sandbox_downgraded=sandboxDowngraded,
+        project=selected_project,
+        workspace=workspace_context,
+        config_root=selected_project.root,
+        credential_missing=credential_missing,
+        sandbox_downgraded=sandbox_downgraded,
     )
 
 
-def apikeyPlaceholder(provider: str) -> str:
+def apikey_placeholder(provider: str) -> str:
     """The value :func:`default_settings` writes for ``provider``.
 
     It is not a real credential, so it is treated as "unset" to let the provider's
@@ -440,7 +440,7 @@ def apikeyPlaceholder(provider: str) -> str:
     return DEFAULT_PLACEHOLDER
 
 
-def decodeExtensions(content: str) -> ExtensionSettings:
+def decode_extensions(content: str) -> ExtensionSettings:
     """The ``extensions`` block of a settings file, decoded by the shared codec.
 
     The keys are the ones the file uses (``commands``, ``hooks``, ``skills``,
@@ -456,7 +456,7 @@ def decodeExtensions(content: str) -> ExtensionSettings:
     return jsonutil.from_json_value(cast("Mapping[str, Any]", block), ExtensionSettings)
 
 
-def resolveProviderConfig(settings: Settings, provider: str, lookup: Lookup) -> ProviderConfig:
+def resolve_provider_config(settings: Settings, provider: str, lookup: Lookup) -> ProviderConfig:
     """Resolve the credential for ``provider``.
 
     A provider that is not named at all is still a startup failure: that is a
@@ -468,11 +468,11 @@ def resolveProviderConfig(settings: Settings, provider: str, lookup: Lookup) -> 
     config = settings.providers.get(provider)
     if config is None:
         raise ValueError("provider " + provider + " is not configured: add it to the providers map in settings.json")
-    if config.api_key == apikeyPlaceholder(provider):
+    if config.api_key == apikey_placeholder(provider):
         config = dataclasses.replace(config, api_key="")
     if config.api_key == "":
-        envKey = provider.upper() + "_API_KEY"
-        value = lookup(envKey)
+        env_key = provider.upper() + "_API_KEY"
+        value = lookup(env_key)
         if value:
             return dataclasses.replace(config, api_key=value)
     return config
@@ -520,7 +520,7 @@ def resolve_status_line(items: tuple[str, ...] | None) -> tuple[str, ...]:
     return tuple(items)
 
 
-def envTrue(lookup: Lookup, key: str) -> bool:
+def env_true(lookup: Lookup, key: str) -> bool:
     """Whether ``key`` is set to the exact string ``true``.
 
     ``True``, ``1``, and ``yes`` do not count, which is what keeps a switch that
@@ -537,7 +537,7 @@ def first_non_empty(*values: str) -> str:
     return ""
 
 
-def instructionSourcePaths(bundle: Bundle) -> tuple[str, ...]:
+def instruction_source_paths(bundle: Bundle) -> tuple[str, ...]:
     """The paths a bundle was assembled from, in the order it read them."""
     return tuple(source.path for source in bundle.sources)
 
@@ -569,7 +569,7 @@ def load_settings_file(path: str) -> Settings:
         save_settings_file(path, settings)
         return settings
     settings = jsonutil.loads(content, Settings)
-    return normalizeSettings(dataclasses.replace(settings, extensions=decodeExtensions(content)))
+    return normalize_settings(dataclasses.replace(settings, extensions=decode_extensions(content)))
 
 
 def save_settings_file(path: str, settings: Settings) -> None:
@@ -598,7 +598,7 @@ def save_settings_file(path: str, settings: Settings) -> None:
         raise
 
 
-def normalizeSettings(settings: Settings) -> Settings:
+def normalize_settings(settings: Settings) -> Settings:
     """Fill in what a stored file may leave out, and never what it states."""
     defaults = default_settings().sandbox
     permissions = settings.permissions or PermissionSettings()
@@ -633,7 +633,7 @@ def normalizeSettings(settings: Settings) -> Settings:
     )
 
 
-def settingsMap(configs: list[MCPServerConfig]) -> dict[str, MCPServerSettings]:
+def settings_map(configs: list[MCPServerConfig]) -> dict[str, MCPServerSettings]:
     """The settings-shaped view of the configured MCP servers."""
     result: dict[str, MCPServerSettings] = {}
     for config in configs:

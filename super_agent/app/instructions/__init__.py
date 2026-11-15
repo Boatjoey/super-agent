@@ -59,7 +59,7 @@ def load(cwd: str) -> Bundle:
     sources: list[Source] = []
     _append_source(parts, sources, user_path, "user-spec")
 
-    for directory in ancestorDirs(cwd):
+    for directory in ancestor_dirs(cwd):
         agent_path = os.path.join(directory, "AGENTS.md")
         if _append_source(parts, sources, agent_path, "project"):
             continue
@@ -73,7 +73,7 @@ def load_project_instructions(directory: str) -> str:
     return load(directory).content
 
 
-def ancestorDirs(cwd: str) -> list[str]:
+def ancestor_dirs(cwd: str) -> list[str]:
     """Directories from the project root down to ``cwd``, outermost first."""
     absolute = os.path.abspath(cwd)
     if not os.path.isdir(absolute):
@@ -159,7 +159,7 @@ __all__ = [
     "USER_CONFIG_DIRECTORY",
     "Bundle",
     "Source",
-    "ancestorDirs",
+    "ancestor_dirs",
     "load",
     "load_project_instructions",
 ]

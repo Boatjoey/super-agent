@@ -119,7 +119,7 @@ Session 对同一份已提交快照分别推进消息持久化和通知输出，
 | `OffMemory` | `runtime/session/memory.py` | 没有后端时的实现：读为空，写入报错 |
 | `StoreMemory` | `store/memory.py` | 后端：会话存储自己的 `_memory.json` |
 | `FileMemory` | `store/memory.py` | 后端：用户指定路径的 JSON 数组 |
-| `openMemory` | `app/memory.py` | 按设置挑选后端，未知后端是启动失败 |
+| `open_memory` | `app/memory.py` | 按设置挑选后端，未知后端是启动失败 |
 | `MemoryController` | `application/memory.py`（构造兼容入口见模块职责） | 开关的运行时一面：改状态、写入设置、重建上下文 |
 
 设置在 `~/.superagent/settings.json` 的 `memory` 块：

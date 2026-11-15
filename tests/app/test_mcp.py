@@ -48,19 +48,19 @@ async def test_mcp_controller_persists_add_and_remove(tmp_path: Path) -> None:
     manager = await connect(live_context(), [])
     try:
         registry = new_registry()
-        settingsPath = tmp_path / "settings.json"
-        save_settings_file(str(settingsPath), default_settings())
-        controller = new_mcp_controller(manager, registry, str(settingsPath), str(REPO_ROOT), None)
+        settings_path = tmp_path / "settings.json"
+        save_settings_file(str(settings_path), default_settings())
+        controller = new_mcp_controller(manager, registry, str(settings_path), str(REPO_ROOT), None)
 
         await controller.add(live_context(), "fake", sys.executable, ["-m", "tests.helpers.mcp_echo_server"])
         assert len(controller.list()) == 1
         assert len(registry.specs()) == 1
 
-        settings = load_settings_file(str(settingsPath))
+        settings = load_settings_file(str(settings_path))
         assert settings.mcp_servers["fake"].command == sys.executable
 
         await controller.remove("fake")
-        settings = load_settings_file(str(settingsPath))
+        settings = load_settings_file(str(settings_path))
         assert len(settings.mcp_servers) == 0
         assert len(registry.specs()) == 0
     finally:

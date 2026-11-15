@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 
 from super_agent import llm
-from super_agent.app.subagents import subagentTool
+from super_agent.app.subagents import SubagentTool
 from super_agent.application.values import AgentProfile
 from super_agent.runtime.engine import new_engine_with_executor
 from super_agent.runtime.execution import PermissionRules
@@ -28,7 +28,7 @@ from super_agent.runtime.protocol.run_context import live_context
 from super_agent.runtime.protocol.types import ToolCall
 from super_agent.runtime.session import Session, new_session
 from super_agent.tools.sandbox import SANDBOX_MODE_OFF, default_sandbox_config
-from super_agent.workspace import new as newWorkspace, new_default_context
+from super_agent.workspace import new as new_workspace, new_default_context
 from tests.fakes.execution import StaticReplyExecutor
 
 
@@ -58,7 +58,7 @@ def repository_dir(tmp_path: Any) -> str:
     return str(repo)
 
 
-class ScriptedDelegation(subagentTool):
+class ScriptedDelegation(SubagentTool):
     """A delegation whose child does one scripted thing, without a model."""
 
     outcome: str = "succeeded"
@@ -66,11 +66,11 @@ class ScriptedDelegation(subagentTool):
     def __init__(self, *, outcome: str, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.outcome = outcome
-        self.childCwd = ""
+        self.child_cwd = ""
 
     async def child(self, profile: AgentProfile, prompt: str, cwd: str, model: Any) -> Session:
         del profile, prompt, model
-        self.childCwd = cwd
+        self.child_cwd = cwd
         if self.outcome == "failed":
             raise RuntimeError("the child could not finish")
         if self.outcome == "cancelled":
@@ -92,7 +92,7 @@ def delegation(repo: str, outcome: str) -> ScriptedDelegation:
         sandbox=sandbox,
         rules=PermissionRules(),
         base=repo,
-        workspace=newWorkspace(new_default_context(repo)),
+        workspace=new_workspace(new_default_context(repo)),
     )
 
 
@@ -108,7 +108,7 @@ async def test_a_finished_delegation_keeps_its_worktree(repository_dir: str) -> 
 
     result = await tool.run(live_context(), ToolCall(name="delegate", input='{"prompt": "inspect", "worktree": true}'))
 
-    worktree = worktree_of(tool.childCwd, repository_dir)
+    worktree = worktree_of(tool.child_cwd, repository_dir)
     assert os.path.isdir(worktree), "the worktree a person is meant to inspect must still exist"
     assert worktree in result
 
@@ -121,7 +121,7 @@ async def test_a_failed_delegation_keeps_its_worktree(repository_dir: str) -> No
     with pytest.raises(RuntimeError, match="could not finish"):
         await tool.run(live_context(), ToolCall(name="delegate", input='{"prompt": "inspect", "worktree": true}'))
 
-    assert os.path.isdir(worktree_of(tool.childCwd, repository_dir))
+    assert os.path.isdir(worktree_of(tool.child_cwd, repository_dir))
 
 
 @pytest.mark.asyncio
@@ -131,7 +131,7 @@ async def test_a_cancelled_delegation_keeps_its_worktree(repository_dir: str) ->
     with pytest.raises(asyncio.CancelledError):
         await tool.run(live_context(), ToolCall(name="delegate", input='{"prompt": "inspect", "worktree": true}'))
 
-    assert os.path.isdir(worktree_of(tool.childCwd, repository_dir))
+    assert os.path.isdir(worktree_of(tool.child_cwd, repository_dir))
 
 
 @pytest.mark.asyncio
@@ -140,5 +140,5 @@ async def test_a_delegation_without_a_worktree_runs_in_the_parent_workspace(repo
 
     await tool.run(live_context(), ToolCall(name="delegate", input='{"prompt": "inspect"}'))
 
-    assert tool.childCwd == repository_dir
+    assert tool.child_cwd == repository_dir
     assert not os.path.isdir(os.path.join(repository_dir, ".super-agent", "worktrees"))

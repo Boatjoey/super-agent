@@ -12,7 +12,7 @@ from collections.abc import Mapping
 
 import pytest
 
-from super_agent.app.config import Lookup, Settings, resolveProviderConfig
+from super_agent.app.config import Lookup, Settings, resolve_provider_config
 
 
 def lookup(values: Mapping[str, str] | None = None) -> Lookup:
@@ -36,7 +36,7 @@ def test_missing_credential_is_no_longer_a_startup_failure() -> None:
     """A named provider with no key resolves to an empty credential, not an error."""
     settings = settings_with("deepseek", "sk-...")
 
-    resolved = resolveProviderConfig(settings, "deepseek", lookup())
+    resolved = resolve_provider_config(settings, "deepseek", lookup())
 
     assert resolved.api_key == ""
 
@@ -45,7 +45,7 @@ def test_missing_credential_still_accepts_the_environment() -> None:
     """The environment variable still supplies the key when settings has none."""
     settings = settings_with("deepseek", "sk-...")
 
-    resolved = resolveProviderConfig(settings, "deepseek", lookup({"DEEPSEEK_API_KEY": "from-env"}))
+    resolved = resolve_provider_config(settings, "deepseek", lookup({"DEEPSEEK_API_KEY": "from-env"}))
 
     assert resolved.api_key == "from-env"
 
@@ -55,14 +55,14 @@ def test_unknown_provider_is_still_a_failure() -> None:
     settings = settings_with("deepseek", "sk-...")
 
     with pytest.raises(ValueError):
-        resolveProviderConfig(settings, "openai", lookup())
+        resolve_provider_config(settings, "openai", lookup())
 
 
 def test_placeholder_is_treated_as_unset() -> None:
     """The template placeholder ``sk-...`` never counts as a credential."""
     settings = settings_with("deepseek", "sk-...")
 
-    resolved = resolveProviderConfig(settings, "deepseek", lookup())
+    resolved = resolve_provider_config(settings, "deepseek", lookup())
 
     assert resolved.api_key == ""
 
@@ -71,6 +71,6 @@ def test_a_real_key_passes_through_unchanged() -> None:
     """A real key survives resolution untouched."""
     settings = settings_with("openai", "real-key")
 
-    resolved = resolveProviderConfig(settings, "openai", lookup())
+    resolved = resolve_provider_config(settings, "openai", lookup())
 
     assert resolved.api_key == "real-key"

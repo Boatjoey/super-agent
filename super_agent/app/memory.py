@@ -30,8 +30,8 @@ __all__ = [
     "BACKEND_FILE",
     "BACKEND_STORE",
     "MemoryController",
-    "openMemory",
-    "setMemoryEnabled",
+    "open_memory",
+    "set_memory_enabled",
 ]
 
 #: The memory kept beside the sessions, in the session store's own file.
@@ -42,7 +42,7 @@ BACKEND_FILE = "file"
 BACKENDS = (BACKEND_STORE, BACKEND_FILE)
 
 
-def openMemory(settings: MemorySettings, store: Store | None) -> Switch:
+def open_memory(settings: MemorySettings, store: Store | None) -> Switch:
     """The backend the settings name, behind the switch they set.
 
     An unknown backend is a startup failure rather than a silent fallback: a
@@ -63,7 +63,7 @@ def openMemory(settings: MemorySettings, store: Store | None) -> Switch:
     return Switch(inner, enabled=settings.enabled)
 
 
-def setMemoryEnabled(enabled: bool, path: str) -> None:
+def set_memory_enabled(enabled: bool, path: str) -> None:
     """Write the switch into ``settings.json``, leaving the rest of the file alone."""
     settings = load_settings_file(path)
     memory = dataclasses.replace(settings.memory, enabled=enabled)
@@ -75,7 +75,7 @@ class MemoryPreferencesAdapter:
         self.path = path
 
     def set_enabled(self, enabled: bool) -> None:
-        setMemoryEnabled(enabled, self.path)
+        set_memory_enabled(enabled, self.path)
 
 
 class MemoryController(ApplicationMemoryController):

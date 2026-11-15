@@ -43,7 +43,7 @@ def lookup(values: Mapping[str, str] | None = None) -> Lookup:
     return get
 
 
-def writeSettings(home: Path, content: str) -> Path:
+def write_settings(home: Path, content: str) -> Path:
     """Write ``settings.json`` under ``home``, creating the directory."""
     directory = home / ".superagent"
     directory.mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,7 @@ def writeSettings(home: Path, content: str) -> Path:
 def test_load_config_combines_flags_env_and_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"claude","permissions":{"mode":"accept-edits","network":"allow",'
         '"allow_command_prefixes":["git status"]},'
@@ -79,7 +79,7 @@ def test_load_config_treats_legacy_null_permission_lists_as_empty(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"openai","providers":{"openai":{"api_key":"key","model":"model"}},'
         '"permissions":{"allow_tools":null,"deny_tools":null,"allow_command_prefixes":null,'
@@ -102,7 +102,7 @@ def test_load_config_treats_legacy_null_permission_lists_as_empty(
 def test_load_config_reads_custom_agent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"deepseek","providers":{"deepseek":{"api_key":"deepseek-key","model":"reasoner"}},'
         '"agent":"reviewer","agents":{"reviewer":{"prompt":"Review only.","permission_mode":"plan"}}}',
@@ -143,7 +143,7 @@ def test_load_config_builds_project_and_workspace_from_explicit_directory(
 def test_load_config_reads_lsp_servers(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"deepseek","providers":{"deepseek":{"api_key":"deepseek-key"}},'
         '"lsp_servers":{"go":{"command":"gopls","args":["serve"],"extensions":["go"],"language_id":"go"}}}',
@@ -169,7 +169,7 @@ def test_load_config_combines_skills_commands_and_plugins(monkeypatch: pytest.Mo
         encoding="utf-8",
     )
     monkeypatch.chdir(project)
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"deepseek","providers":{"deepseek":{"api_key":"deepseek-key"}},'
         '"extensions":{"commands":{"explain":"Explain $ARGUMENTS"},"skills":["skill"],"plugins":["plugin"]}}',
@@ -186,7 +186,7 @@ def test_load_config_combines_skills_commands_and_plugins(monkeypatch: pytest.Mo
 def test_load_config_uses_settings_permission_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"openai","permissions":{"mode":"plan"},"providers":{"openai":{"api_key":"key","model":"model"}}}',
     )
@@ -199,7 +199,7 @@ def test_load_config_uses_settings_permission_mode(monkeypatch: pytest.MonkeyPat
 def test_load_config_rejects_invalid_permission_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"openai","permissions":{"mode":"root"},"providers":{"openai":{"api_key":"key","model":"model"}}}',
     )
@@ -225,7 +225,7 @@ def test_load_config_creates_default_settings_when_missing(monkeypatch: pytest.M
 def test_load_config_maps_sandbox_and_network_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"openai","permissions":{"network":"allow"},'
         '"sandbox":{"mode":"off","cpu_seconds":9,"memory_mb":64,"max_processes":7,"max_open_files":11},'
@@ -245,7 +245,7 @@ def test_load_config_maps_sandbox_and_network_settings(monkeypatch: pytest.Monke
 def test_load_config_rejects_invalid_sandbox_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"openai","sandbox":{"mode":"maybe"},"providers":{"openai":{"api_key":"key","model":"model"}}}',
     )
@@ -282,7 +282,7 @@ def test_load_config_keeps_an_unset_sandbox_strict_where_one_exists(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(home, SETTINGS_WITHOUT_SANDBOX)
+    write_settings(home, SETTINGS_WITHOUT_SANDBOX)
     monkeypatch.setattr(sys, "platform", platform)
 
     cfg = load_config(Flags(), lookup())
@@ -306,7 +306,7 @@ def test_load_config_downgrades_an_unset_sandbox_without_an_implementation(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(home, content)
+    write_settings(home, content)
     monkeypatch.setattr(sys, "platform", WINDOWS)
 
     cfg = load_config(Flags(), lookup())
@@ -323,7 +323,7 @@ def test_load_config_refuses_an_explicit_strict_sandbox_without_an_implementatio
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(home, sandbox_settings("strict"))
+    write_settings(home, sandbox_settings("strict"))
     monkeypatch.setattr(sys, "platform", WINDOWS)
 
     with pytest.raises(ValueError) as failure:
@@ -342,7 +342,7 @@ def test_load_config_keeps_an_explicit_off_sandbox_without_a_downgrade(
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(home, sandbox_settings("off"))
+    write_settings(home, sandbox_settings("off"))
     monkeypatch.setattr(sys, "platform", WINDOWS)
 
     cfg = load_config(Flags(), lookup())
@@ -391,7 +391,7 @@ def test_rewriting_settings_keeps_an_unset_sandbox_mode_unset(monkeypatch: pytes
     """
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    path = writeSettings(home, SETTINGS_WITHOUT_SANDBOX)
+    path = write_settings(home, SETTINGS_WITHOUT_SANDBOX)
     monkeypatch.setattr(sys, "platform", WINDOWS)
 
     app_config.save_settings_file(str(path), load_settings_file(str(path)))
@@ -403,7 +403,7 @@ def test_rewriting_settings_keeps_an_unset_sandbox_mode_unset(monkeypatch: pytes
 def test_load_config_maps_mcp_servers_in_name_order(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"openai","mcp_servers":{'
         '"z":{"command":"z-server"},'
@@ -502,7 +502,7 @@ async def test_model_uses_resolved_credential_not_placeholder(monkeypatch: pytes
     """
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(
+    write_settings(
         home,
         '{"provider":"deepseek","providers":{"deepseek":{"api_key":"'
         + PLACEHOLDER

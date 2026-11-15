@@ -107,10 +107,10 @@ class PluginManifest:
     skills: tuple[str, ...] = dataclasses.field(default=(), metadata=json_field(name="skills"))
 
 
-def loadExtensions(settings: ExtensionSettings, cwd: str) -> Extensions:
+def load_extensions(settings: ExtensionSettings, cwd: str) -> Extensions:
     """Resolve the effective extensions for ``cwd``."""
-    commands = cloneStringMap(settings.commands)
-    hooks = cloneHooks(settings.hooks)
+    commands = clone_string_map(settings.commands)
+    hooks = clone_hooks(settings.hooks)
     skill_paths = list(settings.skills)
 
     home = os.path.expanduser("~")
@@ -119,9 +119,9 @@ def loadExtensions(settings: ExtensionSettings, cwd: str) -> Extensions:
         os.path.join(cwd, PROJECT_EXTENSIONS_DIRECTORY),
     )
     for root in roots:
-        for name, prompt in discoverCommands(os.path.join(root, "commands")).items():
+        for name, prompt in discover_commands(os.path.join(root, "commands")).items():
             commands.setdefault(name, prompt)
-        skill_paths.extend(discoverSkills(os.path.join(root, "skills")))
+        skill_paths.extend(discover_skills(os.path.join(root, "skills")))
 
     plugin_paths = list(settings.plugins)
     for root in (
@@ -134,11 +134,11 @@ def loadExtensions(settings: ExtensionSettings, cwd: str) -> Extensions:
 
     seen_plugins: dict[str, bool] = {}
     for plugin_path in plugin_paths:
-        plugin_root = resolveConfigPath(cwd, plugin_path)
+        plugin_root = resolve_config_path(cwd, plugin_path)
         if seen_plugins.get(plugin_root):
             continue
         seen_plugins[plugin_root] = True
-        content = readExtensionFile(os.path.join(plugin_root, "plugin.json"))
+        content = read_extension_file(os.path.join(plugin_root, "plugin.json"))
         try:
             parsed = jsonutil.loads(content, PluginManifest)
         except (ValueError, TypeError) as error:
@@ -158,10 +158,10 @@ def loadExtensions(settings: ExtensionSettings, cwd: str) -> Extensions:
     skills: list[str] = []
     skill_names: list[str] = []
     for skill_path in skill_paths:
-        path = resolveConfigPath(cwd, skill_path)
+        path = resolve_config_path(cwd, skill_path)
         if os.path.basename(path) != "SKILL.md":
             path = os.path.join(path, "SKILL.md")
-        content = readExtensionFile(path)
+        content = read_extension_file(path)
         skills.append("Skill: " + os.path.basename(os.path.dirname(path)) + "\n" + content.strip())
         skill_names.append(os.path.basename(os.path.dirname(path)))
 
@@ -188,18 +188,18 @@ def _validate(commands: dict[str, str], hooks: dict[str, tuple[str, ...]]) -> No
             raise ValueError("unknown hook event: " + event)
 
 
-def discoverCommands(directory: str) -> dict[str, str]:
+def discover_commands(directory: str) -> dict[str, str]:
     """Every ``*.md`` file in ``directory``, keyed by its basename."""
     result: dict[str, str] = {}
     for entry in _listdir(directory):
         if os.path.splitext(entry)[1] != ".md":
             continue
-        content = readExtensionFile(os.path.join(directory, entry))
+        content = read_extension_file(os.path.join(directory, entry))
         result[os.path.splitext(entry)[0]] = content.strip()
     return result
 
 
-def discoverSkills(directory: str) -> list[str]:
+def discover_skills(directory: str) -> list[str]:
     """Every subdirectory of ``directory`` that holds a ``SKILL.md``."""
     result: list[str] = []
     for entry in _listdir(directory):
@@ -209,7 +209,7 @@ def discoverSkills(directory: str) -> list[str]:
     return result
 
 
-def readExtensionFile(path: str) -> str:
+def read_extension_file(path: str) -> str:
     """Read an extension file, refusing anything over the size cap."""
     size = os.path.getsize(path)
     if size > MAX_EXTENSION_FILE_SIZE:
@@ -218,19 +218,19 @@ def readExtensionFile(path: str) -> str:
         return handle.read()
 
 
-def resolveConfigPath(cwd: str, path: str) -> str:
+def resolve_config_path(cwd: str, path: str) -> str:
     """Resolve an extension-configured path: absolute, or relative to ``cwd``."""
     if os.path.isabs(path):
         return os.path.normpath(path)
     return os.path.normpath(os.path.join(cwd, path))
 
 
-def cloneStringMap(input_map: dict[str, str]) -> dict[str, str]:
+def clone_string_map(input_map: dict[str, str]) -> dict[str, str]:
     """Copy a command map, normalising each key the way a user would write it."""
     return {name.strip().removeprefix("/"): value for name, value in input_map.items()}
 
 
-def cloneHooks(input_hooks: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+def clone_hooks(input_hooks: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
     return {event: tuple(commands) for event, commands in input_hooks.items()}
 
 
@@ -250,11 +250,11 @@ __all__ = [
     "USER_CONFIG_DIRECTORY",
     "ExtensionSettings",
     "PluginManifest",
-    "cloneHooks",
-    "cloneStringMap",
-    "discoverCommands",
-    "discoverSkills",
-    "loadExtensions",
-    "readExtensionFile",
-    "resolveConfigPath",
+    "clone_hooks",
+    "clone_string_map",
+    "discover_commands",
+    "discover_skills",
+    "load_extensions",
+    "read_extension_file",
+    "resolve_config_path",
 ]

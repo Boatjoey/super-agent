@@ -34,19 +34,19 @@ TEST_KEY = "test-key"
 PLAN_MARKER = "Active agent profile: plan"
 
 
-def mustWorkspaceContext(root: Path) -> Context:
+def must_workspace_context(root: Path) -> Context:
     """A workspace whose primary root and cwd are both ``root``."""
     return new_default_context(str(root))
 
 
-def sessionConfig(root: Path, *, provider: str = "deepseek") -> Config:
+def session_config(root: Path, *, provider: str = "deepseek") -> Config:
     """A minimal session configuration: no tools, no network, and a credential."""
     return Config(
         provider=provider,
         no_tools=True,
         permission_mode=PERMISSION_MODE_ASK,
         model_config=ProviderConfig(api_key=TEST_KEY),
-        workspace=mustWorkspaceContext(root),
+        workspace=must_workspace_context(root),
         config_root=str(root),
     )
 
@@ -140,7 +140,7 @@ async def test_new_session_injects_system_prompt(monkeypatch: pytest.MonkeyPatch
     directory.mkdir()
     monkeypatch.chdir(directory)
 
-    session = await new_session(sessionConfig(directory))
+    session = await new_session(session_config(directory))
     try:
         messages = session.snapshot().messages
         assert len(messages) == 1
@@ -160,7 +160,7 @@ async def test_agent_controller_switches_plan_and_build_profiles(
     directory.mkdir()
     monkeypatch.chdir(directory)
 
-    session, _mcp, agents, _memory = await new_session_with_extensions(sessionConfig(directory))
+    session, _mcp, agents, _memory = await new_session_with_extensions(session_config(directory))
     try:
         await agents.use("plan")
         assert session.permission_mode() == PERMISSION_MODE_PLAN
@@ -178,12 +178,12 @@ async def test_session_loads_instructions_from_config_root_not_workspace_access_
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    configRoot = tmp_path / "config"
-    configRoot.mkdir()
-    accessRoot = tmp_path / "access"
-    accessRoot.mkdir()
-    (configRoot / "AGENTS.md").write_text("trusted project instructions", encoding="utf-8")
-    (accessRoot / "AGENTS.md").write_text("untrusted access-root instructions", encoding="utf-8")
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    access_root = tmp_path / "access"
+    access_root.mkdir()
+    (config_root / "AGENTS.md").write_text("trusted project instructions", encoding="utf-8")
+    (access_root / "AGENTS.md").write_text("untrusted access-root instructions", encoding="utf-8")
 
     session, _mcp, _agents, _memory = await new_session_with_extensions(
         Config(
@@ -191,8 +191,8 @@ async def test_session_loads_instructions_from_config_root_not_workspace_access_
             no_tools=True,
             permission_mode=PERMISSION_MODE_ASK,
             model_config=ProviderConfig(api_key=TEST_KEY),
-            workspace=mustWorkspaceContext(accessRoot),
-            config_root=str(configRoot),
+            workspace=must_workspace_context(access_root),
+            config_root=str(config_root),
         )
     )
     try:
@@ -209,7 +209,7 @@ async def test_configured_hooks_require_tools(monkeypatch: pytest.MonkeyPatch, t
     directory = tmp_path / "project"
     directory.mkdir()
     monkeypatch.chdir(directory)
-    cfg = sessionConfig(directory)
+    cfg = session_config(directory)
     cfg.extensions = Extensions(hooks={"startup": ("true",)})
 
     with pytest.raises(JoinedError) as failure:

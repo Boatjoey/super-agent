@@ -60,7 +60,7 @@
 | 出站 | `application/ports.ProviderPreferences` | `application/agents.py` | 同上 |
 | 出站 | `application/ports.MemoryPreferences` | `application/memory.py` | `app/memory.MemoryPreferencesAdapter` |
 | 出站 | `application/ports.MCPBackend` | `application/mcp.py` | `app/mcp.MCPBackendAdapter` |
-| 出站 | `application/ports.DelegationEnvironment` | `application/delegation.py` | `app/subagents.subagentTool`，同时将 `delegate` 工具调用转交应用用例 |
+| 出站 | `application/ports.DelegationEnvironment` | `application/delegation.py` | `app/subagents.SubagentTool`，同时将 `delegate` 工具调用转交应用用例 |
 | 出站 | `application/workflows.Runner`（工具端口的扩展：支持绕过钩子的直接调用） | `application/workflows.py` | 工具注册表与钩子包装 |
 | 出站 | `runtime/protocol/telemetry.Recorder` | `runtime/engine` 经遥测路由 | `store/telemetry.py` 的 JSONL 后端 |
 
