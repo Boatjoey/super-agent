@@ -15,6 +15,8 @@ Super Agent 是面向本地项目开发的 Agent。用户经由终端或本机 W
 | Windows | 本机 Web 界面 | Web；不提供终端 |
 | Linux / macOS | 终端 | 终端、Web |
 
+本机 Web 界面只服务启动它的操作者，不提供账号或多用户访问；访问凭据与安全取舍见[质量约束](constraints.md#web-访问)。
+
 各前端的呈现与操作分别由[界面设计](ui.md)、[使用体验设计](ux.md)和[应用接口规范](../spec/application-interface.md)规定。
 
 ## 前端对标目标

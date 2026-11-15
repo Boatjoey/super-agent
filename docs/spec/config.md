@@ -173,6 +173,9 @@
 | `--yolo` | 自动批准工具，映射为 `bypass` |
 | `--no-tools` | 禁用工具调用 |
 | `--approval-mode <ask\|accept-edits\|plan\|bypass>` | 设置权限模式 |
+| `--web` | 启动本机 Web 前端；Windows 无标志启动时也使用它，见[两个前端与承载方式](application-interface.md#两个前端与承载方式) |
+| `--host <address>` | Web 监听地址，空值或未指定时为 `127.0.0.1`。任何地址都要求访问令牌；可接受的 `Host` 与通配地址的处理见[Web 访问认证](application-interface.md#web-访问认证) |
+| `--port <port>` | Web 监听端口，未指定时为 `8765`；`0` 由系统选择空闲端口，启动输出给出实际端口。不是整数或超出 `0`–`65535` 时以状态 2 退出 |
 | `NO_TOOLS=true` | 通过环境变量禁用工具 |
 | `YOLO=true` | 未显式传入参数时启用绕过审批 |
 
