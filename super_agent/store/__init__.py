@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from super_agent.store.repository import (
     Repository as Repository,
-    logPersistenceFailure as logPersistenceFailure,
+    log_persistence_failure as log_persistence_failure,
     new_repository as new_repository,
-    toSessionMetadata as toSessionMetadata,
-    toSessionWorkspaceSpec as toSessionWorkspaceSpec,
-    toStoreMetadata as toStoreMetadata,
-    toStoreWorkspaceSpec as toStoreWorkspaceSpec,
+    to_session_metadata as to_session_metadata,
+    to_session_workspace_spec as to_session_workspace_spec,
+    to_store_metadata as to_store_metadata,
+    to_store_workspace_spec as to_store_workspace_spec,
 )
 from super_agent.store.store import (
     EVENT_APPROVAL_DECISION as EVENT_APPROVAL_DECISION,
@@ -46,9 +46,9 @@ from super_agent.store.store import (
     new_id as new_id,
     new_turn_id as new_turn_id,
     open_default as open_default,
-    systemMessages as systemMessages,
-    validateID as validateID,
-    writeRecords as writeRecords,
+    system_messages as system_messages,
+    validate_id as validate_id,
+    write_records as write_records,
 )
 
 __all__ = [
@@ -78,18 +78,18 @@ __all__ = [
     "WorkspaceSpec",
     "default_root",
     "fingerprint",
-    "logPersistenceFailure",
+    "log_persistence_failure",
     "messages_from_records",
     "new",
     "new_id",
     "new_repository",
     "new_turn_id",
     "open_default",
-    "systemMessages",
-    "toSessionMetadata",
-    "toSessionWorkspaceSpec",
-    "toStoreMetadata",
-    "toStoreWorkspaceSpec",
-    "validateID",
-    "writeRecords",
+    "system_messages",
+    "to_session_metadata",
+    "to_session_workspace_spec",
+    "to_store_metadata",
+    "to_store_workspace_spec",
+    "validate_id",
+    "write_records",
 ]

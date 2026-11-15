@@ -234,7 +234,7 @@ def new_turn_id(moment: timeutil.Timestamp) -> TurnID:
     return TurnID(timeutil.format_id(moment, keep_dot=True))
 
 
-def validateID(session_id: SessionID) -> None:
+def validate_id(session_id: SessionID) -> None:
     """Reject session identifiers that could escape the sessions root.
 
     Every identifier is joined into filesystem paths, so separators, dot
@@ -287,7 +287,7 @@ def messages_from_records(records: Sequence[Record]) -> list[Message]:
                     )
                 )
         elif record.type == EVENT_RESET:
-            messages = systemMessages(messages)
+            messages = system_messages(messages)
         elif record.type == EVENT_COMPACT:
             if record.compact is not None:
                 messages = list(record.compact.kept_messages)
@@ -296,7 +296,7 @@ def messages_from_records(records: Sequence[Record]) -> list[Message]:
     return messages
 
 
-def systemMessages(messages: Sequence[Message]) -> list[Message]:
+def system_messages(messages: Sequence[Message]) -> list[Message]:
     """Only the ``system`` messages, in order; the rule reset and replay share."""
     return [message for message in messages if message.role == ROLE_SYSTEM]
 
@@ -321,8 +321,8 @@ class Store:
             moment = timeutil.now()
             if meta.id == "":
                 meta = dataclasses.replace(meta, id=new_id(moment))
-            validateID(meta.id)
-            if _isZeroTime(meta.created_at):
+            validate_id(meta.id)
+            if _is_zero_time(meta.created_at):
                 meta = dataclasses.replace(meta, created_at=moment)
             meta = dataclasses.replace(meta, updated_at=moment)
             if meta.title == "":
@@ -343,7 +343,7 @@ class Store:
     def append(self, session_id: SessionID, record: Record) -> None:
         """Append one record, refreshing the session's ``updated_at`` best effort."""
         with self._lock:
-            validateID(session_id)
+            validate_id(session_id)
             self._append_unlocked(session_id, record)
 
     def _append_unlocked(self, session_id: SessionID, record: Record) -> None:
@@ -366,7 +366,7 @@ class Store:
                 self._write_meta(dataclasses.replace(meta, updated_at=timeutil.now()))
         if record.session_id == "":
             record = dataclasses.replace(record, session_id=session_id)
-        if _isZeroTime(record.time):
+        if _is_zero_time(record.time):
             record = dataclasses.replace(record, time=timeutil.now())
         self._ensure_dir(self._session_dir(session_id))
         encoded = (jsonutil.dumps(record) + "\n").encode("utf-8")
@@ -384,7 +384,7 @@ class Store:
     def metadata(self, session_id: SessionID) -> Metadata:
         """Read one session's ``meta.json``."""
         with self._lock:
-            validateID(session_id)
+            validate_id(session_id)
             return self._metadata_unlocked(session_id)
 
     def _metadata_unlocked(self, session_id: SessionID) -> Metadata:
@@ -394,7 +394,7 @@ class Store:
     def set_current_turn(self, session_id: SessionID, turn: TurnID) -> None:
         """Point the session at a fresh turn id."""
         with self._lock:
-            validateID(session_id)
+            validate_id(session_id)
             meta = self._metadata_unlocked(session_id)
             meta = dataclasses.replace(meta, current_turn_id=turn, updated_at=timeutil.now())
             self._write_meta(meta)
@@ -414,7 +414,7 @@ class Store:
     def rename_session(self, session_id: SessionID, title: str) -> None:
         """Change a session's title, rejecting an empty one."""
         with self._lock:
-            validateID(session_id)
+            validate_id(session_id)
             title = title.strip()
             if title == "":
                 raise ValueError("title is required")
@@ -425,7 +425,7 @@ class Store:
     def delete(self, session_id: SessionID) -> None:
         """Remove a session directory and everything in it."""
         with self._lock:
-            validateID(session_id)
+            validate_id(session_id)
             self._remove_session_dir(session_id)
 
     def list(self) -> list[Summary]:
@@ -462,7 +462,7 @@ class Store:
     def records(self, session_id: SessionID) -> list[Record]:
         """Every record in the log, after healing a torn tail."""
         with self._lock:
-            validateID(session_id)
+            validate_id(session_id)
             return self._records_unlocked(session_id)
 
     def _records_unlocked(self, session_id: SessionID) -> list[Record]:
@@ -516,7 +516,7 @@ class Store:
         undo always has something to restore.
         """
         with self._lock:
-            validateID(session_id)
+            validate_id(session_id)
             records = self._records_unlocked(session_id)
             for index in range(len(records) - 1, -1, -1):
                 record = records[index]
@@ -535,14 +535,14 @@ class Store:
         the transcript.
         """
         with self._lock:
-            validateID(session_id)
+            validate_id(session_id)
             records = self._records_unlocked(session_id)
             if keep < 0 or keep >= len(records) - 1:
                 return
             target = self._events_path(session_id)
             temporary = target + ".tmp"
             try:
-                writeRecords(temporary, records[: keep + 1])
+                write_records(temporary, records[: keep + 1])
                 os.replace(temporary, target)
             except OSError:
                 with contextlib.suppress(OSError):
@@ -592,7 +592,7 @@ class Store:
         write must never leave a half-written file behind: write, fsync, and
         atomically rename a temporary file.
         """
-        validateID(meta.id)
+        validate_id(meta.id)
         self._ensure_dir(self._session_dir(meta.id))
         content = (jsonutil.dumps(meta, indent=2) + "\n").encode("utf-8")
         self._atomic_write(self._meta_path(meta.id), content, ".meta-", ".json")
@@ -637,7 +637,7 @@ class Store:
         shutil.rmtree(self._session_dir(session_id), ignore_errors=True)
 
 
-def writeRecords(path: str, records: Sequence[Record]) -> None:
+def write_records(path: str, records: Sequence[Record]) -> None:
     """Rewrite a whole log, mode ``0600``, fsynced before the caller renames it."""
     descriptor = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
     try:
@@ -648,6 +648,6 @@ def writeRecords(path: str, records: Sequence[Record]) -> None:
         os.close(descriptor)
 
 
-def _isZeroTime(moment: datetime) -> bool:
+def _is_zero_time(moment: datetime) -> bool:
     """True for the value this module writes as the zero time."""
     return moment == ZERO_TIME

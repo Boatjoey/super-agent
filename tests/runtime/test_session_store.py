@@ -741,11 +741,11 @@ def test_create_stamps_id_and_metadata_with_the_clock_instant(tmp_path: Path, mo
 
 def test_validate_id_accepts_its_own_basename_and_rejects_everything_else() -> None:
     for good in ("20260916T120000123456789", "a-b_C1", "x"):
-        store.validateID(store.SessionID(good))
+        store.validate_id(store.SessionID(good))
 
     for bad in ("../..", "a/b", "_memory", "", ".", "..", "x y", "a.b", "a\u00e9"):
         with pytest.raises(ValueError):
-            store.validateID(store.SessionID(bad))
+            store.validate_id(store.SessionID(bad))
 
 
 def test_metadata_writes_are_atomic_with_expected_modes_and_layout(tmp_path: Path) -> None:
