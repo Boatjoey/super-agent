@@ -18,7 +18,7 @@ import json
 import socket
 import urllib.parse
 from collections.abc import Awaitable, Callable
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import httpx
 import lxml.html
@@ -43,6 +43,9 @@ Lookup = Callable[[str, int], Awaitable[list[str]]]
 
 #: lxml ships no type information here, so the DOM walk goes through ``Any``.
 _html: Any = lxml.html
+
+#: What lxml raises for a document with no element in it at all.
+_no_element = cast("type[Exception]", _html.etree.ParserError)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -252,6 +255,10 @@ def extracted_page(raw_url: str, content: bytes) -> str:
     """Readable page text plus resolved links, as a JSON object."""
     try:
         root: Any = _html.fromstring(content)
+    except _no_element:
+        # Only comments, a doctype, or processing instructions: markup, and no
+        # page text at all.
+        return _page_json(raw_url, "")
     except Exception:
         # A parse error becomes plain text rather than a failed fetch.
         return _page_json(raw_url, content.decode("utf-8", "replace"))
