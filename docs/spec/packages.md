@@ -225,6 +225,8 @@ Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归
 - `tools/sandbox_darwin.py`：生成 Seatbelt 配置与命令行；构造时运行一条试验命令，配置无法应用即拒绝。
 - `tools/sandbox_darwin_launcher.py`：在每条命令前以独立脚本运行，只依赖标准库；创建并回收命令的临时目录、设置资源限制，再交给 `sandbox-exec` 执行。
 
+两个平台隐藏的 home 目录由 `tools/sandbox_homes.py` 统一给出。
+
 
 ## 工作区类型映射
 

@@ -30,7 +30,6 @@ time, so importing it back at runtime would be circular.
 
 from __future__ import annotations
 
-import contextlib
 import dataclasses
 import os
 import subprocess
@@ -41,6 +40,7 @@ from typing import TYPE_CHECKING, Final
 
 from super_agent.tools.env import child_env
 from super_agent.tools.sandbox_darwin_launcher import SCRATCH_PARAMETER
+from super_agent.tools.sandbox_homes import protected_homes
 
 if TYPE_CHECKING:
     from super_agent.tools.sandbox import SandboxConfig
@@ -265,31 +265,6 @@ def _within(path: str, root: str) -> bool:
     """Whether ``path`` is ``root`` or lies below it."""
     relative = os.path.relpath(path, root)
     return relative != ".." and not relative.startswith(".." + os.sep)
-
-
-def protected_homes() -> tuple[str, ...]:
-    """The user's home directories, resolved: ``HOME`` and the account's own.
-
-    Both count, since settings and credentials follow ``HOME`` while the
-    account's directory is where the user's keys live. The filesystem root is
-    never protected, whatever ``HOME`` says.
-    """
-    # Imported here so that the module, and the tests that import it, still
-    # load on Windows, which has no ``pwd``.
-    import pwd
-
-    candidates = [os.path.expanduser("~")]
-    # An account missing from the user database has no directory of its own.
-    with contextlib.suppress(KeyError):
-        candidates.append(pwd.getpwuid(os.getuid()).pw_dir)
-    result: list[str] = []
-    for candidate in candidates:
-        if not os.path.isabs(candidate):
-            continue
-        resolved = os.path.realpath(candidate)
-        if resolved != os.sep and resolved not in result:
-            result.append(resolved)
-    return tuple(result)
 
 
 def new_platform_sandbox(config: SandboxConfig) -> seatbelt_sandbox:
