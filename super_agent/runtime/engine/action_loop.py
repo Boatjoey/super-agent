@@ -64,16 +64,16 @@ if TYPE_CHECKING:
     from super_agent.runtime.machine import RuntimeDataChangeApplier
 
 
-def typeName(value: Any) -> str:
+def type_name(value: Any) -> str:
     """The value's type name, or ``"nil"`` when it is ``None``."""
     return "nil" if value is None else type(value).__name__
 
 
-def errorString(error: BaseException | None) -> str:
+def error_string(error: BaseException | None) -> str:
     return "" if error is None else str(error)
 
 
-def estimateTokens(value: str) -> int:
+def estimate_tokens(value: str) -> int:
     """Four characters per token, a deliberately rough divisor."""
     count = len(value)
     if count == 0:
@@ -81,7 +81,7 @@ def estimateTokens(value: str) -> int:
     return (count + 3) // 4
 
 
-def estimateMessageTokens(messages: tuple[Message, ...] | list[Message]) -> int:
+def estimate_message_tokens(messages: tuple[Message, ...] | list[Message]) -> int:
     return sum((len(message.content) + len(message.reasoning_content) + 3) // 4 for message in messages)
 
 
@@ -206,7 +206,7 @@ class ActionLoopMixin:
             {
                 "run_id": str(run_id),
                 "duration_ms": millis_since(started),
-                "error": errorString(error),
+                "error": error_string(error),
             },
         )
         if error is not None:
@@ -256,7 +256,7 @@ class ActionLoopMixin:
             "transition",
             {
                 "run_id": str(run_id),
-                "event": typeName(event),
+                "event": type_name(event),
                 "state": str(state),
                 "scheduled_actions": len(decision.action_plan.schedule),
             },
@@ -360,7 +360,7 @@ class ActionLoopMixin:
                 {
                     "run_id": str(action.run_id),
                     "action_id": str(action.action_id),
-                    "action": typeName(action.action),
+                    "action": type_name(action.action),
                     "duration_ms": millis_since(started),
                     "error": str(error),
                 },
@@ -370,7 +370,7 @@ class ActionLoopMixin:
         fields: dict[str, Any] = {
             "run_id": str(action.run_id),
             "action_id": str(action.action_id),
-            "action": typeName(action.action),
+            "action": type_name(action.action),
             "duration_ms": millis_since(started),
         }
         if isinstance(action.action, CallModel):
@@ -382,8 +382,8 @@ class ActionLoopMixin:
             fields["component"] = "approval"
 
         if isinstance(completion.result, ModelReplied):
-            fields["input_tokens_estimate"] = estimateMessageTokens(env.messages)
-            fields["output_tokens_estimate"] = estimateTokens(
+            fields["input_tokens_estimate"] = estimate_message_tokens(env.messages)
+            fields["output_tokens_estimate"] = estimate_tokens(
                 completion.result.response.content + completion.result.response.reasoning_content
             )
             # Exact provider counts win over the rune-count estimates when the
@@ -460,9 +460,9 @@ def _usage_fields(usage: Usage | None) -> dict[str, Any]:
 # Re-exported so callers of the engine do not import the context module twice.
 __all__ = [
     "ActionLoopMixin",
-    "errorString",
-    "estimateMessageTokens",
-    "estimateTokens",
+    "error_string",
+    "estimate_message_tokens",
+    "estimate_tokens",
     "millis_since",
-    "typeName",
+    "type_name",
 ]

@@ -10,11 +10,11 @@ from __future__ import annotations
 
 from super_agent.runtime.engine.action_loop import (
     ActionLoopMixin as ActionLoopMixin,
-    errorString as errorString,
-    estimateMessageTokens as estimateMessageTokens,
-    estimateTokens as estimateTokens,
+    error_string as error_string,
+    estimate_message_tokens as estimate_message_tokens,
+    estimate_tokens as estimate_tokens,
     millis_since as millis_since,
-    typeName as typeName,
+    type_name as type_name,
 )
 from super_agent.runtime.engine.commands import (
     COMPACT_SUMMARY_PROMPT as COMPACT_SUMMARY_PROMPT,
@@ -55,13 +55,13 @@ __all__ = [
     "QueryMixin",
     "StateObserver",
     "discard_chunk",
-    "errorString",
-    "estimateMessageTokens",
-    "estimateTokens",
+    "error_string",
+    "estimate_message_tokens",
+    "estimate_tokens",
     "millis_since",
     "new_engine",
     "new_engine_with_components",
     "new_engine_with_executor",
     "new_engine_with_executor_and_policy",
-    "typeName",
+    "type_name",
 ]

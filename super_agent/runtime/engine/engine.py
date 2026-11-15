@@ -58,7 +58,7 @@ class Engine(CommandsMixin, ActionLoopMixin, QueryMixin):
         self,
         runner: ScheduledActionRunner,
         resolver: ActionResultResolver,
-        runtimeDataChangeApplier: RuntimeDataChangeApplier,
+        runtime_data_change_applier: RuntimeDataChangeApplier,
         runs: RunController,
         approvals: ApprovalStore,
         initial: list[Message] | None,
@@ -68,7 +68,7 @@ class Engine(CommandsMixin, ActionLoopMixin, QueryMixin):
         self.lock: asyncio.Lock = asyncio.Lock()
         self._runner = runner
         self._resolver = resolver
-        self._applier = runtimeDataChangeApplier
+        self._applier = runtime_data_change_applier
         self._runs = runs
         self._approvals = approvals
         self._runtime_data = RuntimeData(state=STATE_INITIALIZING, messages=list(initial or []))
@@ -151,13 +151,13 @@ def new_engine_with_executor_and_policy(
 def new_engine_with_components(
     runner: ScheduledActionRunner,
     resolver: ActionResultResolver,
-    runtimeDataChangeApplier: RuntimeDataChangeApplier,
+    runtime_data_change_applier: RuntimeDataChangeApplier,
     runs: RunController,
     approvals: ApprovalStore,
     initial: list[Message] | None,
 ) -> Engine:
     """Assemble the engine from its ports; the constructor tests substitute through."""
-    return Engine(runner, resolver, runtimeDataChangeApplier, runs, approvals, initial)
+    return Engine(runner, resolver, runtime_data_change_applier, runs, approvals, initial)
 
 
 __all__ = [
