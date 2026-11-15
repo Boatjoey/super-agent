@@ -9,6 +9,7 @@ the prompt.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
 from typing import Any, cast
 
@@ -35,6 +36,14 @@ _DESTRUCTIVE_TOKENS = ("rm", "rmdir", "shred", "mkfs", "dd", "chmod", "chown", "
 _WRITE_TOKENS = ("touch", "mkdir", "mv", "cp", "sed", "perl", "git")
 
 _READ_ONLY_GIT_PREFIXES = ("git status", "git diff", "git show", "git log", "git branch")
+
+#: Where a shell word ends: whitespace, and the operators that start another
+#: command, a substitution, or a redirection. ``echo hi;rm x`` runs ``rm`` as
+#: surely as ``echo hi; rm x`` does.
+_WORD_BREAK = re.compile(r"[\s;&|()<>`]+")
+
+#: ``NAME=value``: the value may be the command a later ``$NAME`` runs.
+_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=(.+)", re.DOTALL)
 
 
 def analyzeCommandRequest(request: PermissionRequest) -> PermissionRequest:
@@ -75,16 +84,36 @@ def isReadOnlyGitCommand(command: str) -> bool:
 
 
 def hasAnyToken(command: str, tokens: tuple[str, ...]) -> bool:
-    """Whether any whitespace-separated field equals one of ``tokens``.
+    """Whether any shell word of ``command`` equals one of ``tokens``.
 
-    Comparing whole fields rather than substrings is what keeps ``gitk`` from
+    Comparing whole words rather than substrings is what keeps ``gitk`` from
     looking like ``git`` and ``rmdir`` from looking like ``rm``.
     """
-    for field in command.split():
-        field = field.strip("'\";|&()")
-        if field in tokens:
-            return True
-    return False
+    return any(word in tokens for word in _shell_words(command))
+
+
+def _shell_words(command: str) -> list[str]:
+    """The words of ``command`` the way the shell reads them, erring wide.
+
+    Words end at operators as well as at whitespace, quotes and backslashes are
+    removed as the shell removes them, so ``'rm'``, ``r''m``, ``\\rm`` and
+    ``$'rm'`` all read as ``rm``, and an assignment's value is a word too,
+    because ``X=rm; $X …`` runs it. Quoted text splits like the rest:
+    ``bash -c 'rm x'`` runs what it quotes, so reading data as words can only
+    make a class stricter.
+    """
+    words: list[str] = []
+    for field in _WORD_BREAK.split(command.replace("\\\n", "")):
+        word = field.replace("$'", "'").replace('$"', '"')
+        for mark in ("\\", "'", '"'):
+            word = word.replace(mark, "")
+        if word == "":
+            continue
+        words.append(word)
+        assignment = _ASSIGNMENT.fullmatch(word)
+        if assignment is not None:
+            words.append(assignment.group(1))
+    return words
 
 
 def containsNetworkIntent(command: str) -> bool:
