@@ -52,7 +52,7 @@ def stand_in(monkeypatch: pytest.MonkeyPatch) -> tuple[StandInSession, dict[str,
         return real_select(flags, "linux")
 
     monkeypatch.setattr(app, "new_session_with_extensions", new_session)
-    monkeypatch.setattr(app, "new_agent_application", new_application)
+    monkeypatch.setattr(__main__, "new_agent_application", new_application)
     monkeypatch.setattr(__main__, "_run_terminal", run_terminal)
     monkeypatch.setattr(__main__.web, "serve", serve)
     monkeypatch.setattr(__main__, "select_front_end", select_on_posix)
