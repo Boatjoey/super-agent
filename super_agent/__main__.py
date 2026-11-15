@@ -54,7 +54,7 @@ def main() -> None:
     except cli.FlagError as error:
         if error.message:
             print(error.message, file=sys.stderr)
-        if error.showUsage:
+        if error.show_usage:
             sys.stderr.write(cli.usage())
         raise SystemExit(error.status) from None
 

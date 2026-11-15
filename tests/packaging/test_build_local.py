@@ -19,13 +19,13 @@ FORBIDDEN_HELP_TEXT = "Auto-approve tool execution (default true)"
 
 def test_build_local_script_produces_runnable_binary(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[2]
-    installDir = tmp_path / "bin"
-    installDir.mkdir()
+    install_dir = tmp_path / "bin"
+    install_dir.mkdir()
 
     result = subprocess.run(
         ["./scripts/build-local.sh"],
         cwd=repo,
-        env={**os.environ, "SUPER_AGENT_INSTALL_DIR": str(installDir)},
+        env={**os.environ, "SUPER_AGENT_INSTALL_DIR": str(install_dir)},
         capture_output=True,
         text=True,
         check=False,
@@ -33,10 +33,10 @@ def test_build_local_script_produces_runnable_binary(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, f"build-local failed:\n{result.stdout}{result.stderr}"
 
-    binary = installDir / "super-agent"
+    binary = install_dir / "super-agent"
     assert binary.exists()
     assert os.access(binary, os.X_OK)
 
-    helpResult = subprocess.run([str(binary), "-h"], capture_output=True, text=True, check=False)
-    assert helpResult.returncode == 0, f"binary -h failed:\n{helpResult.stdout}{helpResult.stderr}"
-    assert FORBIDDEN_HELP_TEXT not in helpResult.stdout + helpResult.stderr
+    help_result = subprocess.run([str(binary), "-h"], capture_output=True, text=True, check=False)
+    assert help_result.returncode == 0, f"binary -h failed:\n{help_result.stdout}{help_result.stderr}"
+    assert FORBIDDEN_HELP_TEXT not in help_result.stdout + help_result.stderr

@@ -58,13 +58,13 @@ class FlagError(Exception):
     ``status`` is 2 for a parse failure and 0 when ``-h`` asked for the usage.
     """
 
-    __slots__ = ("message", "showUsage", "status")
+    __slots__ = ("message", "show_usage", "status")
 
-    def __init__(self, message: str, status: int = 2, *, showUsage: bool = True) -> None:
+    def __init__(self, message: str, status: int = 2, *, show_usage: bool = True) -> None:
         super().__init__(message)
         self.message = message
         self.status = status
-        self.showUsage = showUsage
+        self.show_usage = show_usage
 
 
 def usage() -> str:
@@ -86,7 +86,7 @@ def usage() -> str:
 
 def parse(argv: Sequence[str]) -> Flags:
     """Parse ``argv``, or raise :class:`FlagError`."""
-    byName = {flag.name: flag for flag in FLAGS}
+    by_name = {flag.name: flag for flag in FLAGS}
     values: dict[str, str] = {flag.name: ("false" if flag.is_bool else "") for flag in FLAGS}
     index = 0
     while index < len(argv):
@@ -103,37 +103,37 @@ def parse(argv: Sequence[str]) -> Flags:
             raise FlagError(f"bad flag syntax: {argument}")
         index += 1
         value = ""
-        hasValue = "=" in name[1:]
-        if hasValue:
+        has_value = "=" in name[1:]
+        if has_value:
             name, value = name.split("=", 1)
-        flag = byName.get(name)
+        flag = by_name.get(name)
         if flag is None:
             if name in ("help", "h"):  # the one special case the parser has
                 raise FlagError("", status=0)
             raise FlagError(f"flag provided but not defined: -{name}")
         if flag.is_bool:
-            if not hasValue:
+            if not has_value:
                 value = "true"
         else:
-            if not hasValue and index < len(argv):
+            if not has_value and index < len(argv):
                 value = argv[index]
                 index += 1
-                hasValue = True
-            if not hasValue:
+                has_value = True
+            if not has_value:
                 raise FlagError(f"flag needs an argument: -{name}")
         values[name] = value
     return Flags(
-        auto_approve_tools=_boolValue(values["yolo"], "yolo"),
-        no_tools=_boolValue(values["no-tools"], "no-tools"),
+        auto_approve_tools=_bool_value(values["yolo"], "yolo"),
+        no_tools=_bool_value(values["no-tools"], "no-tools"),
         permission_mode=values["approval-mode"],
         cwd=values["cwd"],
-        web=_boolValue(values["web"], "web"),
+        web=_bool_value(values["web"], "web"),
         host=values["host"],
         port=values["port"],
     )
 
 
-def _boolValue(value: str, name: str) -> bool:
+def _bool_value(value: str, name: str) -> bool:
     """The two accepted boolean spellings, or a parse failure."""
     if value in TRUE_VALUES:
         return True
