@@ -23,15 +23,15 @@
 - `web` 是另一个前端适配器，只依赖 `frontend`，把端口承载为本机 HTTP 与服务器推送事件；不得导入运行时、`tui` 或组合根。
 - `application` 承载跨运行用例的应用控制器及前端契约实现；具体落点见[六边形边界的代码约束](#六边形边界的代码约束)。
 - `app` 包含组合根、启动配置适配与设施桥接；不能把整个包都视作组合根，逐文件归属见下表。
-- `llm`、`tools`、`store`、`project` 和 `workspace` 是顶层适配器。`llm` 和 `tools` 可以导入 `runtime/protocol`，不得导入根 `runtime` 门面；`store` 和 `workspace` 还可以导入声明其端口的 `runtime/session`。
+- `llm`、`tools`、`store`、`project` 和 `workspace` 是顶层适配器。在运行时各包中，`llm` 和 `tools` 只能导入 `runtime/protocol`；`store` 和 `workspace` 还可以导入声明其端口的 `runtime/session`。
 
 适配器在边界将第三方 SDK 值转换为 `runtime/protocol` 类型，SDK 对象不得进入状态机。
 
 导入 `llm` 或构造内建模型时，不得导入模型服务商 SDK。选中的服务商适配器及 SDK 在首次模型请求时加载，避免无关服务商拖慢终端启动。
 
-`tui` 不得导入 `runtime`，运行时也不得导入 `tui`。在应用边界的 `application/presentation.py` 中，运行时状态被转换为仅用于展示的 `frontend.AgentStatus`；两个前端都不拥有运行时状态枚举。`app/tui_adapter.py` 只保留历史名称的重新导出，不含实现。
+`tui` 不得导入 `runtime`，运行时也不得导入 `tui`。在应用边界的 `application/presentation.py` 中，运行时状态被转换为仅用于展示的 `frontend.AgentStatus`；两个前端都不拥有运行时状态枚举。
 
-根 `runtime` 包是兼容门面，按 `api_model.py`、`api_machine.py`、`api_execution.py`、`api_engine.py` 和 `api_session.py` 组织。它公开会话持久化端口和元数据，不导入具体适配器。内部包必须依赖拥有该类型的窄接口包，而不是这个门面。
+根 `runtime` 包只是子包的命名空间，不重新导出任何名称；`from super_agent.runtime import machine` 这类写法导入的是子包本身。内部模块与测试从拥有类型的包导入：协议值取自 `runtime/protocol/types.py`，权限值取自 `runtime/permission/types.py`，其余名称取自声明它们的子包。`runtime` 各子包的 `__init__.py` 只公开本子包声明的名称，不转发其他子包的值。依赖检查同时扫描 `super_agent/` 与 `tests/`，拒绝绑定根 `runtime` 包或从中导入子包以外的名称，也拒绝导入已删除的兼容模块。
 
 `ToolBatchReceived`、`ToolCallNeedsApproval` 和 `ActionResultResolver` 分别是工具批次接收、审批请求和结果映射的规范名称；运行时不得为它们重新导出其他名称。
 
@@ -87,7 +87,7 @@
 
 `web/turns.py` 的 `TurnRunner` 仅依赖 `AgentInteractionPort`，参数及成员命名为 `interaction`、`_interaction`，表达其交互能力范围。完整前端组合入口仍可持有 `FrontendPorts`，参数及成员使用 `frontend_ports`／`_frontend_ports`。`tui/app.py` 的 `App` 分别持有 `snapshot_port` 与 `turn_port`，区别端口对象和读取的快照值；终端构造入口中的完整契约对象命名为 `frontend_ports`，避免与核心 Session 混淆。
 
-`application/agent_application.py` 的 `AgentApplication` 是应用服务，通过结构化类型实现这些端口；Web 与 TUI 是调用端口的入站适配器，该应用服务不属于前端适配器。无须显式继承，也不为组合端口拆分实现。应用职责仍按[六边形边界的代码约束](#六边形边界的代码约束)维护；构造入口命名为 `new_agent_application`。该实现持有的控制器命名为 `agent_controller`、`mcp_controller` 和 `memory_controller`；审批队列与待决标识分别命名为 `_approval_queue`、`_pending_approval_id`，局部名称区分运行时队列和前端通知通道。相关标识符使用 `snake_case`，测试中的完整契约替身使用 `FakeFrontendPorts`，审批等待替身名称明确表示其场景。历史终端名称仍只重新导出同一个实现。兼容要求见[交互端口兼容性](application-interface.md#交互端口兼容性)。
+`application/agent_application.py` 的 `AgentApplication` 是应用服务，通过结构化类型实现这些端口；Web 与 TUI 是调用端口的入站适配器，该应用服务不属于前端适配器。无须显式继承，也不为组合端口拆分实现。应用职责仍按[六边形边界的代码约束](#六边形边界的代码约束)维护；构造入口命名为 `new_agent_application`。该实现持有的控制器命名为 `agent_controller`、`mcp_controller` 和 `memory_controller`；审批队列与待决标识分别命名为 `_approval_queue`、`_pending_approval_id`，局部名称区分运行时队列和前端通知通道。相关标识符使用 `snake_case`，测试中的完整契约替身使用 `FakeFrontendPorts`，审批等待替身名称明确表示其场景。兼容要求见[交互端口兼容性](application-interface.md#交互端口兼容性)。
 
 ## 六边形边界的代码约束
 
@@ -105,11 +105,11 @@
 
 `application` 和整个 `runtime` 不得导入 `app`、`llm`、`tools`、`store`、`workspace`、`project`、`tui` 或 `web`。应用控制器不得直接导入文件系统、网络或进程模块；资源通过构造参数注入。适配器的运行时依赖限制递归覆盖子目录；终端所有目录均不得回调组合根。
 
-`application/agent_application.py` 实现前端入站契约，拥有流生命周期、排队轮次推进及审批关联；`application/presentation.py` 只执行运行值到展示值的转换。`app/agent_application.py` 只保留历史导入名，不承载用例实现。
+`application/agent_application.py` 实现前端入站契约，拥有流生命周期、排队轮次推进及审批关联；`application/presentation.py` 只执行运行值到展示值的转换。
 
 `application/agents.py`、`memory.py`、`mcp.py`、`workflows.py`、`delegation.py` 分别拥有档案切换、记忆开关、MCP 变更补偿、扩展工作流和委派用例。模型创建、指令读取、设置写入、MCP 连接与工具安装、子会话和工作树构造位于 `app` 的对应设施实现；这些设施通过 `application/ports.py` 契约注入。
 
-`application/values.py` 拥有应用档案、有效扩展集合和 MCP 配置值；`runtime/protocol/provider.py` 拥有服务商配置值。原位置可重新导出同一个类型，不能再声明副本。遥测记录由内侧记录契约接收，JSONL 文件 I/O 位于 `store` 适配器。
+`application/values.py` 拥有应用档案、有效扩展集合和 MCP 配置值，使用方从该模块导入，`app` 中的模块不重新导出这些值；`runtime/protocol/provider.py` 拥有服务商配置值，`llm` 的包接口重新导出同一个类型。其他位置不能再声明副本。遥测记录由内侧记录契约接收，JSONL 文件 I/O 位于 `store` 适配器。
 
 `app` 中保留代码的归属如下：
 
@@ -119,12 +119,11 @@
 | `config.py`、`extensions.py`、`instructions/` | 启动配置与文件适配器 | 加载、解析、校验与保存本地配置、指令及扩展，把结果转换成内侧值 |
 | `agents.py`、`memory.py`、`mcp.py` | 出站设施及兼容构造入口 | 实现上表出站端口；历史控制器构造函数只注入设施，不复制用例 |
 | `subagents.py` | 委派设施与工具接入 | 将工具调用交给委派用例，构造子会话依赖、工作树与工具目录 |
-| `workflows.py`、`agent_application.py`、`tui_adapter.py` | 兼容导出 | 重新导出同一个实现，不另设业务流程 |
 | `system_prompt.py` | 启动上下文素材 | 内置提示词常量 |
 
 `application/agents.py` 的模型路由与工具筛选、`application/workflows.py` 的钩子包装，是内部业务协作对象，不能仅因实现了 `Model` 或 `ToolRunner` 就认定为外侧适配器；具体模型和工具 I/O 仍由注入的出站实现承担。`runtime/execution/policy.py` 中的 `os.path` 只用于路径字符串计算，不读取文件；它不代表核心可以访问工作环境。
 
-依赖检查同时保留合法依赖的正例和越界导入的反例，覆盖嵌套适配器、应用层与整个运行时，防止检查只扫描到顶层文件。
+依赖检查同时保留合法依赖的正例和越界导入的反例，覆盖嵌套适配器、应用层、整个运行时与测试目录，防止检查只扫描到顶层文件。
 
 ## 对外名称与兼容入口
 
@@ -154,13 +153,6 @@ Python 类名只在遥测记录中成为持久化的取值，涉及的字段见[
 
 | 兼容入口 | 转发内容 | 处置 |
 |---|---|---|
-| 根 `super_agent.runtime` 门面：`runtime/__init__.py` 及 `api_engine.py`、`api_execution.py`、`api_machine.py`、`api_model.py`、`api_session.py` | `machine`、`execution`、`engine`、`session`、`protocol` 的名称 | 直接删除；`from super_agent.runtime import <子包>` 导入的是拥有类型的子包，不受影响 |
-| `app/agent_application.py` | `AgentApplication`、`new_agent_application` 与展示转换函数 | 直接删除 |
-| `app/tui_adapter.py` | 历史名称 `TerminalConversation`、`new_terminal_conversation`、`to_tui_*` | 直接删除 |
-| `app/workflows.py` | `Runner`、`WorkflowController` | 直接删除 |
-| `runtime/machine/aliases.py`、`runtime/execution/aliases.py`、`runtime/session/aliases.py` | 其他包的值，例如 `machine.Message`、`session.Engine` | 直接删除，包的 `__init__.py` 不再转发这些名称 |
-| `app/__init__.py` 中的 `AgentApplication`、`new_agent_application`、`TerminalConversation`、`new_terminal_conversation`、`WorkflowController` | 经上述兼容模块转发的应用层名称 | 直接删除 |
-| 类型迁移后留在原位置的转发：`app/agents.py` 的 `AgentProfile`、`filteredToolRunner`、`routedModel`，`app/config.py` 的 `MCPServerSettings`，`app/extensions.py` 的 `Extensions`，`app/mcp.py` 的 `MCPServerSummary`，`app/session.py` 的 `toolHooks`，`app/subagents.py` 转发的五个委派名称，`application/agents.py` 的 `AgentProfile`，`runtime/engine/engine.py` 的 `PolicySetter`、`PolicySnapshot`、`PolicyStore`，`runtime/telemetry/telemetry.py` 的 `Fields`、`install`、`record`，`tui/actions.py` 的 `extract_code_blocks` | 拥有模块中的同一对象 | 直接删除 |
 | 历史控制器构造入口：`app/agents.py` 的 `AgentController`，`app/mcp.py` 的 `MCPController` 与 `new_mcp_controller`，`app/memory.py` 的 `MemoryController` | 只为应用控制器注入设施的子类与工厂 | 直接删除：组合根直接构造 `application` 中的控制器并注入设施 |
 
 下列转发不是兼容入口，予以保留：各包 `__init__.py` 按 [Python 约定](../development.md#python-约定)公开的接口；`tools/commands.py`、`tools/files.py`、`tools/sandbox.py` 按平台选择实现的转发；终端以既有名称使用契约展示值的转发（`tui/conversation.py`、`tui/approval/model.py`、`tui/commands/ports.py`、`tui/transcript/model.py`），依据见[代码依赖与接口约束](#代码依赖与接口约束)。
@@ -221,7 +213,7 @@ Engine 文件显式指明 `machine`、`execution` 和 `protocol` 中的类型归
 - `frontend/transport.py`：`Channel` 与 `Cancellation`；`frontend/approval.py`：审批决定值。
 - `frontend/failure.py`：可展示的失败值 `Failure` 与 `CANCELLED`/`FAILED` 分类，含从异常转换的入口。
 - `frontend/wire.py`：契约的 JSON 投影，供 Web 事件使用。
-- 前端入站契约的应用实现和展示转换见[六边形边界的代码约束](#六边形边界的代码约束)；`app/agent_application.py` 和 `app/tui_adapter.py` 仅重新导出兼容名称。
+- 前端入站契约的应用实现和展示转换见[六边形边界的代码约束](#六边形边界的代码约束)。
 - `web/hub.py` 事件分发、`web/turns.py` 单轮槽位、`web/routes.py` 路由表、`web/server.py` HTTP 与事件流、`web/assets.py` 随包静态文件。
 - `web/static/index.html` 页面语义结构与可访问性容器、`web/static/style.css` 设计令牌、组件和响应式布局、`web/static/favicon.svg` 站点图标、`web/static/app.ts` 快照重建、事件消费、视图渲染与用户操作的 TypeScript 源码；`web/static/app.js` 是其随包发布的浏览器构建产物。静态前端不拥有业务规则，也不引入运行时或模型依赖。
 - `web/access.py` 启动令牌、Cookie 换取与 Host、Origin 校验，协议见[Web 访问认证](application-interface.md#web-访问认证)；`web/static/unauthorized.html` 是未认证请求得到的说明页。

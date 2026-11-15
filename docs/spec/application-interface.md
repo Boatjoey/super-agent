@@ -139,7 +139,7 @@ Web 界面把任何 `/api` 请求得到的 401 视为凭据缺失或失效：停
 | 附件与工作区查询 | `AttachmentsPort`、`WorkspacePort` | 附件验证、待提交附件及只读仓库、诊断查询 |
 | 记忆与扩展管理 | `MemoryPort`、`ExtensionPort`、`MCPPort` | 记忆读写与开关见[跨会话记忆](#跨会话记忆)；扩展与 MCP 按各自契约处理 |
 
-完整端口集合命名为 `FrontendPorts`，声明于[前端契约](../../super_agent/frontend/ports.py)及各功能端口；`tui` 只按终端既有名称重新导出契约，不再拥有独立的应用端口。应用实现为 [AgentApplication](../../super_agent/application/agent_application.py)，`TerminalConversation` 是其历史名称。
+完整端口集合命名为 `FrontendPorts`，声明于[前端契约](../../super_agent/frontend/ports.py)及各功能端口；`tui` 只按终端既有名称重新导出契约，不再拥有独立的应用端口。应用实现为 [AgentApplication](../../super_agent/application/agent_application.py)。
 
 该集合按用例拆分，前端功能只使用自己需要的窄端口。不能因存在统一组合入口，就让每个界面模块直接调用整个运行时。
 
