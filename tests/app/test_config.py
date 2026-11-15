@@ -261,39 +261,143 @@ def test_strict_sandbox_platforms(platform: str, supported: bool) -> None:
     assert strict_sandbox_supported(platform) is supported
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="checks the macOS resolution of an unset sandbox mode")
-def test_load_config_keeps_an_unset_strict_sandbox_on_macos(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+#: A settings file that says nothing about the sandbox, so its mode is unset.
+SETTINGS_WITHOUT_SANDBOX: Final[str] = '{"provider":"openai","providers":{"openai":{"api_key":"key","model":"model"}}}'
+
+#: ``sys.platform`` on Windows, which has no strict sandbox implementation.
+WINDOWS: Final[str] = "win32"
+
+
+def sandbox_settings(mode: str) -> str:
+    """A settings file whose ``sandbox`` block states ``mode`` and nothing else."""
+    return (
+        '{"provider":"openai","sandbox":{"mode":"' + mode + '"},'
+        '"providers":{"openai":{"api_key":"key","model":"model"}}}'
+    )
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux"])
+def test_load_config_keeps_an_unset_sandbox_strict_where_one_exists(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, platform: str
+) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(home, '{"provider":"openai","providers":{"openai":{"api_key":"key","model":"model"}}}')
+    writeSettings(home, SETTINGS_WITHOUT_SANDBOX)
+    monkeypatch.setattr(sys, "platform", platform)
 
     cfg = load_config(Flags(), lookup())
 
-    # macOS has a sandbox now, so an unset mode stays strict instead of being
-    # downgraded to running commands with full authority.
+    # Both platforms have a strict sandbox, so an unset mode is simply the
+    # default and is never downgraded to running commands with full authority.
     assert cfg.sandbox.mode == "strict"
     assert cfg.sandbox_downgraded is False
     assert cfg.sandbox.downgraded is False
 
 
-def test_load_config_downgrades_an_unset_strict_sandbox_without_an_implementation(
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param(SETTINGS_WITHOUT_SANDBOX, id="no-sandbox-block"),
+        pytest.param(sandbox_settings(""), id="empty-mode"),
+    ],
+)
+def test_load_config_downgrades_an_unset_sandbox_without_an_implementation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, content: str
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    writeSettings(home, content)
+    monkeypatch.setattr(sys, "platform", WINDOWS)
+
+    cfg = load_config(Flags(), lookup())
+
+    # The application still starts, and the downgrade is recorded so every
+    # front end can say that commands run with full authority.
+    assert cfg.sandbox.mode == "strict"
+    assert cfg.sandbox_downgraded is True
+    assert cfg.sandbox.downgraded is True
+
+
+def test_load_config_refuses_an_explicit_strict_sandbox_without_an_implementation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    writeSettings(home, '{"provider":"openai","providers":{"openai":{"api_key":"key","model":"model"}}}')
+    writeSettings(home, sandbox_settings("strict"))
+    monkeypatch.setattr(sys, "platform", WINDOWS)
 
-    def unsupported(platform: str | None = None) -> bool:
-        """Stands in for a platform such as Windows that has no strict sandbox."""
-        return False
+    with pytest.raises(ValueError) as failure:
+        load_config(Flags(), lookup())
 
-    monkeypatch.setattr(app_config, "strict_sandbox_supported", unsupported)
+    # Asked for by name, strict cannot be honoured here: startup fails rather
+    # than weakening the request, and the message names both ways out.
+    message = str(failure.value)
+    assert "sandbox mode strict is not supported on this platform" in message
+    assert "remove sandbox.mode from settings.json" in message
+    assert "set it to off" in message
+
+
+def test_load_config_keeps_an_explicit_off_sandbox_without_a_downgrade(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    writeSettings(home, sandbox_settings("off"))
+    monkeypatch.setattr(sys, "platform", WINDOWS)
 
     cfg = load_config(Flags(), lookup())
 
-    assert cfg.sandbox.mode == "strict"
-    assert cfg.sandbox_downgraded is True
-    assert cfg.sandbox.downgraded is True
+    # Off was chosen rather than imposed, so there is no downgrade to announce.
+    assert cfg.sandbox.mode == "off"
+    assert cfg.sandbox_downgraded is False
+    assert cfg.sandbox.downgraded is False
+
+
+@pytest.mark.parametrize(("platform", "mode"), [("linux", "strict"), ("darwin", "strict"), (WINDOWS, "")])
+def test_the_template_states_strict_only_where_it_can_be_honoured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, platform: str, mode: str
+) -> None:
+    path = tmp_path / ".superagent" / "settings.json"
+    monkeypatch.setattr(sys, "platform", platform)
+
+    written = load_settings_file(str(path))
+    reread = load_settings_file(str(path))
+
+    assert written.sandbox.mode == mode
+    assert reread.sandbox.mode == mode
+
+
+def test_a_fresh_install_starts_downgraded_on_every_run_without_an_implementation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(sys, "platform", WINDOWS)
+
+    first = load_config(Flags(), lookup())
+    second = load_config(Flags(), lookup())
+
+    # The first run writes the template and the second reads it back; neither
+    # may take the template's own mode for an explicit strict request.
+    assert first.sandbox_downgraded is True
+    assert second.sandbox_downgraded is True
+
+
+def test_rewriting_settings_keeps_an_unset_sandbox_mode_unset(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Saving any setting must not turn the default into an explicit strict.
+
+    Every writer (credentials, MCP servers, agents, the memory switch) loads the
+    normalised settings and saves them back. Were the default filled in on load,
+    the next start on a platform without a sandbox would refuse.
+    """
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    path = writeSettings(home, SETTINGS_WITHOUT_SANDBOX)
+    monkeypatch.setattr(sys, "platform", WINDOWS)
+
+    app_config.save_settings_file(str(path), load_settings_file(str(path)))
+
+    assert load_settings_file(str(path)).sandbox.mode == ""
+    assert load_config(Flags(), lookup()).sandbox_downgraded is True
 
 
 def test_load_config_maps_mcp_servers_in_name_order(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

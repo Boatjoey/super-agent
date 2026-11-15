@@ -292,7 +292,16 @@ def default_settings() -> Settings:
             "claude": ProviderConfig(api_key=CLAUDE_PLACEHOLDER, model="claude-3-7-sonnet-20250219"),
         },
         permissions=PermissionSettings(mode="ask", network="deny"),
-        sandbox=SandboxSettings(mode="strict", cpu_seconds=120, memory_mb=1024, max_processes=128, max_open_files=256),
+        sandbox=SandboxSettings(
+            # ``strict`` is written only where it can be honoured. Elsewhere an
+            # explicit ``strict`` refuses to start, so the template leaves the
+            # mode unset and a fresh install gets the announced downgrade.
+            mode="strict" if strict_sandbox_supported() else "",
+            cpu_seconds=120,
+            memory_mb=1024,
+            max_processes=128,
+            max_open_files=256,
+        ),
         mcp_servers={},
         lsp_servers={},
         agent="build",
@@ -336,18 +345,7 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
         mode = PERMISSION_MODE_BYPASS
     if not valid_permission_mode(mode):
         raise ValueError("invalid permission mode: " + str(mode))
-    sandboxMode = SandboxMode(settings.sandbox.mode)
-    if not valid_sandbox_mode(sandboxMode):
-        raise ValueError("invalid sandbox mode: " + settings.sandbox.mode)
-    # Linux and macOS have a strict sandbox. On every other platform the
-    # *configured* mode is kept — ``Config.sandbox.mode`` stays ``strict``, since
-    # that is what the settings say — but the downgrade is flagged so the command
-    # runner can fall back to unsandboxed execution and the operator is told that
-    # commands run with full authority. Choosing ``strict`` explicitly on an
-    # unsupported platform is still an error, not a silent downgrade.
-    sandboxDowngraded = False
-    if not strict_sandbox_supported() and sandboxMode == SANDBOX_MODE_STRICT:
-        sandboxDowngraded = True
+    sandboxMode, sandboxDowngraded = resolve_sandbox_mode(settings.sandbox.mode)
     status_line = resolve_status_line(settings.tui.status_line)
     rules = PermissionRules(
         allow_tools=settings.permissions.allow_tools,
@@ -481,6 +479,33 @@ def resolveProviderConfig(settings: Settings, provider: str, lookup: Lookup) -> 
     return config
 
 
+def resolve_sandbox_mode(configured: str) -> tuple[SandboxMode, bool]:
+    """The mode ``sandbox.mode`` selects, and whether it was downgraded.
+
+    An unset mode — the key absent, or the empty string — means the default,
+    ``strict``. Linux and macOS have a strict sandbox, so there the two spellings
+    are the same request. Elsewhere they deliberately part: the default is
+    downgraded, so the application still starts and every front end can say that
+    commands run with full authority, while an explicit ``strict`` is a request
+    this platform cannot honour, and it fails startup instead of being weakened.
+
+    A downgraded result keeps ``strict`` as its mode and reports the downgrade
+    beside it. The command runner honours that flag only where no sandbox exists,
+    so a platform that has one always builds it.
+    """
+    if configured == "":
+        return SANDBOX_MODE_STRICT, not strict_sandbox_supported()
+    mode = SandboxMode(configured)
+    if not valid_sandbox_mode(mode):
+        raise ValueError("invalid sandbox mode: " + configured)
+    if mode == SANDBOX_MODE_STRICT and not strict_sandbox_supported():
+        raise ValueError(
+            "sandbox mode strict is not supported on this platform: only Linux and macOS have a strict sandbox; "
+            "remove sandbox.mode from settings.json to run commands unsandboxed with a warning, or set it to off"
+        )
+    return mode, False
+
+
 def resolve_status_line(items: tuple[str, ...] | None) -> tuple[str, ...]:
     """Validate the retained ``tui.status_line`` setting.
 
@@ -597,7 +622,10 @@ def normalizeSettings(settings: Settings) -> Settings:
         ),
         sandbox=dataclasses.replace(
             sandbox,
-            mode=sandbox.mode or defaults.mode,
+            # ``mode`` stays as stored. An unset mode and an explicit ``strict``
+            # resolve differently where no strict sandbox exists, and every
+            # writer saves what this returns: filling in the default here would
+            # turn "unset" into "strict" the next time the file is written.
             cpu_seconds=sandbox.cpu_seconds if sandbox.cpu_seconds > 0 else defaults.cpu_seconds,
             memory_mb=sandbox.memory_mb if sandbox.memory_mb > 0 else defaults.memory_mb,
             max_processes=sandbox.max_processes if sandbox.max_processes > 0 else defaults.max_processes,
