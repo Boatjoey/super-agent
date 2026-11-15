@@ -10,7 +10,7 @@ import dataclasses
 from super_agent import llm
 from super_agent.app.config import (
     Config,
-    firstNonEmpty,
+    first_non_empty,
     load_settings_file,
     save_settings_file,
 )
@@ -129,13 +129,13 @@ def buildAgentProfiles(cfg: Config, providers: dict[str, llm.ProviderConfig]) ->
         name = rawName.strip()
         if name == "" or name in ("build", "plan"):
             raise ValueError("custom agent name is empty or reserved: " + name)
-        provider = firstNonEmpty(item.provider, cfg.provider)
+        provider = first_non_empty(item.provider, cfg.provider)
         providerCfg = providers.get(provider)
         if providerCfg is None:
             raise ValueError("agent " + name + " references unknown provider: " + provider)
         if item.model != "":
             providerCfg = dataclasses.replace(providerCfg, model=item.model)
-        mode = PermissionMode(firstNonEmpty(item.permission_mode, str(cfg.permission_mode)))
+        mode = PermissionMode(first_non_empty(item.permission_mode, str(cfg.permission_mode)))
         if not valid_permission_mode(mode):
             raise ValueError("agent " + name + " has invalid permission mode: " + str(mode))
         profiles[name] = AgentProfile(

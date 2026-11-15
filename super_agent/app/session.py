@@ -28,7 +28,7 @@ from super_agent import llm, store, tools
 from super_agent.app.agents import AgentController, buildAgentProfiles, initialMessagesWithAgent
 from super_agent.app.config import (
     Config,
-    firstNonEmpty,
+    first_non_empty,
     instructionSourcePaths,
     settings_path,
     settingsMap,
@@ -84,7 +84,7 @@ async def new_session_with_extensions(
     """
     workspaceContext = contextForConfig(cfg)
     cwd = workspaceContext.get_cwd()
-    configRoot = firstNonEmpty(cfg.config_root, cfg.project.root, cwd)
+    configRoot = first_non_empty(cfg.config_root, cfg.project.root, cwd)
     workspaceRuntime = newWorkspace(workspaceContext)
     cfg.sandbox.workspace = workspaceContext.get_primary_root()
     telemetry.configure(cfg.telemetry_path)
@@ -101,7 +101,7 @@ async def new_session_with_extensions(
             # a profile naming another provider still gets its own entry.
             providers[cfg.provider] = cfg.model_config
         profiles = buildAgentProfiles(cfg, providers)
-        agentName = firstNonEmpty(cfg.agent, "build")
+        agentName = first_non_empty(cfg.agent, "build")
         profile = profiles.get(agentName)
         if profile is None:
             raise ValueError("unknown configured agent: " + agentName)

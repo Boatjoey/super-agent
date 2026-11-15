@@ -16,10 +16,10 @@ from typing import Final, Protocol
 
 from super_agent.jsonutil import json_field
 from super_agent.runtime.execution.command_analyzer import (
-    analyzeCommandRequest,
-    firstNonEmpty,
-    jsonStringField,
-    toolPaths,
+    analyze_command_request,
+    first_non_empty,
+    json_string_field,
+    tool_paths,
 )
 from super_agent.runtime.permission.types import (
     COMMAND_CLASS_DESTRUCTIVE,
@@ -147,33 +147,33 @@ class DefaultPolicy:
         request = self.permission_request(call, input)
         if (
             self.matches(call.name, self._rules.deny_tools)
-            or self.matchesPrefix(request.command, self._rules.deny_prefixes)
-            or self.touchesProtectedPath(request)
-            or self.touchesDeniedPath(request)
-            or self.usesDeniedEnv(request)
+            or self.matches_prefix(request.command, self._rules.deny_prefixes)
+            or self.touches_protected_path(request)
+            or self.touches_denied_path(request)
+            or self.uses_denied_env(request)
         ):
             return ToolDecision.DECISION_DENIED
         if self._mode == PERMISSION_MODE_BYPASS:
             return ToolDecision.DECISION_RUN_DIRECTLY
         if self._mode == PERMISSION_MODE_PLAN:
-            if request.command_class == COMMAND_CLASS_READ_ONLY and not self.needsApproval(call, input.tool_specs):
+            if request.command_class == COMMAND_CLASS_READ_ONLY and not self.needs_approval(call, input.tool_specs):
                 return ToolDecision.DECISION_RUN_DIRECTLY
             return ToolDecision.DECISION_DENIED
-        if request.command_class == COMMAND_CLASS_DESTRUCTIVE or self.networkDenied(request):
+        if request.command_class == COMMAND_CLASS_DESTRUCTIVE or self.network_denied(request):
             return ToolDecision.DECISION_NEEDS_APPROVAL
         if (
             self.matches(call.name, self._rules.allow_tools)
-            or self.matchesPrefix(request.command, self._rules.allow_prefixes)
-            or self.pathsAllowed(request)
-            or self.envAllowed(request)
+            or self.matches_prefix(request.command, self._rules.allow_prefixes)
+            or self.paths_allowed(request)
+            or self.env_allowed(request)
         ):
             return ToolDecision.DECISION_RUN_DIRECTLY
         if self._mode == PERMISSION_MODE_ACCEPT_EDITS:
             if request.command_class == COMMAND_CLASS_READ_ONLY:
                 return ToolDecision.DECISION_RUN_DIRECTLY
-            if self.isWriteTool(call.name):
+            if self.is_write_tool(call.name):
                 return ToolDecision.DECISION_RUN_DIRECTLY
-        if self.needsApproval(call, input.tool_specs):
+        if self.needs_approval(call, input.tool_specs):
             return ToolDecision.DECISION_NEEDS_APPROVAL
         return ToolDecision.DECISION_RUN_DIRECTLY
 
@@ -189,39 +189,39 @@ class DefaultPolicy:
         if call.name in ("web_search", "browser_fetch"):
             return replace(request, command_class=COMMAND_CLASS_NETWORK, reason="network access requires approval")
         if call.name in ("bash", "run_command"):
-            command = jsonStringField(call.input, "command")
+            command = json_string_field(call.input, "command")
             if call.name == "run_command":
-                cwd = firstNonEmpty(jsonStringField(call.input, "cwd"), request.cwd)
-                return analyzeCommandRequest(replace(request, command=command, cwd=cwd))
-            return analyzeCommandRequest(replace(request, command=command))
+                cwd = first_non_empty(json_string_field(call.input, "cwd"), request.cwd)
+                return analyze_command_request(replace(request, command=command, cwd=cwd))
+            return analyze_command_request(replace(request, command=command))
         if call.name in ("git_status", "git_diff", "read_file", "list_files", "search"):
             return replace(
                 request,
                 command_class=COMMAND_CLASS_READ_ONLY,
-                touched_paths=toolPaths(call),
+                touched_paths=tool_paths(call),
                 reason="read-only tool",
             )
         if call.name in ("write_file", "apply_patch"):
             return replace(
                 request,
                 command_class=COMMAND_CLASS_WRITE,
-                touched_paths=toolPaths(call),
+                touched_paths=tool_paths(call),
                 reason="tool writes workspace files",
             )
-        if not self.needsApproval(call, input.tool_specs):
+        if not self.needs_approval(call, input.tool_specs):
             return replace(request, command_class=COMMAND_CLASS_READ_ONLY, reason="tool spec is marked safe")
         return request
 
-    def needsApproval(self, call: ToolCall, specs: tuple[ToolSpec, ...]) -> bool:
-        return isRiskyTool(call.name, specs)
+    def needs_approval(self, call: ToolCall, specs: tuple[ToolSpec, ...]) -> bool:
+        return is_risky_tool(call.name, specs)
 
-    def isWriteTool(self, name: str) -> bool:
+    def is_write_tool(self, name: str) -> bool:
         return name in ("write_file", "apply_patch")
 
-    def networkDenied(self, request: PermissionRequest) -> bool:
+    def network_denied(self, request: PermissionRequest) -> bool:
         return self._rules.network != "allow" and request.command_class == COMMAND_CLASS_NETWORK
 
-    def touchesProtectedPath(self, request: PermissionRequest) -> bool:
+    def touches_protected_path(self, request: PermissionRequest) -> bool:
         """Whether the call reaches outside the sandbox's ordinary reach.
 
         ``.git``, ``.env``, SSH keys, AWS credentials, and gcloud configuration
@@ -229,7 +229,7 @@ class DefaultPolicy:
         only place a tool may write.
         """
         for path in request.touched_paths:
-            clean = _cleanSlash(path)
+            clean = _clean_slash(path)
             if (
                 clean == ".git"
                 or clean.startswith(".git/")
@@ -240,24 +240,24 @@ class DefaultPolicy:
                 or ".config/gcloud/" in clean
             ):
                 return True
-            if isAbsolutePath(path) and request.cwd != "":
+            if is_absolute_path(path) and request.cwd != "":
                 rel = _rel(request.cwd, path)
                 if rel is None or rel == ".." or rel.startswith(".." + os.sep):
                     return True
         return False
 
-    def touchesDeniedPath(self, request: PermissionRequest) -> bool:
-        return any(self.matchesPath(path, self._rules.deny_paths) for path in request.touched_paths)
+    def touches_denied_path(self, request: PermissionRequest) -> bool:
+        return any(self.matches_path(path, self._rules.deny_paths) for path in request.touched_paths)
 
-    def usesDeniedEnv(self, request: PermissionRequest) -> bool:
+    def uses_denied_env(self, request: PermissionRequest) -> bool:
         return any(self.matches(key, self._rules.deny_env) for key in request.env_vars)
 
-    def pathsAllowed(self, request: PermissionRequest) -> bool:
+    def paths_allowed(self, request: PermissionRequest) -> bool:
         if not request.touched_paths or not self._rules.allow_paths:
             return False
-        return all(self.matchesPath(path, self._rules.allow_paths) for path in request.touched_paths)
+        return all(self.matches_path(path, self._rules.allow_paths) for path in request.touched_paths)
 
-    def envAllowed(self, request: PermissionRequest) -> bool:
+    def env_allowed(self, request: PermissionRequest) -> bool:
         if not request.env_vars or not self._rules.allow_env:
             return False
         return all(self.matches(key, self._rules.allow_env) for key in request.env_vars)
@@ -265,7 +265,7 @@ class DefaultPolicy:
     def matches(self, value: str, patterns: tuple[str, ...]) -> bool:
         return any(pattern == value for pattern in patterns)
 
-    def matchesPrefix(self, command: str, prefixes: tuple[str, ...]) -> bool:
+    def matches_prefix(self, command: str, prefixes: tuple[str, ...]) -> bool:
         """Whether ``command`` starts with ``prefix`` at a token boundary.
 
         ``"git"`` matches ``"git status"`` and ``"git"`` but not ``"gitk"``.
@@ -280,16 +280,16 @@ class DefaultPolicy:
                 return True
         return False
 
-    def matchesPath(self, path: str, patterns: tuple[str, ...]) -> bool:
-        path = _cleanSlash(path)
+    def matches_path(self, path: str, patterns: tuple[str, ...]) -> bool:
+        path = _clean_slash(path)
         for pattern in patterns:
-            pattern = _cleanSlash(pattern)
+            pattern = _clean_slash(pattern)
             if path == pattern or path.startswith(pattern.rstrip("/") + "/"):
                 return True
         return False
 
 
-def isRiskyTool(name: str, specs: tuple[ToolSpec, ...]) -> bool:
+def is_risky_tool(name: str, specs: tuple[ToolSpec, ...]) -> bool:
     """Whether a tool needs approval, defaulting to yes for an unknown tool."""
     for spec in specs:
         if spec.name == name:
@@ -297,7 +297,7 @@ def isRiskyTool(name: str, specs: tuple[ToolSpec, ...]) -> bool:
     return True
 
 
-def isAbsolutePath(path: str) -> bool:
+def is_absolute_path(path: str) -> bool:
     """Whether ``path`` is rooted, including Windows paths that name no drive.
 
     ``os.path.isabs("/etc/passwd")`` is false on Windows although the path
@@ -307,7 +307,7 @@ def isAbsolutePath(path: str) -> bool:
     return os.path.isabs(path) or (os.name == "nt" and path[:1] in ("/", "\\"))
 
 
-def _cleanSlash(path: str) -> str:
+def _clean_slash(path: str) -> str:
     """``filepath.ToSlash(filepath.Clean(path))``."""
     return os.path.normpath(path).replace(os.sep, "/")
 

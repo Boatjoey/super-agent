@@ -46,20 +46,20 @@ _WORD_BREAK = re.compile(r"[\s;&|()<>`]+")
 _ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=(.+)", re.DOTALL)
 
 
-def analyzeCommandRequest(request: PermissionRequest) -> PermissionRequest:
+def analyze_command_request(request: PermissionRequest) -> PermissionRequest:
     """Fill in the class, reason, touched paths, and environment of a command."""
     command = request.command.strip()
-    touched = (*request.touched_paths, *commandPaths(command))
-    env = commandEnv(command)
+    touched = (*request.touched_paths, *command_paths(command))
+    env = command_env(command)
 
     if command == "":
         command_class, reason = COMMAND_CLASS_UNKNOWN, "empty command"
-    elif hasAnyToken(command, _DESTRUCTIVE_TOKENS) or "rm -rf" in command:
+    elif has_any_token(command, _DESTRUCTIVE_TOKENS) or "rm -rf" in command:
         command_class, reason = COMMAND_CLASS_DESTRUCTIVE, "destructive shell command"
-    elif containsNetworkIntent(command):
+    elif contains_network_intent(command):
         command_class, reason = COMMAND_CLASS_NETWORK, "network-capable shell command"
-    elif commandMayWrite(command):
-        if isReadOnlyGitCommand(command) and not _writes_besides_read_only_git(command):
+    elif command_may_write(command):
+        if is_read_only_git_command(command) and not _writes_besides_read_only_git(command):
             command_class, reason = COMMAND_CLASS_READ_ONLY, "read-only git command"
         else:
             command_class, reason = COMMAND_CLASS_WRITE, "shell command may write files"
@@ -75,11 +75,11 @@ def analyzeCommandRequest(request: PermissionRequest) -> PermissionRequest:
     )
 
 
-def commandMayWrite(command: str) -> bool:
-    return ">" in command or "| tee" in command or hasAnyToken(command, _WRITE_TOKENS)
+def command_may_write(command: str) -> bool:
+    return ">" in command or "| tee" in command or has_any_token(command, _WRITE_TOKENS)
 
 
-def isReadOnlyGitCommand(command: str) -> bool:
+def is_read_only_git_command(command: str) -> bool:
     return any(command.startswith(prefix) for prefix in _READ_ONLY_GIT_PREFIXES)
 
 
@@ -114,7 +114,7 @@ def _redirects_or_substitutes(command: str) -> bool:
     return any(mark in text for mark in (">", "$(", "`", "<("))
 
 
-def hasAnyToken(command: str, tokens: tuple[str, ...]) -> bool:
+def has_any_token(command: str, tokens: tuple[str, ...]) -> bool:
     """Whether any shell word of ``command`` equals one of ``tokens``.
 
     Comparing whole words rather than substrings is what keeps ``gitk`` from
@@ -147,12 +147,12 @@ def _shell_words(command: str) -> list[str]:
     return words
 
 
-def containsNetworkIntent(command: str) -> bool:
+def contains_network_intent(command: str) -> bool:
     if "://" in command:
         return True
-    if hasAnyToken(command, _NETWORK_CLIENTS):
+    if has_any_token(command, _NETWORK_CLIENTS):
         return True
-    if not hasAnyToken(command, _NETWORK_PACKAGE_MANAGERS):
+    if not has_any_token(command, _NETWORK_PACKAGE_MANAGERS):
         return False
     # The words joined by single spaces as well, so ``git\tpush`` and
     # ``git "push"`` say what ``git push`` says.
@@ -162,7 +162,7 @@ def containsNetworkIntent(command: str) -> bool:
     )
 
 
-def commandPaths(command: str) -> tuple[str, ...]:
+def command_paths(command: str) -> tuple[str, ...]:
     """Every field that looks like a path, so the policy can vet it."""
     paths: list[str] = []
     for field in command.split():
@@ -172,7 +172,7 @@ def commandPaths(command: str) -> tuple[str, ...]:
     return tuple(paths)
 
 
-def commandEnv(command: str) -> tuple[str, ...]:
+def command_env(command: str) -> tuple[str, ...]:
     """Every ``NAME=value`` prefix, the way a shell would export it."""
     variables: list[str] = []
     for field in command.split():
@@ -182,9 +182,9 @@ def commandEnv(command: str) -> tuple[str, ...]:
     return tuple(variables)
 
 
-def toolPaths(call: ToolCall) -> tuple[str, ...]:
+def tool_paths(call: ToolCall) -> tuple[str, ...]:
     """The paths a structured tool call names, from ``path``/``cwd``/``paths``/``files``."""
-    parsed = _parseInput(call.input)
+    parsed = _parse_input(call.input)
     if parsed is None:
         return ()
     paths: list[str] = []
@@ -201,23 +201,23 @@ def toolPaths(call: ToolCall) -> tuple[str, ...]:
     return tuple(paths)
 
 
-def jsonStringField(input: str, field: str) -> str:
+def json_string_field(input: str, field: str) -> str:
     """Read one string field out of a tool call's raw JSON input."""
-    parsed = _parseInput(input)
+    parsed = _parse_input(input)
     if parsed is None:
         return ""
     value = parsed.get(field)
     return value if isinstance(value, str) else ""
 
 
-def firstNonEmpty(*values: str) -> str:
+def first_non_empty(*values: str) -> str:
     for value in values:
         if value != "":
             return value
     return ""
 
 
-def _parseInput(input: str) -> dict[str, Any] | None:
+def _parse_input(input: str) -> dict[str, Any] | None:
     try:
         parsed: Any = json.loads(input)
     except (TypeError, ValueError):

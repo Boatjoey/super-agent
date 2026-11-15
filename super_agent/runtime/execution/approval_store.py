@@ -66,10 +66,10 @@ class MemoryApprovalStore:
 
 def new_approval_key(call: ToolCall) -> ApprovalKey:
     """The key an approval decision is recorded under."""
-    return ApprovalKey(tool_name=call.name, input_hash=hashCanonicalInput(call.input))
+    return ApprovalKey(tool_name=call.name, input_hash=hash_canonical_input(call.input))
 
 
-def hashCanonicalInput(input: str) -> str:
+def hash_canonical_input(input: str) -> str:
     """SHA-256 of the input in its canonical JSON form.
 
     Input that is not JSON is hashed as written: parsing fails and the raw text

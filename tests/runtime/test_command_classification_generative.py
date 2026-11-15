@@ -64,7 +64,7 @@ from super_agent.runtime.execution import (
     PermissionRules,
     ToolDecision,
     ToolPolicyInput,
-    analyzeCommandRequest,
+    analyze_command_request,
     new_policy,
 )
 from super_agent.runtime.permission.types import (
@@ -118,7 +118,7 @@ def approval_path(command: str) -> tuple[ToolDecision, ...]:
 
 
 def command_class(command: str) -> CommandClass:
-    return analyzeCommandRequest(PermissionRequest(command=command)).command_class
+    return analyze_command_request(PermissionRequest(command=command)).command_class
 
 
 def relaxation(command: str, baseline: str) -> str | None:

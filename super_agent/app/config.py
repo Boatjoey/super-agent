@@ -66,7 +66,7 @@ __all__ = [
     "decodeExtensions",
     "default_settings",
     "envTrue",
-    "firstNonEmpty",
+    "first_non_empty",
     "load_config",
     "load_settings",
     "load_settings_file",
@@ -332,7 +332,7 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
         telemetryPath = os.path.join(cwd, telemetryPath)
     bundle = loadInstructions(cwd)
     extensions = loadExtensions(settings.extensions, cwd)
-    mode = PermissionMode(firstNonEmpty(flags.permission_mode, settings.permissions.mode, "ask"))
+    mode = PermissionMode(first_non_empty(flags.permission_mode, settings.permissions.mode, "ask"))
     # The YOLO environment variable is a fallback for when no explicit mode was
     # requested; an explicit --approval-mode flag always wins so a checked-in
     # .env cannot silently disable permission prompts.
@@ -355,7 +355,7 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
         deny_paths=settings.permissions.deny_paths,
         allow_env=settings.permissions.allow_env,
         deny_env=settings.permissions.deny_env,
-        network=firstNonEmpty(settings.permissions.network, "deny"),
+        network=first_non_empty(settings.permissions.network, "deny"),
     )
     # Settings come from JSON, where object key order is not meaningful, so the
     # server names are sorted to make the resolved order deterministic.
@@ -413,7 +413,7 @@ def load_config(flags: Flags, lookup: Lookup | None = None) -> Config:
         instructions=bundle,
         instruction_sources=instructionSourcePaths(bundle),
         agents=settings.agents,
-        agent=firstNonEmpty(settings.agent, "build"),
+        agent=first_non_empty(settings.agent, "build"),
         extensions=extensions,
         telemetry_path=telemetryPath,
         memory=dataclasses.replace(
@@ -529,7 +529,7 @@ def envTrue(lookup: Lookup, key: str) -> bool:
     return lookup(key) == "true"
 
 
-def firstNonEmpty(*values: str) -> str:
+def first_non_empty(*values: str) -> str:
     """The first value that is not the empty string."""
     for value in values:
         if value != "":
