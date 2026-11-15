@@ -24,7 +24,7 @@ Gap 是我们需要努力完成的事情。本文件集中维护这些工作：�
 | G34 | 加深命令分类与工具输出的安全测试 | [工具](spec/tools.md)、[质量约束](design/constraints.md) | `runtime/execution/command_analyzer.py` 的 shell 分类没有生成式测试，引号、子 shell、重定向与变量展开的组合缺少覆盖；MCP 与 Web 工具输出中夹带提示注入的情形没有用例 | 上述场景有生成式或专门用例覆盖；发现的问题按[修复 bug](development.md#修复-bug)流程处理 |
 | G35 | 建立性能基准与遥测汇总 | [遥测](spec/runtime.md#遥测)、[质量约束](design/constraints.md) | 没有启动耗时、长会话回放与流式通知去重的基准；`estimateTokens` 是粗略估算，影响上下文压缩的时机；遥测 JSONL 没有按轮次与步骤汇总的耗时视图 | 基准可复现运行，结果有记录；token 估算用服务商返回的用量校正；可按轮次与步骤查看模型首 token、工具执行与审批等待耗时；涉及持久化格式的优化先更新[会话规范](spec/session.md) |
 | G36 | 完善工程化门槛与发布流程 | [开发命令](development.md#开发命令)、[构建](development.md#构建)、[完成标准](development.md#完成标准) | 覆盖率检查没有下限；没有版本号、变更记录与发布流程的约定；`tools/web.py` 使用 `httpx`、`llm/openai.py` 使用 `httpx2`，两个 HTTP 客户端库并存，必要性未说明；没有提交前检查 | 覆盖率下限与 G25 的度量指标进入持续集成门禁；完成一次从打标签到安装后启动的发布演练；HTTP 客户端依赖的取舍有结论；开发流程文档同步更新 |
-| G38 | 在配置规范中补齐钩子事件与 Web 启动参数 | [配置](spec/config.md) | 钩子事件名只存在于 `app/extensions.py` 的 `HOOK_EVENTS`，[扩展](spec/config.md#扩展)没有列出；[命令行参数](spec/config.md#命令行参数与环境变量)表缺少 `--web`、`--host`、`--port` | 规范列出全部钩子事件与上述参数；测试比对规范与实现的清单，格式变化时明确失败 |
+| G38 | 在配置规范中补齐钩子事件与 Web 启动参数 | [配置](spec/config.md) | 钩子事件已于 2026-11-15 列入[扩展](spec/config.md#扩展)，并有测试比对实现清单。仍缺：[命令行参数](spec/config.md#命令行参数与环境变量)表缺少 `--web`、`--host`、`--port` | 规范列出全部钩子事件与上述参数；测试比对规范与实现的清单，格式变化时明确失败 |
 | G39 | Linux 严格沙箱隐藏真实 home 目录 | [工具沙箱](spec/tools.md#沙箱)、[授权与工作范围](design/constraints.md#授权与工作范围) | `tools/sandbox_linux.py` 只读挂载宿主根目录，只替换 `/tmp` 与 `/var/tmp`，并把 `HOME` 指向临时目录；真实 `/home/<user>` 仍可按绝对路径读取，包括保存服务商密钥的 `~/.superagent/settings.json` 与 `~/.ssh`。macOS 严格沙箱已拒绝读取 home | 严格沙箱内按绝对路径读取真实 home 失败，工作区位于 home 下时仍可读写；Linux 集成用例覆盖并在持续集成中运行 |
 
 ## 说明
