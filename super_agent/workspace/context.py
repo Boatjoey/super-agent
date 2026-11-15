@@ -47,14 +47,14 @@ class Context:
     before the remaining components are re-appended.
     """
 
-    def __init__(self, primaryRoot: str, cwd: str, roots: Sequence[Root]) -> None:
-        self._primaryRoot = primaryRoot
+    def __init__(self, primary_root: str, cwd: str, roots: Sequence[Root]) -> None:
+        self._primary_root = primary_root
         self._cwd = cwd
         self._roots = tuple(roots)
 
     def get_primary_root(self) -> str:
         """The canonical primary root."""
-        return self._primaryRoot
+        return self._primary_root
 
     def get_cwd(self) -> str:
         """The canonical directory relative paths resolve against."""
@@ -70,7 +70,7 @@ class Context:
             raise ValueError("path is required")
         if not os.path.isabs(path):
             path = os.path.join(self._cwd, path)
-        return canonicalNearest(os.path.abspath(path))
+        return canonical_nearest(os.path.abspath(path))
 
     def can_read(self, path: str) -> bool:
         """Whether ``path`` lies inside a readable root."""
@@ -78,7 +78,7 @@ class Context:
             resolved = self.resolve_path(path)
         except (OSError, ValueError):
             return False
-        return self.canAccess(resolved, write=False)
+        return self.can_access(resolved, write=False)
 
     def can_write(self, path: str) -> bool:
         """Whether ``path`` lies inside a writable root."""
@@ -86,9 +86,9 @@ class Context:
             resolved = self.resolve_path(path)
         except (OSError, ValueError):
             return False
-        return self.canAccess(resolved, write=True)
+        return self.can_access(resolved, write=True)
 
-    def canAccess(self, path: str, write: bool) -> bool:
+    def can_access(self, path: str, write: bool) -> bool:
         """The containment check: a lexically relative path that never escapes."""
         for root in self._roots:
             if write and root.access != ACCESS_READ_WRITE:
@@ -102,27 +102,27 @@ class Context:
         return False
 
 
-def new_context(primaryRoot: str, cwd: str, roots: Sequence[Root]) -> Context:
+def new_context(primary_root: str, cwd: str, roots: Sequence[Root]) -> Context:
     """Build a validated context, or raise.
 
     Every path is canonicalized and the primary root and cwd must be readable by
     the resulting policy, so a context that exists is one that works.
     """
-    if primaryRoot == "" or cwd == "":
+    if primary_root == "" or cwd == "":
         raise ValueError("workspace primary root and cwd are required")
-    primary = canonicalDirectory(primaryRoot)
-    working = canonicalDirectory(cwd)
+    primary = canonical_directory(primary_root)
+    working = canonical_directory(cwd)
     normalized: list[Root] = []
     for root in roots:
         if root.access != ACCESS_READ and root.access != ACCESS_READ_WRITE:
             raise ValueError("invalid workspace root access")
-        normalized.append(Root(path=canonicalDirectory(root.path), access=root.access))
+        normalized.append(Root(path=canonical_directory(root.path), access=root.access))
     if not normalized:
         raise ValueError("workspace requires at least one root")
     context = Context(primary, working, normalized)
-    if not context.canAccess(primary, write=False):
+    if not context.can_access(primary, write=False):
         raise ValueError("workspace primary root is not readable")
-    if not context.canAccess(working, write=False):
+    if not context.can_access(working, write=False):
         raise ValueError("workspace cwd is not readable")
     return context
 
@@ -132,7 +132,7 @@ def new_default_context(root: str) -> Context:
     return new_context(root, root, [Root(path=root, access=ACCESS_READ_WRITE)])
 
 
-def canonicalDirectory(path: str) -> str:
+def canonical_directory(path: str) -> str:
     """Resolve symlinks and require an existing directory, like ``filepath.EvalSymlinks`` plus a stat."""
     resolved = os.path.realpath(os.path.abspath(path), strict=True)
     if not os.path.isdir(resolved):
@@ -140,7 +140,7 @@ def canonicalDirectory(path: str) -> str:
     return os.path.normpath(resolved)
 
 
-def canonicalNearest(path: str) -> str:
+def canonical_nearest(path: str) -> str:
     """Canonicalize the nearest existing ancestor and re-append the rest.
 
     A path that does not exist yet still has to be checked against the roots, so

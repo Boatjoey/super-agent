@@ -258,7 +258,7 @@ async def test_the_configuration_view_reads_the_workspace_it_belongs_to(tmp_path
     session = new_persistent_session(
         engine,
         None,
-        workspace.new(workspace.contextFromSpec(spec)),
+        workspace.new(workspace.context_from_spec(spec)),
         Metadata(
             id=SessionID("session-with-workspace"),
             title="ws",

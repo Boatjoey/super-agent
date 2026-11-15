@@ -32,7 +32,7 @@ def resolve(explicit: str, cwd: str) -> Project:
     start = cwd
     if explicit != "":
         start = explicit if os.path.isabs(explicit) else os.path.join(cwd, explicit)
-    root = canonicalDirectory(start)
+    root = canonical_directory(start)
     if explicit == "":
         current = root
         while True:
@@ -51,7 +51,7 @@ def resolve(explicit: str, cwd: str) -> Project:
     return Project(id=root, root=root)
 
 
-def canonicalDirectory(path: str) -> str:
+def canonical_directory(path: str) -> str:
     """Resolve symlinks and require an existing directory."""
     resolved = os.path.realpath(os.path.abspath(path), strict=True)
     if not os.path.isdir(resolved):
