@@ -549,6 +549,10 @@ interface PendingActions {
   reset: boolean;
 }
 
+// "unauthorized" is not a network state: the server answered, and refused the
+// launch cookie. Retrying cannot fix that, so it ends reconnection.
+type ConnectionState = "connecting" | "online" | "offline" | "unauthorized";
+
 interface AppState {
   messages: MessageView[];
   streaming: MessageView | null;
@@ -559,7 +563,7 @@ interface AppState {
   config: ConfigView | null;
   sessions: SessionView[];
   providers: ProviderView[];
-  connection: "connecting" | "online" | "offline";
+  connection: ConnectionState;
   snapshotLoad: RegionState;
   configLoad: RegionState;
   sessionsLoad: RegionState;
@@ -708,6 +712,9 @@ async function api(path: string, init?: RequestInit): Promise<JsonRecord> {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
+  if (response.status === 401) {
+    markUnauthorized();
+  }
   let payload: unknown = {};
   try {
     payload = await response.json();
@@ -725,13 +732,45 @@ let eventSource: EventSource | null = null;
 let reconnectTimer = 0;
 let reconnectDelay = 1000;
 
-function setConnection(next: "connecting" | "online" | "offline"): void {
+function setConnection(next: ConnectionState): void {
   state.connection = next;
   renderConnection();
 }
 
-function scheduleReconnect(): void {
+// The launch cookie is missing or belongs to an earlier launch: stop every
+// retry and say what fixes it. Only opening the address printed at startup
+// does, and that is the operator's move, not the page's.
+function markUnauthorized(): void {
   if (reconnectTimer !== 0) {
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = 0;
+  }
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  if (state.connection !== "unauthorized") {
+    setConnection("unauthorized");
+  }
+}
+
+// An EventSource never reports the status of a refused request, so a cheap
+// route tells a refused credential (stop) from an unreachable server (retry).
+async function diagnoseDisconnect(): Promise<void> {
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    if (response.status === 401) {
+      markUnauthorized();
+      return;
+    }
+  } catch {
+    // Unreachable: the retry below is the right answer.
+  }
+  scheduleReconnect();
+}
+
+function scheduleReconnect(): void {
+  if (reconnectTimer !== 0 || state.connection === "unauthorized") {
     return;
   }
   const delay = reconnectDelay;
@@ -747,6 +786,9 @@ function connect(): void {
     window.clearTimeout(reconnectTimer);
     reconnectTimer = 0;
   }
+  if (state.connection === "unauthorized") {
+    return;
+  }
   setConnection("connecting");
   const events = new EventSource("/api/events");
   eventSource = events;
@@ -756,11 +798,13 @@ function connect(): void {
   };
   events.onerror = () => {
     events.close();
-    if (eventSource === events) {
-      eventSource = null;
+    if (eventSource !== events) {
+      // Already replaced or stopped, for instance by markUnauthorized().
+      return;
     }
+    eventSource = null;
     setConnection("offline");
-    scheduleReconnect();
+    void diagnoseDisconnect();
   };
   for (const kind of EVENT_KINDS) {
     events.addEventListener(kind, (event) => {
@@ -968,11 +1012,25 @@ function render(): void {
 function renderConnection(): void {
   const online = state.connection === "online";
   const connecting = state.connection === "connecting";
-  els.connectionLabel.textContent = online ? "已连接" : connecting ? "连接中" : "已断开";
+  const unauthorized = state.connection === "unauthorized";
+  els.connectionLabel.textContent = online
+    ? "已连接"
+    : connecting
+      ? "连接中"
+      : unauthorized
+        ? "未认证"
+        : "已断开";
   els.connection.dataset.state = state.connection;
-  els.connection.classList.toggle("error", state.connection === "offline");
+  els.connection.classList.toggle("error", state.connection === "offline" || unauthorized);
   els.connection.classList.toggle("busy", connecting);
-  if (state.connection === "offline") {
+  if (unauthorized) {
+    els.connectionBanner.classList.remove("hidden");
+    els.connectionBanner.replaceChildren(
+      document.createTextNode(
+        "访问凭据缺失或已失效（服务可能已重启），页面已停止重连。请在浏览器中打开本次启动时终端打印的地址重新进入；已显示的内容不受影响。",
+      ),
+    );
+  } else if (state.connection === "offline") {
     els.connectionBanner.classList.remove("hidden");
     els.connectionBanner.replaceChildren(
       svgIcon("icon-refresh"),

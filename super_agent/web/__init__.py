@@ -6,7 +6,10 @@ is the same object the terminal drives, and the values it shows are the contract
 HTTP surface, the event stream, the static page — and nothing else does.
 
 ``serve`` is what the entry point calls; :class:`~super_agent.web.routes.Router`
-is what the tests call, because routing is a pure function of a request.
+is what the tests call, because routing is a pure function of a request. Before
+any request reaches the router, :class:`~super_agent.web.access.WebAccess` checks
+that it names this server, was not sent by another site, and carries the cookie
+the launch token was exchanged for.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from __future__ import annotations
 import sys
 
 from super_agent import frontend
+from super_agent.web.access import WebAccess as WebAccess
 from super_agent.web.assets import Assets as Assets
 from super_agent.web.hub import EventHub as EventHub, Subscription as Subscription
 from super_agent.web.routes import Request as Request, Response as Response, Router as Router
@@ -31,6 +35,7 @@ __all__ = [
     "Subscription",
     "TurnBusy",
     "TurnRunner",
+    "WebAccess",
     "WebAdapter",
     "new_web_adapter",
     "serve",
@@ -50,10 +55,14 @@ def new_web_adapter(
 
 
 async def serve(frontend_ports: frontend.FrontendPorts, *, host: str = "127.0.0.1", port: int = 8765) -> None:
-    """Serve the interface until the process is interrupted."""
+    """Serve the interface until the process is interrupted.
+
+    The address line is the only place the launch token is ever written: the
+    operator who started the process reads it there and opens it once.
+    """
     server, hub, _runner = new_web_adapter(frontend_ports, host=host, port=port)
     await server.start()
-    print(f"super-agent web interface: http://{host}:{server.port}/", file=sys.stderr, flush=True)
+    print(f"super-agent web interface: {server.address}", file=sys.stderr, flush=True)
     try:
         await server.serve_forever()
     finally:

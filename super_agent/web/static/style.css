@@ -511,7 +511,8 @@ button[aria-disabled="true"] {
   animation: pulse-soft 1.2s ease-in-out infinite;
 }
 
-.connection[data-state="offline"] .connection-dot {
+.connection[data-state="offline"] .connection-dot,
+.connection[data-state="unauthorized"] .connection-dot {
   background: var(--danger);
 }
 

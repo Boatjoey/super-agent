@@ -32,6 +32,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -44,6 +45,9 @@ REPLY = "smoke test reply"
 
 #: How long any single interactive step may take before it is a failure.
 STEP_TIMEOUT_SECONDS = 20.0
+
+#: What the web front end writes before the address that carries its launch token.
+ADDRESS_PREFIX = "super-agent web interface: "
 
 
 class FakeProvider(BaseHTTPRequestHandler):
@@ -496,53 +500,110 @@ def stop(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=5)
 
 
-def failed_output(process: subprocess.Popen[bytes]) -> str:
-    """Whatever a dead front end wrote, so a startup failure names its cause."""
-    if process.stderr is None:
-        return ""
-    with contextlib.suppress(Exception):
-        return process.stderr.read().decode("utf-8", errors="replace")[-2000:]
-    return ""
+class StartupOutput:
+    """A front end's standard error, read on a thread so it can neither fill the pipe nor be lost.
+
+    The web front end writes its address there, launch token included, and that
+    line is the only way in: the smoke reads it exactly as an operator would.
+    """
+
+    def __init__(self, process: subprocess.Popen[bytes]) -> None:
+        self.process = process
+        self.lines: list[str] = []
+        self._reader = threading.Thread(target=self._drain, daemon=True)
+        self._reader.start()
+
+    def _drain(self) -> None:
+        if self.process.stderr is None:
+            return
+        for raw in self.process.stderr:
+            self.lines.append(raw.decode("utf-8", errors="replace"))
+
+    def text(self) -> str:
+        return "".join(self.lines)[-2000:]
+
+    def address(self) -> str:
+        """The address the front end printed at startup, or a failure naming what it wrote instead."""
+        deadline = time.monotonic() + STEP_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            for line in tuple(self.lines):
+                if line.startswith(ADDRESS_PREFIX):
+                    return line[len(ADDRESS_PREFIX) :].strip()
+            if self.process.poll() is not None:
+                raise AssertionError(f"the web interface exited with {self.process.returncode}\n{self.text()}")
+            time.sleep(0.05)
+        raise AssertionError(f"the web interface never printed its address\n{self.text()}")
 
 
-def wait_until_listening(port: int, process: subprocess.Popen[bytes]) -> None:
-    """Wait for the web interface to accept a connection, or fail with its output."""
-    deadline = time.monotonic() + STEP_TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            raise AssertionError(f"the web interface exited with {process.returncode}\n{failed_output(process)}")
-        with contextlib.closing(socket.socket()) as probe:
-            probe.settimeout(0.5)
-            if probe.connect_ex(("127.0.0.1", port)) == 0:
-                return
-        time.sleep(0.1)
-    raise AssertionError(f"the web interface never listened on {port}\n{failed_output(process)}")
-
-
-def http_request(port: int, method: str, path: str, payload: dict[str, object] | None = None) -> tuple[int, bytes]:
-    """One HTTP exchange against the web interface."""
+def http_exchange(
+    port: int,
+    method: str,
+    path: str,
+    payload: dict[str, object] | None = None,
+    *,
+    cookie: str = "",
+    headers: dict[str, str] | None = None,
+) -> tuple[int, http.client.HTTPMessage, bytes]:
+    """One HTTP exchange against the web interface, carrying ``cookie`` when there is one."""
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=STEP_TIMEOUT_SECONDS)
     try:
         body = None if payload is None else json.dumps(payload).encode()
-        headers = {} if body is None else {"Content-Type": "application/json"}
-        connection.request(method, path, body=body, headers=headers)
+        sent = dict(headers or {})
+        if body is not None:
+            sent["Content-Type"] = "application/json"
+        if cookie:
+            sent["Cookie"] = cookie
+        connection.request(method, path, body=body, headers=sent)
         response = connection.getresponse()
-        return response.status, response.read()
+        return response.status, response.headers, response.read()
     finally:
         connection.close()
 
 
-def http_json(port: int, method: str, path: str, payload: dict[str, object] | None = None) -> tuple[int, dict]:
-    status, raw = http_request(port, method, path, payload)
+def http_request(
+    port: int,
+    method: str,
+    path: str,
+    payload: dict[str, object] | None = None,
+    *,
+    cookie: str = "",
+    headers: dict[str, str] | None = None,
+) -> tuple[int, bytes]:
+    """One HTTP exchange, when only the status and the body matter."""
+    status, _headers, raw = http_exchange(port, method, path, payload, cookie=cookie, headers=headers)
+    return status, raw
+
+
+def http_json(
+    port: int, method: str, path: str, payload: dict[str, object] | None = None, *, cookie: str = ""
+) -> tuple[int, dict]:
+    status, raw = http_request(port, method, path, payload, cookie=cookie)
     return status, (json.loads(raw) if raw.strip() else {})
+
+
+def sign_in(address: str) -> tuple[int, str]:
+    """Open the printed address the way a browser does: the port, and the cookie it is given.
+
+    The answer must be a redirect to the bare address, so the token leaves the
+    address bar, with a cookie scripts cannot read and other sites cannot send.
+    """
+    parsed = urllib.parse.urlsplit(address)
+    assert parsed.scheme == "http" and parsed.hostname == "127.0.0.1" and parsed.port, f"unexpected address {address!r}"
+    assert urllib.parse.parse_qs(parsed.query).get("token"), "the printed address carries no token"
+    status, headers, _body = http_exchange(parsed.port, "GET", f"{parsed.path}?{parsed.query}")
+    assert status == 303, f"the token exchange answered {status}, want 303"
+    assert headers.get("Location") == "/", f"the exchange redirected to {headers.get('Location')!r}, want '/'"
+    attributes = [part.strip() for part in (headers.get("Set-Cookie") or "").split(";")]
+    assert "HttpOnly" in attributes and "SameSite=Strict" in attributes, f"cookie attributes {attributes[1:]!r}"
+    return parsed.port, attributes[0]
 
 
 class EventStream:
     """The web interface's server-sent event stream, read one event at a time."""
 
-    def __init__(self, port: int) -> None:
+    def __init__(self, port: int, cookie: str) -> None:
         self.connection = http.client.HTTPConnection("127.0.0.1", port, timeout=STEP_TIMEOUT_SECONDS)
-        self.connection.request("GET", "/api/events")
+        self.connection.request("GET", "/api/events", headers={"Cookie": cookie})
         self.response = self.connection.getresponse()
         content_type = self.response.getheader("content-type") or ""
         assert self.response.status == 200, f"event stream status {self.response.status}"
@@ -582,25 +643,27 @@ class EventStream:
 
 
 def run_web_checks(home: Path, workspace: Path) -> None:
-    """The web interface: page, snapshot, a streamed turn, the single-turn slot, cancel."""
+    """The web interface: its printed address, page, snapshot, a streamed turn, the single-turn slot, cancel."""
     port = free_port()
     process = spawn_front_end(["--web", "--port", str(port)], home, workspace)
+    output = StartupOutput(process)
     stream: EventStream | None = None
     try:
-        wait_until_listening(port, process)
+        signed_port, cookie = sign_in(output.address())
+        assert signed_port == port, f"the printed address names port {signed_port}, want {port}"
 
-        status, page = http_request(port, "GET", "/")
+        status, page = http_request(port, "GET", "/", cookie=cookie)
         assert status == 200, f"index status {status}"
         assert b"<html" in page.lower(), "the index is not an HTML page"
 
-        status, snapshot = http_json(port, "GET", "/api/snapshot")
+        status, snapshot = http_json(port, "GET", "/api/snapshot", cookie=cookie)
         assert status == 200, f"snapshot status {status}"
         assert snapshot["snapshot"]["agent_status"]["busy"] is False, snapshot
 
-        stream = EventStream(port)
+        stream = EventStream(port, cookie)
         assert stream.next_event().get("kind") == "Snapshot", "an event stream must open with a snapshot"
 
-        status, accepted = http_json(port, "POST", "/api/turns", {"text": "hello smoke"})
+        status, accepted = http_json(port, "POST", "/api/turns", {"text": "hello smoke"}, cookie=cookie)
         assert (status, accepted) == (202, {"accepted": True}), f"turn status {status} {accepted}"
 
         events = stream.until("TurnFinished")
@@ -614,34 +677,34 @@ def run_web_checks(home: Path, workspace: Path) -> None:
         ]
         assert replies and REPLY in replies[-1], f"no completed reply in {kinds}"
 
-        status, _ = http_json(port, "POST", "/api/turns", {"text": "slow please"})
+        status, _ = http_json(port, "POST", "/api/turns", {"text": "slow please"}, cookie=cookie)
         assert status == 202, f"the slow turn was not accepted: {status}"
-        status, _ = http_json(port, "POST", "/api/turns", {"text": "second"})
+        status, _ = http_json(port, "POST", "/api/turns", {"text": "second"}, cookie=cookie)
         assert status == 409, f"a second concurrent turn got {status}, want 409"
 
         # Input queued behind the running turn: the answer says it is waiting, and
         # the cancel below discards it rather than letting it start a turn the user
         # no longer meant to run.
-        status, queued = http_json(port, "POST", "/api/queue", {"text": "queued smoke"})
+        status, queued = http_json(port, "POST", "/api/queue", {"text": "queued smoke"}, cookie=cookie)
         assert (status, queued.get("status")) == (200, "queued"), f"queue status {status} {queued}"
 
-        status, _ = http_json(port, "POST", "/api/cancel")
+        status, _ = http_json(port, "POST", "/api/cancel", cookie=cookie)
         assert status == 200, f"cancel status {status}"
         stream.until("TurnFinished")
 
-        status, late = http_json(port, "POST", "/api/queue", {"text": "nothing to wait behind"})
+        status, late = http_json(port, "POST", "/api/queue", {"text": "nothing to wait behind"}, cookie=cookie)
         assert (status, late.get("status")) == (200, "rejected"), f"queue without a turn got {status} {late}"
 
-        status, snapshot = http_json(port, "GET", "/api/snapshot")
+        status, snapshot = http_json(port, "GET", "/api/snapshot", cookie=cookie)
         assert status == 200, "the interface stopped answering after a cancelled turn"
         assert snapshot["snapshot"]["agent_status"]["busy"] is False, snapshot
 
         # The memory switch: the browser is told where the lines live, and can
         # turn the memory off. The lines themselves stay where they are.
-        status, memory = http_json(port, "GET", "/api/memory")
+        status, memory = http_json(port, "GET", "/api/memory", cookie=cookie)
         assert status == 200, f"memory status {status}"
         assert memory.get("backend"), f"the memory did not say where it lives: {memory}"
-        status, switched = http_json(port, "POST", "/api/memory", {"enabled": False})
+        status, switched = http_json(port, "POST", "/api/memory", {"enabled": False}, cookie=cookie)
         assert (status, switched.get("enabled")) == (200, False), f"memory switch got {status} {switched}"
     finally:
         if stream is not None:
@@ -687,7 +750,7 @@ def main() -> int:
                 print("ok   terminal: prompt, streaming reply, resize, mid-turn cancel, /clear, /compact, /undo, /quit")
         if "web" in wants:
             run_web_checks(home, workspace)
-            print("ok   web: page, snapshot, streamed turn, single-turn slot, cancel")
+            print("ok   web: printed address, token exchange, page, snapshot, streamed turn, single-turn slot, cancel")
     finally:
         server.shutdown()
         shutil.rmtree(root, ignore_errors=True)

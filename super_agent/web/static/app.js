@@ -447,6 +447,9 @@ async function api(path, init) {
         headers: { "Content-Type": "application/json" },
         ...init,
     });
+    if (response.status === 401) {
+        markUnauthorized();
+    }
     let payload = {};
     try {
         payload = await response.json();
@@ -467,8 +470,39 @@ function setConnection(next) {
     state.connection = next;
     renderConnection();
 }
-function scheduleReconnect() {
+// The launch cookie is missing or belongs to an earlier launch: stop every
+// retry and say what fixes it. Only opening the address printed at startup
+// does, and that is the operator's move, not the page's.
+function markUnauthorized() {
     if (reconnectTimer !== 0) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = 0;
+    }
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
+    if (state.connection !== "unauthorized") {
+        setConnection("unauthorized");
+    }
+}
+// An EventSource never reports the status of a refused request, so a cheap
+// route tells a refused credential (stop) from an unreachable server (retry).
+async function diagnoseDisconnect() {
+    try {
+        const response = await fetch("/api/health", { cache: "no-store" });
+        if (response.status === 401) {
+            markUnauthorized();
+            return;
+        }
+    }
+    catch {
+        // Unreachable: the retry below is the right answer.
+    }
+    scheduleReconnect();
+}
+function scheduleReconnect() {
+    if (reconnectTimer !== 0 || state.connection === "unauthorized") {
         return;
     }
     const delay = reconnectDelay;
@@ -483,6 +517,9 @@ function connect() {
         window.clearTimeout(reconnectTimer);
         reconnectTimer = 0;
     }
+    if (state.connection === "unauthorized") {
+        return;
+    }
     setConnection("connecting");
     const events = new EventSource("/api/events");
     eventSource = events;
@@ -492,11 +529,13 @@ function connect() {
     };
     events.onerror = () => {
         events.close();
-        if (eventSource === events) {
-            eventSource = null;
+        if (eventSource !== events) {
+            // Already replaced or stopped, for instance by markUnauthorized().
+            return;
         }
+        eventSource = null;
         setConnection("offline");
-        scheduleReconnect();
+        void diagnoseDisconnect();
     };
     for (const kind of EVENT_KINDS) {
         events.addEventListener(kind, (event) => {
@@ -692,11 +731,22 @@ function render() {
 function renderConnection() {
     const online = state.connection === "online";
     const connecting = state.connection === "connecting";
-    els.connectionLabel.textContent = online ? "已连接" : connecting ? "连接中" : "已断开";
+    const unauthorized = state.connection === "unauthorized";
+    els.connectionLabel.textContent = online
+        ? "已连接"
+        : connecting
+            ? "连接中"
+            : unauthorized
+                ? "未认证"
+                : "已断开";
     els.connection.dataset.state = state.connection;
-    els.connection.classList.toggle("error", state.connection === "offline");
+    els.connection.classList.toggle("error", state.connection === "offline" || unauthorized);
     els.connection.classList.toggle("busy", connecting);
-    if (state.connection === "offline") {
+    if (unauthorized) {
+        els.connectionBanner.classList.remove("hidden");
+        els.connectionBanner.replaceChildren(document.createTextNode("访问凭据缺失或已失效（服务可能已重启），页面已停止重连。请在浏览器中打开本次启动时终端打印的地址重新进入；已显示的内容不受影响。"));
+    }
+    else if (state.connection === "offline") {
         els.connectionBanner.classList.remove("hidden");
         els.connectionBanner.replaceChildren(svgIcon("icon-refresh"), document.createTextNode(" 事件流已断开，正在自动重连。恢复后会自动重建界面，无需重新提交任务。"));
     }

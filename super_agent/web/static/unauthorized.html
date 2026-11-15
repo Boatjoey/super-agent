@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Super Agent · 需要访问令牌</title>
+    <!-- Served with status 401 to a browser without the launch cookie. It is
+         self-contained: every other file, the stylesheet included, needs the
+         cookie this page is explaining how to get. -->
+    <style>
+      body {
+        margin: 0;
+        font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      main {
+        max-width: 560px;
+        margin: 15vh auto 0;
+        padding: 0 20px;
+      }
+      h1 {
+        font-size: 20px;
+        line-height: 1.4;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>需要访问令牌</h1>
+      <p>Super Agent 的 Web 界面只对启动它的人开放。请在浏览器中打开本次启动时终端打印的地址，它形如 <code>http://127.0.0.1:8765/?token=…</code>。</p>
+      <p>服务重启后，旧地址和浏览器保存的凭据都会失效，请改用新打印的地址。</p>
+    </main>
+  </body>
+</html>

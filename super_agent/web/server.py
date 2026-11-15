@@ -9,6 +9,9 @@ harness interface does not need a web framework.
 
 A response closes its connection; the event stream keeps its own open. Both are
 stated in the response headers, so a browser does not have to guess.
+
+Every request, the event stream included, first passes the access check of
+:mod:`super_agent.web.access`; only a request it lets through is routed or served.
 """
 
 from __future__ import annotations
@@ -17,7 +20,9 @@ import asyncio
 import contextlib
 import json
 import urllib.parse
+from collections.abc import Iterable
 
+from super_agent.web.access import WebAccess, new_token
 from super_agent.web.assets import Assets
 from super_agent.web.routes import Request, Response, Router, error_response
 
@@ -30,10 +35,20 @@ EVENTS_PATH = "/api/events"
 #: need a different route rather than a bigger buffer.
 MAX_BODY = 1024 * 1024
 
+#: What a browser without the cookie is shown instead of the interface.
+UNAUTHORIZED_PAGE = "unauthorized.html"
+
+#: Headers a browser sends once. A second copy is a malformed request, not a
+#: choice between two answers to "which site is this" or "who sent it".
+SINGLE_HEADERS = frozenset({"host", "origin"})
+
 _REASONS = {
     200: "OK",
     202: "Accepted",
+    303: "See Other",
     400: "Bad Request",
+    401: "Unauthorized",
+    403: "Forbidden",
     404: "Not Found",
     405: "Method Not Allowed",
     409: "Conflict",
@@ -43,9 +58,13 @@ _REASONS = {
 
 
 class WebAdapter:
-    """One listening socket, one router, one asset directory."""
+    """One listening socket, one router, one asset directory, one launch token.
 
-    __slots__ = ("_assets", "_host", "_port", "_router", "_server")
+    The token is drawn when the adapter is made, so each launch has its own and
+    a restart leaves every earlier cookie worthless.
+    """
+
+    __slots__ = ("_access", "_assets", "_host", "_port", "_router", "_server", "_token")
 
     def __init__(
         self,
@@ -59,18 +78,31 @@ class WebAdapter:
         self._host = host
         self._server: asyncio.AbstractServer | None = None
         self._port = port
+        self._token = new_token()
+        self._access = self._new_access(())
 
     @property
     def port(self) -> int:
         """The bound port. With ``port=0`` this is the port the kernel chose."""
         return self._port
 
+    @property
+    def address(self) -> str:
+        """The address to open in a browser, carrying the launch token. Complete once bound."""
+        return self._access.address
+
     async def start(self) -> None:
-        """Bind and start accepting. Idempotent enough to be called once."""
+        """Bind and start accepting. Idempotent enough to be called once.
+
+        The access rules are rebuilt for the port and addresses the sockets
+        actually got before control returns to the loop, so no connection is
+        ever checked against the configured port ``0``.
+        """
         self._server = await asyncio.start_server(self._handle, self._host, self._port, limit=64 * 1024)
-        socket = self._server.sockets[0] if self._server.sockets else None
-        if socket is not None:
-            self._port = int(socket.getsockname()[1])
+        sockets = self._server.sockets
+        if sockets:
+            self._port = int(sockets[0].getsockname()[1])
+        self._access = self._new_access(str(socket.getsockname()[0]) for socket in sockets)
 
     async def serve_forever(self) -> None:
         """Serve until :meth:`close`."""
@@ -79,6 +111,16 @@ class WebAdapter:
         assert self._server is not None
         async with self._server:
             await self._server.serve_forever()
+
+    def _new_access(self, bound: Iterable[str]) -> WebAccess:
+        page = self._assets.read(UNAUTHORIZED_PAGE)
+        return WebAccess(
+            self._token,
+            host=self._host,
+            port=self._port,
+            bound=bound,
+            page=page[0] if page is not None else None,
+        )
 
     async def close(self) -> None:
         """Stop accepting. Connections in flight finish on their own."""
@@ -115,6 +157,10 @@ class WebAdapter:
             await _write(writer, error_response(413, "request body too large"))
             return
 
+        refusal = self._access.check(request)
+        if refusal is not None:
+            await _write(writer, refusal)
+            return
         if request.method == "GET" and request.path == EVENTS_PATH:
             await self._stream(reader, writer)
             return
@@ -183,12 +229,19 @@ async def _read_request(reader: asyncio.StreamReader) -> Request:
     if len(parts) < 2:
         raise ValueError("malformed request line")
     method, target = parts[0], parts[1]
+    if not target.startswith("/"):
+        # An absolute URL or ``*`` would name a host other than the Host header
+        # the access check reads, and this server serves only its own paths.
+        raise ValueError("request target is not a path")
     headers: dict[str, str] = {}
     for line in lines[1:]:
         if not line:
             continue
         name, _, value = line.partition(":")
-        headers[name.strip().lower()] = value.strip()
+        name = name.strip().lower()
+        if name in SINGLE_HEADERS and name in headers:
+            raise ValueError(f"repeated {name} header")
+        headers[name] = value.strip()
     try:
         length = int(headers.get("content-length", "0") or "0")
     except ValueError as invalid:
@@ -202,6 +255,7 @@ async def _read_request(reader: asyncio.StreamReader) -> Request:
         path=parsed.path,
         body=body,
         query=urllib.parse.parse_qs(parsed.query),
+        headers=headers,
     )
 
 

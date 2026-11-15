@@ -14,7 +14,8 @@ The front end is one of two: the terminal, or the local web interface (``-web``)
 Naming no flag picks the platform default: the web interface on Windows, which
 ships without the terminal, and the terminal elsewhere. Both drive the same
 application service, so the only thing this file decides is which transport
-carries it.
+carries it. Only the web interface draws a launch token and prints the address
+that carries it; the terminal has no network surface to protect.
 
 Status 1 means "the app refused to start" or "the interface failed"; the app
 itself never produces any other status.
@@ -36,8 +37,9 @@ from super_agent import app, cli, llm, web
 if TYPE_CHECKING:
     from super_agent import frontend, runtime
 
-#: The web interface's defaults. Loopback only: the interface can run tools, so
-#: binding it to every address would hand that to the local network.
+#: The web interface's defaults. Every request is authenticated whatever the
+#: address, but the transport is plain HTTP: another address would put the token
+#: and the cookie on that network, so loopback stays the default.
 DEFAULT_HOST: Final[str] = "127.0.0.1"
 DEFAULT_PORT: Final[int] = 8765
 

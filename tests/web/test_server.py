@@ -2,6 +2,7 @@
 
 The route table is tested without a socket; this file tests only what the socket
 adds — request framing, the static files, and the one connection that stays open.
+Every client here signs in first, through the address the adapter prints.
 """
 
 from __future__ import annotations
@@ -9,15 +10,31 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+from collections.abc import AsyncGenerator
 from typing import cast
 
 import httpx
 import pytest
 
 from super_agent import frontend
-from super_agent.web import new_web_adapter
+from super_agent.web import WebAdapter, new_web_adapter
 from super_agent.web.server import _read_request  # pyright: ignore[reportPrivateUsage]
 from tests.fakes.frontend import FakeFrontendPorts
+
+
+@contextlib.asynccontextmanager
+async def signed_in(server: WebAdapter) -> AsyncGenerator[httpx.AsyncClient]:
+    """A client that got in the way a browser does: by opening the printed address."""
+    async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{server.port}", timeout=5) as client:
+        exchange = await client.get(server.address)
+        assert exchange.status_code == 303, exchange.text
+        yield client
+
+
+def cookie_header(server: WebAdapter) -> str:
+    """The Cookie header the exchange would give a browser, for a hand-written request."""
+    token = server.address.rsplit("token=", 1)[1]
+    return f"super_agent_{server.port}={token}"
 
 
 async def read_event(reader: asyncio.StreamReader) -> tuple[str, dict[str, object]]:
@@ -41,7 +58,7 @@ async def test_the_page_the_script_and_the_json_surface_are_served() -> None:
     server, _hub, _runner = new_web_adapter(frontend_ports, port=0)
     await server.start()
     try:
-        async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{server.port}", timeout=5) as client:
+        async with signed_in(server) as client:
             page = await client.get("/")
             assert page.status_code == 200
             assert "Super Agent" in page.text
@@ -82,7 +99,10 @@ async def test_the_event_stream_greets_a_tab_then_follows_a_turn() -> None:
     await server.start()
     reader, writer = await asyncio.open_connection("127.0.0.1", server.port)
     try:
-        writer.write(b"GET /api/events HTTP/1.1\r\nHost: localhost\r\nAccept: text/event-stream\r\n\r\n")
+        writer.write(
+            f"GET /api/events HTTP/1.1\r\nHost: localhost:{server.port}\r\n"
+            f"Cookie: {cookie_header(server)}\r\nAccept: text/event-stream\r\n\r\n".encode()
+        )
         await writer.drain()
         head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5)
         assert b"200 OK" in head
@@ -94,7 +114,7 @@ async def test_the_event_stream_greets_a_tab_then_follows_a_turn() -> None:
         agent_status = cast("dict[str, object]", snapshot["agent_status"])
         assert agent_status["label"] == "Idle"
 
-        async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{server.port}", timeout=5) as client:
+        async with signed_in(server) as client:
             accepted = await client.post("/api/turns", json={"text": "hello"})
         assert accepted.status_code == 202
         await runner.wait()
@@ -135,7 +155,7 @@ async def test_only_the_events_path_streams() -> None:
     server, _hub, _runner = new_web_adapter(FakeFrontendPorts(), port=0)
     await server.start()
     try:
-        async with httpx.AsyncClient(base_url=f"http://127.0.0.1:{server.port}", timeout=5) as client:
+        async with signed_in(server) as client:
             response = await client.get("/api/events/extra")
             assert response.status_code == 404
     finally:

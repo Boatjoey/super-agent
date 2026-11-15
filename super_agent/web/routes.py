@@ -27,12 +27,17 @@ __all__ = ["Request", "Response", "Router", "json_response"]
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Request:
-    """One parsed request. The body is raw bytes; :attr:`json` decodes it."""
+    """One parsed request. The body is raw bytes; :attr:`json` decodes it.
+
+    ``headers`` maps lower-cased names to values. The routes never read them: they
+    are for the access check, which runs before a request reaches the router.
+    """
 
     method: str
     path: str
     body: bytes = b""
     query: dict[str, list[str]] = dataclasses.field(default_factory=dict[str, list[str]])
+    headers: dict[str, str] = dataclasses.field(default_factory=dict[str, str])
 
     @property
     def json(self) -> dict[str, Any]:
