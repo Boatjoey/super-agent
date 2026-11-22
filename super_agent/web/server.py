@@ -153,7 +153,7 @@ class WebAdapter:
         except (TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError, ValueError):
             await _write(writer, error_response(400, "malformed request"))
             return
-        except PayloadTooLarge:
+        except PayloadTooLargeError:
             await _write(writer, error_response(413, "request body too large"))
             return
 
@@ -218,7 +218,7 @@ class WebAdapter:
             subscription.aclose()
 
 
-class PayloadTooLarge(Exception):
+class PayloadTooLargeError(Exception):
     """The body exceeded :data:`MAX_BODY`."""
 
 
@@ -247,7 +247,7 @@ async def _read_request(reader: asyncio.StreamReader) -> Request:
     except ValueError as invalid:
         raise ValueError("bad content-length") from invalid
     if length > MAX_BODY:
-        raise PayloadTooLarge(length)
+        raise PayloadTooLargeError(length)
     body = await reader.readexactly(length) if length > 0 else b""
     parsed = urllib.parse.urlsplit(target)
     return Request(

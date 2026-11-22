@@ -25,18 +25,18 @@ from super_agent.frontend import (
 )
 from super_agent.web.hub import EventHub
 
-__all__ = ["NoPendingApproval", "TurnBusy", "TurnRunner"]
+__all__ = ["NoPendingApprovalError", "TurnBusyError", "TurnRunner"]
 
 #: The three answers a browser may send. Anything else is a client bug, and
 #: turning it into a decision would execute a tool nobody chose.
 DECISIONS: frozenset[str] = frozenset({str(frontend.APPROVE_ONCE), str(frontend.APPROVE_ALWAYS), str(frontend.DENY)})
 
 
-class TurnBusy(Exception):
+class TurnBusyError(Exception):
     """A turn is already running; the runtime would refuse the second one."""
 
 
-class NoPendingApproval(Exception):
+class NoPendingApprovalError(Exception):
     """Nothing is waiting for a decision, so a decision would answer nothing."""
 
 
@@ -66,7 +66,7 @@ class TurnRunner:
     async def start_turn(self, text: str) -> None:
         """Start one turn and return immediately; its events arrive on the hub."""
         if self.running:
-            raise TurnBusy("a turn is already running")
+            raise TurnBusyError("a turn is already running")
         self._task = asyncio.create_task(self._run(text))
 
     async def steer(self, text: str) -> SteeringReceipt:
@@ -92,10 +92,10 @@ class TurnRunner:
         if decision not in DECISIONS:
             raise ValueError(f"unknown approval decision: {decision}")
         if self._pending is None:
-            raise NoPendingApproval("no tool call is waiting for a decision")
+            raise NoPendingApprovalError("no tool call is waiting for a decision")
         receipt = await self._interaction.approve(Decision(decision), request_id)
         if receipt.status != frontend.ACCEPTED:
-            raise NoPendingApproval(receipt.reason or "the decision answered no pending request")
+            raise NoPendingApprovalError(receipt.reason or "the decision answered no pending request")
 
     async def cancel(self) -> None:
         """Cancel the turn in flight. Idempotent, and honest about doing nothing."""

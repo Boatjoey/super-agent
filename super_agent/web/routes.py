@@ -20,7 +20,7 @@ from typing import Any, cast
 from super_agent import frontend
 from super_agent.frontend import wire
 from super_agent.web.hub import EventHub, Subscription
-from super_agent.web.turns import NoPendingApproval, TurnBusy, TurnRunner
+from super_agent.web.turns import NoPendingApprovalError, TurnBusyError, TurnRunner
 
 __all__ = ["Request", "Response", "Router", "json_response"]
 
@@ -99,7 +99,7 @@ class Router:
         """Dispatch one request. Unexpected failures become a 500 with the reason."""
         try:
             return await self._dispatch(request)
-        except (TurnBusy, NoPendingApproval) as conflict:
+        except (TurnBusyError, NoPendingApprovalError) as conflict:
             return error_response(409, str(conflict))
         except (ValueError, KeyError) as invalid:
             return error_response(400, str(invalid))

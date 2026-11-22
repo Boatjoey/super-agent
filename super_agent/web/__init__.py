@@ -22,18 +22,22 @@ from super_agent.web.assets import Assets as Assets
 from super_agent.web.hub import EventHub as EventHub, Subscription as Subscription
 from super_agent.web.routes import Request as Request, Response as Response, Router as Router
 from super_agent.web.server import EVENTS_PATH as EVENTS_PATH, WebAdapter as WebAdapter
-from super_agent.web.turns import NoPendingApproval as NoPendingApproval, TurnBusy as TurnBusy, TurnRunner as TurnRunner
+from super_agent.web.turns import (
+    NoPendingApprovalError as NoPendingApprovalError,
+    TurnBusyError as TurnBusyError,
+    TurnRunner as TurnRunner,
+)
 
 __all__ = [
     "EVENTS_PATH",
     "Assets",
     "EventHub",
-    "NoPendingApproval",
+    "NoPendingApprovalError",
     "Request",
     "Response",
     "Router",
     "Subscription",
-    "TurnBusy",
+    "TurnBusyError",
     "TurnRunner",
     "WebAccess",
     "WebAdapter",

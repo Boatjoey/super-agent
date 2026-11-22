@@ -8,7 +8,7 @@ import pytest
 
 from super_agent import frontend
 from super_agent.web import EventHub, TurnRunner
-from super_agent.web.turns import NoPendingApproval
+from super_agent.web.turns import NoPendingApprovalError
 from tests.fakes.frontend import AwaitingApprovalFrontendPorts, InteractionOnly
 
 
@@ -32,10 +32,10 @@ async def test_interaction_without_management_drives_a_turn_to_its_final_snapsho
         await runner.cancel()
         assert frontend_ports.cancellations == 1
     else:
-        with pytest.raises(NoPendingApproval):
+        with pytest.raises(NoPendingApprovalError):
             await runner.approve("once", "stale")
         await runner.approve("once", "approval-1")
-        with pytest.raises(NoPendingApproval):
+        with pytest.raises(NoPendingApprovalError):
             await runner.approve("once", "approval-1")
     await asyncio.wait_for(runner.wait(), timeout=5)
 
