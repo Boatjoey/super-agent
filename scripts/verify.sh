@@ -22,7 +22,9 @@ if [[ "$(uname -s)" == "Darwin" && ! -x /usr/bin/sandbox-exec ]]; then
     exit 1
 fi
 
-# The four gates: formatting, linting, strict typing, and behaviour.
+# The four gates: formatting, linting, strict typing, and behaviour. PEP 8
+# naming is enforced by ruff's N rules and, for the attributes assigned through
+# self that ruff cannot see, by tests/architecture/test_naming.py under pytest.
 npm run check:web
 uv run ruff format --check .
 uv run ruff check .

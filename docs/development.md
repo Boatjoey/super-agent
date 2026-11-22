@@ -208,7 +208,7 @@ Python 单线程事件循环排除了对共享内存的未同步访问，但引�
 
 整个代码库遵循以下风格：
 
-- **命名遵循 PEP 8。** 模块、函数和方法使用 `snake_case`；类使用 `PascalCase`；模块常量和枚举成员使用 `UPPER_SNAKE`；数据类字段使用 `snake_case`。例如 `STATE_IDLE`、`AppendUserMessage`、`run_turn` 和 `apply_runtime_data_changes`。
+- **命名遵循 PEP 8。** 模块、函数和方法使用 `snake_case`；类使用 `PascalCase`；模块常量和枚举成员使用 `UPPER_SNAKE`；数据类字段使用 `snake_case`。例如 `STATE_IDLE`、`AppendUserMessage`、`run_turn` 和 `apply_runtime_data_changes`。异常类名以 `Error` 结尾。静态检查启用 ruff 的 pep8-naming 规则（`N`），不设豁免；它看不到经 `self` 赋值的属性名，由 `tests/architecture/test_naming.py` 复用度量脚本的命名统计检查生产代码与测试，任一类别计数不为零即失败。
 - **模块名使用 snake_case**，例如 `runtime/machine/transition.py`。
 - **包通过 `__init__.py` 重新导出公开接口**，因此 `machine.STATE_IDLE` 和 `machine.transition` 从包命名空间解析。
 - **值类型使用带显式编解码器的 `@dataclass`**（`super_agent/jsonutil.py`），不使用校验库。每个字段用 `json_field` 声明 JSON 键，保证键名不随 Python 属性名变化。
