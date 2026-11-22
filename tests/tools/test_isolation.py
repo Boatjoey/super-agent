@@ -261,11 +261,12 @@ async def test_strict_sandbox_restricts_filesystem_network_and_resources(tmp_pat
     config.memory_bytes = 64 << 20
     config.max_processes = 17
     config.max_open_files = 23
-    # Missing bubblewrap/prlimit is a declared dependency, not a reason to skip:
-    # verify.sh fails on it before the tests run, and a bare pytest run should
-    # surface it too.
-    registry = sandboxed_registry(config, workspace_for(workspace))
+    # Constructing the sandbox runs its startup trial, so the kernel is checked
+    # first. Missing bubblewrap/prlimit is a declared dependency, not a reason to
+    # skip: the check passes it through, verify.sh fails on it before the tests
+    # run, and a bare pytest run surfaces it here.
     _require_namespaces()
+    registry = sandboxed_registry(config, workspace_for(workspace))
 
     probe = await registry.run(live_context(), ToolCall(name="run_command", input='{"command":"printf ready"}'))
     assert probe == "ready"
@@ -560,17 +561,177 @@ def test_sandbox_covers_a_home_inside_another_home_once(tmp_path: Path) -> None:
     ]
 
 
-@posix_only
-def test_platform_sandbox_hides_the_users_homes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+#: What bwrap prints where AppArmor denies it capabilities in its user namespace.
+LOOPBACK_REFUSAL: Final[str] = "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted"
+
+#: What bwrap prints where the kernel forbids unprivileged user namespaces.
+NAMESPACE_REFUSAL: Final[str] = (
+    "bwrap: No permissions to create a new namespace, likely because the kernel does not allow"
+    " non-privileged user namespaces."
+)
+
+
+def _fake_bwrap(directory: Path, body: str) -> str:
+    """An executable stand-in for bwrap that runs ``body`` with ``/bin/sh``."""
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "bwrap"
+    path.write_text("#!/bin/sh\n" + body + "\n", encoding="utf-8")
+    path.chmod(0o755)
+    return str(path)
+
+
+def _use_bwrap(monkeypatch: pytest.MonkeyPatch, bwrap: str) -> None:
+    """Make the Linux sandbox find ``bwrap``, and a prlimit only bwrap would run."""
+
     def which(name: str) -> str | None:
-        return "/usr/bin/" + name
+        return bwrap if name == "bwrap" else "/usr/bin/prlimit"
 
     monkeypatch.setattr(shutil, "which", which)
+
+
+def _apparmor_switch(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, value: str | None) -> None:
+    """Stand in for Ubuntu's AppArmor user-namespace switch; ``None`` is a kernel without it."""
+    switch = tmp_path / "apparmor_restrict_unprivileged_userns"
+    if value is not None:
+        switch.write_text(value + "\n", encoding="ascii")
+    monkeypatch.setattr("super_agent.tools.sandbox_linux.APPARMOR_USERNS_SYSCTL_PATH", str(switch))
+
+
+@posix_only
+def test_platform_sandbox_hides_the_users_homes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _use_bwrap(monkeypatch, _fake_bwrap(tmp_path / "bin", "exit 0"))
 
     sandbox = new_platform_sandbox(default_sandbox_config(str(tmp_path)))
 
     assert sandbox.protected == protected_homes()
     assert os.path.realpath(os.environ["HOME"]) in sandbox.protected
+
+
+@posix_only
+def test_platform_sandbox_runs_its_trial_through_the_real_command_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = _directory(tmp_path / "workspace")
+    bwrap = _fake_bwrap(tmp_path / "bin", 'printf "%s\\n" "$@" > "$0.args"')
+    _use_bwrap(monkeypatch, bwrap)
+
+    sandbox = new_platform_sandbox(default_sandbox_config(workspace))
+
+    # The trial is a command like any other: same mounts, network policy and
+    # limits, with ``true`` as the program.
+    _, expected, _ = sandbox.wrap(workspace, "", "true", [])
+    assert Path(bwrap + ".args").read_text(encoding="utf-8").splitlines() == expected
+    assert expected[-2:] == ["--", "true"]
+
+
+@posix_only
+@pytest.mark.parametrize("ubuntu_bwrap", [pytest.param(True, id="usr-bin-bwrap"), pytest.param(False, id="elsewhere")])
+def test_platform_sandbox_refuses_to_start_with_the_apparmor_remedies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ubuntu_bwrap: bool
+) -> None:
+    bwrap = _fake_bwrap(tmp_path / "bin", f"echo '{LOOPBACK_REFUSAL}' >&2; exit 1")
+    target = os.path.realpath(bwrap)
+    _use_bwrap(monkeypatch, bwrap)
+    _apparmor_switch(monkeypatch, tmp_path, "1")
+    if ubuntu_bwrap:
+        # Ubuntu's own profile attaches to one path; the hint only makes sense there.
+        monkeypatch.setattr("super_agent.tools.sandbox_linux.UBUNTU_BWRAP", target)
+
+    with pytest.raises(RuntimeError) as refusal:
+        new_platform_sandbox(default_sandbox_config(str(tmp_path)))
+
+    ubuntu_hint = (
+        ", such as bwrap-userns-restrict from Ubuntu's apparmor-profiles package"
+        " (copy it from /usr/share/apparmor/extra-profiles to /etc/apparmor.d, then apparmor_parser -r it)"
+    )
+    assert str(refusal.value) == "\n".join(
+        [
+            f"strict sandbox could not start bubblewrap: {LOOPBACK_REFUSAL}",
+            "This system restricts unprivileged user namespaces with AppArmor"
+            " (kernel.apparmor_restrict_unprivileged_userns = 1), which is the likely cause. Fix it with one of:",
+            f"  - load an AppArmor profile that grants userns to {target}" + (ubuntu_hint if ubuntu_bwrap else ""),
+            "  - run `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, which lifts the restriction"
+            " for every program on the system, so it no longer mitigates kernel exploits that abuse user namespaces",
+            "  - set sandbox.mode to off, which runs commands without isolation",
+        ]
+    )
+
+
+@posix_only
+@pytest.mark.parametrize("switch", [pytest.param(None, id="no-apparmor-switch"), pytest.param("0", id="switch-off")])
+def test_platform_sandbox_refuses_to_start_without_blaming_apparmor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, switch: str | None
+) -> None:
+    bwrap = _fake_bwrap(tmp_path / "bin", f"echo '{NAMESPACE_REFUSAL}' >&2; exit 1")
+    _use_bwrap(monkeypatch, bwrap)
+    _apparmor_switch(monkeypatch, tmp_path, switch)
+
+    with pytest.raises(RuntimeError) as refusal:
+        new_platform_sandbox(default_sandbox_config(str(tmp_path)))
+
+    assert str(refusal.value) == (
+        f"strict sandbox could not start bubblewrap: {NAMESPACE_REFUSAL}\n"
+        "bubblewrap needs unprivileged user namespaces: if this system restricts them, allow them for"
+        f" {os.path.realpath(bwrap)}, or set sandbox.mode to off, which runs commands without isolation."
+    )
+
+
+@posix_only
+def test_platform_sandbox_refuses_to_start_when_bwrap_cannot_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bwrap = _fake_bwrap(tmp_path / "bin", "exit 0")
+    Path(bwrap).chmod(0o644)
+    _use_bwrap(monkeypatch, bwrap)
+
+    with pytest.raises(RuntimeError, match="strict sandbox could not run bwrap: ") as refusal:
+        new_platform_sandbox(default_sandbox_config(str(tmp_path)))
+    assert "set sandbox.mode to off" in str(refusal.value)
+
+
+@posix_only
+def test_strict_registry_refuses_at_construction_when_the_trial_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The registry the app builds at startup is where the refusal surfaces."""
+    workspace = _directory(tmp_path / "workspace")
+    _use_bwrap(monkeypatch, _fake_bwrap(tmp_path / "bin", f"echo '{LOOPBACK_REFUSAL}' >&2; exit 1"))
+    _apparmor_switch(monkeypatch, tmp_path, "1")
+    # This machine's own platform may not be Linux; the Linux sandbox is the one under test.
+    monkeypatch.setattr("super_agent.tools.sandbox.new_platform_sandbox", new_platform_sandbox)
+
+    with pytest.raises(RuntimeError, match="strict sandbox could not start bubblewrap") as refusal:
+        sandboxed_registry(default_sandbox_config(workspace), workspace_for(workspace))
+    assert "kernel.apparmor_restrict_unprivileged_userns = 1" in str(refusal.value)
+
+
+#: Set to ``1`` where AppArmor restricts unprivileged user namespaces and no
+#: profile covers bwrap, as on CI's runner before it lifts the restriction. The
+#: real startup trial must then refuse and name AppArmor as the cause.
+EXPECT_REFUSAL_ENV: Final[str] = "SUPER_AGENT_TEST_EXPECT_SANDBOX_REFUSAL"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
+def test_strict_sandbox_startup_trial_matches_this_kernel(tmp_path: Path) -> None:
+    """The real trial lets the sandbox start exactly where bubblewrap can run, and says why it cannot."""
+    config = default_sandbox_config(str(tmp_path))
+    expect_refusal = os.environ.get(EXPECT_REFUSAL_ENV) == "1"
+    refusal = _namespace_refusal()
+    if expect_refusal and not refusal:
+        pytest.fail(f"{EXPECT_REFUSAL_ENV}=1, but bubblewrap runs here: this system no longer restricts it")
+    if not refusal:
+        new_platform_sandbox(config)
+        return
+
+    with pytest.raises(RuntimeError) as raised:
+        new_platform_sandbox(config)
+
+    message = str(raised.value)
+    assert message.startswith("strict sandbox could not start bubblewrap: ")
+    assert "set sandbox.mode to off" in message
+    if expect_refusal:
+        assert LOOPBACK_REFUSAL in message
+        assert "with AppArmor (kernel.apparmor_restrict_unprivileged_userns = 1)" in message
 
 
 def _account_directory(monkeypatch: pytest.MonkeyPatch, directory: str | None) -> None:
