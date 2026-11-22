@@ -23,13 +23,42 @@ jobs:
       # dependencies, and verify.sh refuses to run without them.
       - run: sudo apt-get update && sudo apt-get install -y bubblewrap util-linux
       - run: uv sync
-      # Until the next step lifts it, the runner restricts unprivileged user
-      # namespaces as a default Ubuntu 24.04 does, so the strict sandbox must
-      # refuse to start here and name AppArmor as the cause. Should the runner
-      # stop restricting bwrap, this step fails and is no longer needed.
-      - run: uv run pytest tests/tools/test_isolation.py -k test_strict_sandbox_startup_trial_matches_this_kernel
-        env:
-          SUPER_AGENT_TEST_EXPECT_SANDBOX_REFUSAL: "1"
+      # Build a system that restricts unprivileged user namespaces on purpose,
+      # whatever the image's defaults: switch AppArmor's restriction on, and run
+      # a copy of bwrap from a path no AppArmor profile attaches to (profiles
+      # attach by path). The strict sandbox must then refuse to start and name
+      # AppArmor as the cause. The copy is on PATH for the check only, and the
+      # switch goes back to 0 when the step exits. A kernel without a usable
+      # switch skips the check with a notice. The first group logs what the image
+      # provides, so a change in its defaults can be diagnosed.
+      - name: Strict sandbox refuses to start where user namespaces are restricted
+        run: |
+          switch=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          echo "::group::What this runner provides"
+          echo "system: $(lsb_release -ds 2>/dev/null || echo unknown), kernel $(uname -r)"
+          dpkg-query -W bubblewrap apparmor apparmor-profiles 2>/dev/null || true
+          echo "kernel.apparmor_restrict_unprivileged_userns: $(cat "$switch" 2>&1 || true)"
+          echo "loaded AppArmor profiles for bwrap or unprivileged user namespaces:"
+          sudo -n aa-status 2>&1 | grep -i -E 'bwrap|unprivileged_userns' || echo "  none (or aa-status is unavailable)"
+          echo "AppArmor profile files that mention bwrap:"
+          grep -ril bwrap /etc/apparmor.d 2>/dev/null || echo "  none"
+          if bwrap --ro-bind / / --unshare-all -- true 2> "$RUNNER_TEMP/bwrap-probe.txt"; then
+            echo "$(command -v bwrap) starts as the image is configured"
+          else
+            echo "$(command -v bwrap) fails as the image is configured: $(cat "$RUNNER_TEMP/bwrap-probe.txt")"
+          fi
+          echo "::endgroup::"
+          if ! cat "$switch" > /dev/null 2>&1; then
+            echo "::notice title=Sandbox refusal check skipped::this kernel has no usable kernel.apparmor_restrict_unprivileged_userns, so the restriction cannot be built"
+            exit 0
+          fi
+          unprofiled="$RUNNER_TEMP/unprofiled-bwrap"
+          trap 'sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; rm -rf "$unprofiled"' EXIT
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+          mkdir -p "$unprofiled"
+          install -m 0755 "$(command -v bwrap)" "$unprofiled/bwrap"
+          PATH="$unprofiled:$PATH" SUPER_AGENT_TEST_EXPECT_SANDBOX_REFUSAL=1 \
+            uv run pytest tests/tools/test_isolation.py -k test_strict_sandbox_startup_trial_matches_this_kernel
       # Ubuntu 24.04 confines unprivileged user namespaces with AppArmor, which
       # stops bwrap from configuring loopback in its network namespace. Lift the
       # restriction where the kernel has it, so the strict sandbox tests run.

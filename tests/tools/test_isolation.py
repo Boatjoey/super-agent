@@ -706,8 +706,9 @@ def test_strict_registry_refuses_at_construction_when_the_trial_fails(
 
 
 #: Set to ``1`` where AppArmor restricts unprivileged user namespaces and no
-#: profile covers bwrap, as on CI's runner before it lifts the restriction. The
-#: real startup trial must then refuse and name AppArmor as the cause.
+#: profile covers the bwrap on PATH, as CI arranges by switching the restriction
+#: on and running a copy of bwrap. The real startup trial must then refuse and
+#: name AppArmor as the cause.
 EXPECT_REFUSAL_ENV: Final[str] = "SUPER_AGENT_TEST_EXPECT_SANDBOX_REFUSAL"
 
 
@@ -718,7 +719,7 @@ def test_strict_sandbox_startup_trial_matches_this_kernel(tmp_path: Path) -> Non
     expect_refusal = os.environ.get(EXPECT_REFUSAL_ENV) == "1"
     refusal = _namespace_refusal()
     if expect_refusal and not refusal:
-        pytest.fail(f"{EXPECT_REFUSAL_ENV}=1, but bubblewrap runs here: this system no longer restricts it")
+        pytest.fail(f"{EXPECT_REFUSAL_ENV}=1, but bubblewrap runs here: nothing restricts its user namespaces")
     if not refusal:
         new_platform_sandbox(config)
         return
