@@ -144,7 +144,7 @@ NETWORK_RULES: Final[str] = r"""(allow network-outbound (remote ip))
 
 
 @dataclasses.dataclass(slots=True)
-class seatbelt_sandbox:
+class SeatbeltSandbox:
     """Runs a command through the launcher and ``sandbox-exec``."""
 
     sandbox_exec: str
@@ -267,7 +267,7 @@ def _within(path: str, root: str) -> bool:
     return relative != ".." and not relative.startswith(".." + os.sep)
 
 
-def new_platform_sandbox(config: SandboxConfig) -> seatbelt_sandbox:
+def new_platform_sandbox(config: SandboxConfig) -> SeatbeltSandbox:
     """Build the Seatbelt sandbox, or refuse when it cannot contain commands."""
     if not os.access(SANDBOX_EXEC, os.X_OK):
         raise RuntimeError(
@@ -276,7 +276,7 @@ def new_platform_sandbox(config: SandboxConfig) -> seatbelt_sandbox:
         )
     if not sys.executable or not os.path.isfile(LAUNCHER):
         raise RuntimeError("strict sandbox cannot locate its launcher (set sandbox.mode to off)")
-    sandbox = seatbelt_sandbox(
+    sandbox = SeatbeltSandbox(
         sandbox_exec=SANDBOX_EXEC,
         python=sys.executable,
         launcher=LAUNCHER,

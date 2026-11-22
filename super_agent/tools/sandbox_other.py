@@ -10,10 +10,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from super_agent.tools.sandbox import SandboxConfig, command_sandbox
+    from super_agent.tools.sandbox import CommandSandbox, SandboxConfig
 
 
-def new_platform_sandbox(config: SandboxConfig) -> command_sandbox:
+def new_platform_sandbox(config: SandboxConfig) -> CommandSandbox:
     """Refuse to construct a sandbox this platform cannot provide."""
     raise RuntimeError(
         "strict sandbox is currently supported only on Linux and macOS; set sandbox.mode to off explicitly"

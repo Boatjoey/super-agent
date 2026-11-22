@@ -26,10 +26,10 @@ from super_agent.errors import CancellationError
 from super_agent.runtime.protocol.run_context import RunContext, live_context
 from super_agent.runtime.protocol.types import ToolCall
 from super_agent.tools import Registry, default_sandbox_config, sandbox_darwin, sandboxed_registry
-from super_agent.tools.commands import command_exit_error
+from super_agent.tools.commands import CommandExitError
 from super_agent.tools.registry import registry_with_runner
-from super_agent.tools.sandbox import SandboxConfig, command_runner, new_command_runner
-from super_agent.tools.sandbox_darwin import seatbelt_profile, seatbelt_sandbox
+from super_agent.tools.sandbox import CommandRunner, SandboxConfig, new_command_runner
+from super_agent.tools.sandbox_darwin import SeatbeltSandbox, seatbelt_profile
 from tests.tools.test_workspace import workspace_for
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt (sandbox-exec) exists only on macOS")
@@ -100,12 +100,12 @@ async def test_strict_sandbox_writes_only_inside_the_workspace(tmp_path: Path) -
 
     # The blocked write is the sandbox's answer, so it surfaces as the command's
     # own non-zero exit, not as a failure to run it.
-    with pytest.raises(command_exit_error):
+    with pytest.raises(CommandExitError):
         await _run(registry, f"echo planted > {outside / 'planted.txt'}")
     assert not (outside / "planted.txt").exists()
 
     home = Path(os.environ["HOME"])
-    with pytest.raises(command_exit_error):
+    with pytest.raises(CommandExitError):
         await _run(registry, f"echo planted > {home / 'planted.txt'}")
     assert not (home / "planted.txt").exists()
 
@@ -351,10 +351,10 @@ def test_strict_sandbox_refuses_to_start_when_the_profile_cannot_be_applied(
     assert "sandbox.mode to off" in str(excinfo.value)
 
 
-def _contained_runner(workspace: Path) -> tuple[command_runner, seatbelt_sandbox]:
+def _contained_runner(workspace: Path) -> tuple[CommandRunner, SeatbeltSandbox]:
     context = workspace_for(workspace)
     runner = new_command_runner(default_sandbox_config(str(workspace)), context)
-    assert isinstance(runner.sandbox, seatbelt_sandbox)
+    assert isinstance(runner.sandbox, SeatbeltSandbox)
     return runner, runner.sandbox
 
 
@@ -395,7 +395,7 @@ def test_a_downgrade_flag_does_not_disable_the_macos_sandbox(tmp_path: Path) -> 
 
     runner = new_command_runner(config, workspace_for(workspace))
 
-    assert isinstance(runner.sandbox, seatbelt_sandbox)
+    assert isinstance(runner.sandbox, SeatbeltSandbox)
 
 
 def test_profile_reads_every_path_from_a_parameter(tmp_path: Path) -> None:

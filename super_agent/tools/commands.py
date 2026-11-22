@@ -4,7 +4,7 @@ A command's output is capped while it is read and its process gets its own
 session, so a command that emits gigabytes or leaves a background job behind
 cannot outlive the call or the memory bound.
 
-A non-zero exit is a result, not a failure: :class:`command_exit_error` carries
+A non-zero exit is a result, not a failure: :class:`CommandExitError` carries
 the status into the output and only the tools that treat it as a diagnosis
 swallow it.
 """
@@ -23,8 +23,8 @@ from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import ToolCall, ToolSpec
 from super_agent.tools.env import child_env
 from super_agent.tools.files import decode_args, decode_json_object, object_schema
-from super_agent.tools.output import capped_buffer
-from super_agent.tools.sandbox import command_runner, runner_or_default
+from super_agent.tools.output import CappedBuffer
+from super_agent.tools.sandbox import CommandRunner, runner_or_default
 from super_agent.tools.workspace import WorkspaceContext, resolve_readable
 
 if sys.platform == "win32":
@@ -70,7 +70,7 @@ _signal_names: Final[dict[int, str]] = {
 }
 
 
-class command_exit_error(Exception):
+class CommandExitError(Exception):
     """A command exited non-zero.
 
     Its output already reads as a diagnosis for the model, which is why the
@@ -96,7 +96,7 @@ class _GitDiffArgs:
 class RunCommandTool:
     """Run a workspace command with cwd, timeout, and output limits."""
 
-    runner: command_runner | None = None
+    runner: CommandRunner | None = None
     workspace: WorkspaceContext | None = None
 
     def specs(self) -> list[ToolSpec]:
@@ -140,7 +140,7 @@ class RunCommandTool:
 class GitStatusTool:
     """Show the branch and short git status for the workspace."""
 
-    runner: command_runner | None = None
+    runner: CommandRunner | None = None
     workspace: WorkspaceContext | None = None
 
     def specs(self) -> list[ToolSpec]:
@@ -176,7 +176,7 @@ class GitStatusTool:
 class GitDiffTool:
     """Show ``git diff`` for optional workspace paths."""
 
-    runner: command_runner | None = None
+    runner: CommandRunner | None = None
     workspace: WorkspaceContext | None = None
 
     def specs(self) -> list[ToolSpec]:
@@ -245,7 +245,7 @@ def output_limit(max_bytes: int) -> int:
 
 
 async def run_shell(
-    runner: command_runner,
+    runner: CommandRunner,
     ctx: RunContext,
     cwd: str,
     timeout_seconds: int,
@@ -266,7 +266,7 @@ async def run_shell(
 
 
 async def run_exec(
-    runner: command_runner,
+    runner: CommandRunner,
     ctx: RunContext,
     cwd: str,
     timeout: float,
@@ -298,7 +298,7 @@ async def run_exec(
         stderr=asyncio.subprocess.STDOUT,
         **spawn_kwargs,
     )
-    sink = capped_buffer(limit=max_bytes)
+    sink = CappedBuffer(limit=max_bytes)
     reader = asyncio.create_task(_consume(process, sink))
     cancelled = asyncio.create_task(ctx.done().wait())
     waiting: set[asyncio.Task[Any]] = {reader, cancelled}
@@ -315,7 +315,7 @@ async def run_exec(
         await _settle(cancelled)
 
 
-async def _consume(process: asyncio.subprocess.Process, sink: capped_buffer) -> None:
+async def _consume(process: asyncio.subprocess.Process, sink: CappedBuffer) -> None:
     """Read the merged output into ``sink`` until the stream closes."""
     stream = process.stdout
     if stream is None:  # pragma: no cover - stdout is always piped here
@@ -328,12 +328,12 @@ async def _consume(process: asyncio.subprocess.Process, sink: capped_buffer) -> 
     await process.wait()
 
 
-def _finish(sink: capped_buffer, returncode: int | None) -> tuple[str, BaseException | None]:
+def _finish(sink: CappedBuffer, returncode: int | None) -> tuple[str, BaseException | None]:
     """The result of a process that ran to completion."""
     result = sink.string()
     if not returncode:
         return result, None
-    error = command_exit_error(_exit_status_message(returncode))
+    error = CommandExitError(_exit_status_message(returncode))
     if result != "" and not result.endswith("\n"):
         result += "\n"
     result += str(error)

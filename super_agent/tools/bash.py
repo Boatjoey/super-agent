@@ -14,13 +14,13 @@ from typing import Any, cast
 from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import ToolCall, ToolSpec
 from super_agent.tools.commands import (
+    CommandExitError,
     command_cwd,
-    command_exit_error,
     default_command_timeout,
     default_output_bytes,
     run_exec,
 )
-from super_agent.tools.sandbox import command_runner, runner_or_default
+from super_agent.tools.sandbox import CommandRunner, runner_or_default
 from super_agent.tools.workspace import WorkspaceContext
 
 
@@ -28,7 +28,7 @@ from super_agent.tools.workspace import WorkspaceContext
 class BashTool:
     """Run a bash command after user approval."""
 
-    runner: command_runner | None = None
+    runner: CommandRunner | None = None
     workspace: WorkspaceContext | None = None
 
     def specs(self) -> list[ToolSpec]:
@@ -63,7 +63,7 @@ class BashTool:
         if error is None:
             return output
         ctx.raise_if_cancelled()
-        if isinstance(error, command_exit_error):
+        if isinstance(error, CommandExitError):
             # A non-zero exit status is a normal result rather than a tool
             # failure: the output and status already read as a diagnosis for the
             # model.

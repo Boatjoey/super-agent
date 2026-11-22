@@ -70,7 +70,7 @@
 
 终端不再单独声明 `MemoryPort`；两个前端使用前端契约里的同一个端口。
 
-人工审批不在此表：请求由应用发起，回答经 `TurnPort.approve` 入站，因此横跨两侧。`ApprovalWaiter`、`Closer`、`WorkspaceContext` 与适配器内部的 `Tool`、`command_sandbox`、`KeyReader` 等接口不满足边界判据，不算端口。
+人工审批不在此表：请求由应用发起，回答经 `TurnPort.approve` 入站，因此横跨两侧。`ApprovalWaiter`、`Closer`、`WorkspaceContext` 与适配器内部的 `Tool`、`CommandSandbox`、`KeyReader` 等接口不满足边界判据，不算端口。
 
 ## 前端端口的组合与使用
 

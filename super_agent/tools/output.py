@@ -8,7 +8,7 @@ in full before the limit is applied.
 from __future__ import annotations
 
 
-class capped_buffer:
+class CappedBuffer:
     """Collects at most ``limit`` bytes of command output."""
 
     __slots__ = ("_buf", "_limit", "_truncated")

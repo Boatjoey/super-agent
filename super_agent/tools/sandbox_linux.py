@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 @dataclasses.dataclass(slots=True)
-class bubblewrap_sandbox:
+class BubblewrapSandbox:
     """Wraps a command in ``bwrap`` and then ``prlimit``."""
 
     bwrap: str
@@ -132,7 +132,7 @@ def _within(path: str, root: str) -> bool:
     return relative != ".." and not relative.startswith(".." + os.sep)
 
 
-def new_platform_sandbox(config: SandboxConfig) -> bubblewrap_sandbox:
+def new_platform_sandbox(config: SandboxConfig) -> BubblewrapSandbox:
     """Build the bubblewrap sandbox, or refuse when its tools are missing."""
     bwrap = shutil.which("bwrap")
     if bwrap is None:
@@ -146,4 +146,4 @@ def new_platform_sandbox(config: SandboxConfig) -> bubblewrap_sandbox:
             "strict sandbox requires prlimit: prlimit not found in PATH "
             "(install util-linux, or set sandbox.mode to off)"
         )
-    return bubblewrap_sandbox(bwrap=bwrap, prlimit=prlimit, config=config, protected=protected_homes())
+    return BubblewrapSandbox(bwrap=bwrap, prlimit=prlimit, config=config, protected=protected_homes())

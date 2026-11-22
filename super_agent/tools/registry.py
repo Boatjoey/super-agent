@@ -15,7 +15,7 @@ from super_agent.runtime.protocol.types import ToolCall, ToolSpec
 from super_agent.tools.bash import BashTool
 from super_agent.tools.commands import GitDiffTool, GitStatusTool, RunCommandTool
 from super_agent.tools.files import ApplyPatchTool, ListFilesTool, ReadFileTool, SearchTool, WriteFileTool
-from super_agent.tools.sandbox import SandboxConfig, command_runner, new_command_runner
+from super_agent.tools.sandbox import CommandRunner, SandboxConfig, new_command_runner
 from super_agent.tools.web import BrowserFetchTool, WebSearchTool
 from super_agent.tools.workspace import WorkspaceContext
 
@@ -189,7 +189,7 @@ def sandboxed_registry(config: SandboxConfig, workspace: WorkspaceContext | None
     return registry_with_runner(runner, workspace)
 
 
-def registry_with_runner(runner: command_runner | None, workspace: WorkspaceContext | None) -> Registry:
+def registry_with_runner(runner: CommandRunner | None, workspace: WorkspaceContext | None) -> Registry:
     """The built-in set, wired to ``runner``."""
     return new_registry(
         ReadFileTool(workspace=workspace),

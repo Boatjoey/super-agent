@@ -83,7 +83,7 @@ def valid_sandbox_mode(mode: SandboxMode) -> bool:
     return mode in (SANDBOX_MODE_OFF, SANDBOX_MODE_STRICT)
 
 
-class command_sandbox(Protocol):
+class CommandSandbox(Protocol):
     """Rewrites a command so it runs contained."""
 
     def wrap(self, workspace_root: str, cwd: str, name: str, args: list[str]) -> tuple[str, list[str], str]:
@@ -92,36 +92,36 @@ class command_sandbox(Protocol):
 
 
 @dataclasses.dataclass(slots=True)
-class command_runner:
+class CommandRunner:
     """A command sandbox plus the workspace binding it resolves against.
 
     ``sandbox`` is ``None`` when commands run unsandboxed, which is what
     ``sandbox.mode: off`` selects.
     """
 
-    sandbox: command_sandbox | None = None
+    sandbox: CommandSandbox | None = None
     workspace: WorkspaceContext | None = None
 
 
 #: Falls back to the unsandboxed direct runner. Production registries are built
 #: through ``sandboxed_registry``, which always supplies a runner; the fallback
 #: exists for tests that construct bare tool values.
-direct_command_runner: Final[command_runner] = command_runner()
+direct_command_runner: Final[CommandRunner] = CommandRunner()
 
 
-def runner_or_default(runner: command_runner | None) -> command_runner:
+def runner_or_default(runner: CommandRunner | None) -> CommandRunner:
     """``runner`` when supplied, the unsandboxed runner otherwise."""
     return direct_command_runner if runner is None else runner
 
 
-def new_command_runner(config: SandboxConfig, workspace_context: WorkspaceContext | None) -> command_runner:
+def new_command_runner(config: SandboxConfig, workspace_context: WorkspaceContext | None) -> CommandRunner:
     """Build the runner for ``config``, refusing a configuration it cannot honour."""
     if config.mode == "":
         config.mode = SANDBOX_MODE_STRICT
     if not valid_sandbox_mode(config.mode):
         raise RuntimeError("invalid sandbox mode: " + str(config.mode))
     if config.mode == SANDBOX_MODE_OFF:
-        return command_runner(workspace=workspace_context)
+        return CommandRunner(workspace=workspace_context)
     # Linux and macOS have a strict sandbox. On any other platform the runner
     # falls back to unsandboxed execution only when the downgrade was decided at
     # configuration resolution (``downgraded``); without that flag the refusal
@@ -129,7 +129,7 @@ def new_command_runner(config: SandboxConfig, workspace_context: WorkspaceContex
     # silently running commands with full authority. A platform that has a
     # sandbox ignores the flag and always builds it.
     if not strict_sandbox_supported() and config.downgraded:
-        return command_runner(workspace=workspace_context)
+        return CommandRunner(workspace=workspace_context)
     if config.workspace == "":
         raise RuntimeError("strict sandbox requires a workspace")
     config.workspace = os.path.realpath(os.path.abspath(config.workspace), strict=True)
@@ -145,4 +145,4 @@ def new_command_runner(config: SandboxConfig, workspace_context: WorkspaceContex
         config.max_processes = 128
     if config.max_open_files <= 0:
         config.max_open_files = 256
-    return command_runner(sandbox=new_platform_sandbox(config), workspace=workspace_context)
+    return CommandRunner(sandbox=new_platform_sandbox(config), workspace=workspace_context)

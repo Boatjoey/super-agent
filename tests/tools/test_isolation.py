@@ -25,9 +25,9 @@ import pytest
 from super_agent.runtime.protocol.run_context import live_context
 from super_agent.runtime.protocol.types import ToolCall
 from super_agent.tools import default_registry, default_sandbox_config, sandboxed_registry
-from super_agent.tools.commands import command_exit_error, max_output_bytes
+from super_agent.tools.commands import CommandExitError, max_output_bytes
 from super_agent.tools.sandbox_homes import protected_homes
-from super_agent.tools.sandbox_linux import bubblewrap_sandbox, new_platform_sandbox
+from super_agent.tools.sandbox_linux import BubblewrapSandbox, new_platform_sandbox
 from tests.helpers import spawn_tree
 from tests.tools.test_workspace import workspace_for
 
@@ -275,7 +275,7 @@ async def test_strict_sandbox_restricts_filesystem_network_and_resources(tmp_pat
     # The blocked write is what the sandbox is being asked to produce, so the
     # type is the tool's own: a non-zero exit is a result the model reads, not
     # the ``RuntimeError`` that means the sandbox itself could not run.
-    with pytest.raises(command_exit_error):
+    with pytest.raises(CommandExitError):
         await registry.run(
             live_context(),
             ToolCall(name="run_command", input=json.dumps({"command": command})),
@@ -368,10 +368,10 @@ async def test_strict_sandbox_hides_the_real_home_and_keeps_a_workspace_inside_i
         planted.unlink(missing_ok=True)
 
 
-def _sandbox(tmp_path: Path, *, allow_network: bool = False, protected: tuple[str, ...] = ()) -> bubblewrap_sandbox:
+def _sandbox(tmp_path: Path, *, allow_network: bool = False, protected: tuple[str, ...] = ()) -> BubblewrapSandbox:
     config = default_sandbox_config(str(tmp_path))
     config.allow_network = allow_network
-    return bubblewrap_sandbox(bwrap="/usr/bin/bwrap", prlimit="/usr/bin/prlimit", config=config, protected=protected)
+    return BubblewrapSandbox(bwrap="/usr/bin/bwrap", prlimit="/usr/bin/prlimit", config=config, protected=protected)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="bubblewrap is Linux-only")
