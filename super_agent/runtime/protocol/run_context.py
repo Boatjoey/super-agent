@@ -14,9 +14,9 @@ from __future__ import annotations
 
 import asyncio
 
-from super_agent.errors import Cancelled
+from super_agent.errors import CancellationError
 
-#: Reason attached to a :class:`Cancelled` raised by :meth:`RunContext.raise_if_cancelled`.
+#: Reason attached to a :class:`CancellationError` raised by :meth:`RunContext.raise_if_cancelled`.
 DEFAULT_CANCEL_REASON = "run cancelled"
 
 
@@ -74,8 +74,8 @@ class RunContext:
         return self.cancelled
 
     def err(self) -> Exception | None:
-        """``None`` while the run is live, a :class:`Cancelled` once it is not."""
-        return Cancelled(DEFAULT_CANCEL_REASON) if self.cancelled.is_set() else None
+        """``None`` while the run is live, a :class:`CancellationError` once it is not."""
+        return CancellationError(DEFAULT_CANCEL_REASON) if self.cancelled.is_set() else None
 
     def cancel(self) -> None:
         """Cancel the run and everything derived from it.
@@ -90,9 +90,9 @@ class RunContext:
             child.cancel()
 
     def raise_if_cancelled(self) -> None:
-        """Raise :class:`Cancelled` when the run has already been cancelled."""
+        """Raise :class:`CancellationError` when the run has already been cancelled."""
         if self.cancelled.is_set():
-            raise Cancelled(DEFAULT_CANCEL_REASON)
+            raise CancellationError(DEFAULT_CANCEL_REASON)
 
     def __repr__(self) -> str:
         return f"RunContext(cancelled={self.cancelled.is_set()})"

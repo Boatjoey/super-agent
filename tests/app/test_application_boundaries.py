@@ -7,7 +7,7 @@ import pytest
 from super_agent.application.delegation import MAX_SUBAGENT_DEPTH, SUBAGENT_DEPTH_KEY, Delegation
 from super_agent.application.mcp import MCPController
 from super_agent.application.values import AgentProfile
-from super_agent.errors import Cancelled, JoinedError
+from super_agent.errors import CancellationError, JoinedError
 from super_agent.runtime.protocol.run_context import RunContext, live_context
 from super_agent.runtime.protocol.types import ModelResponse, ToolCall
 from tests.fakes.application import DelegationEnvironment, MCPBackend
@@ -95,7 +95,7 @@ async def test_cancelled_delegation_closes_child_and_settles_approval_listener()
     await asyncio.wait_for(model.started.wait(), timeout=2)
     ctx.cancel()
 
-    with pytest.raises(Cancelled):
+    with pytest.raises(CancellationError):
         await asyncio.wait_for(task, timeout=2)
 
     assert environment.closed == 1

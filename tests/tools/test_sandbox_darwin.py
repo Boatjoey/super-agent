@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from super_agent.errors import Cancelled
+from super_agent.errors import CancellationError
 from super_agent.runtime.protocol.run_context import RunContext, live_context
 from super_agent.runtime.protocol.types import ToolCall
 from super_agent.tools import Registry, default_sandbox_config, sandbox_darwin, sandboxed_registry
@@ -232,7 +232,7 @@ async def test_strict_sandbox_removes_the_ephemeral_home_after_a_cancel(tmp_path
         await asyncio.sleep(0.05)
     ctx.cancel()
 
-    with pytest.raises(Cancelled):
+    with pytest.raises(CancellationError):
         await call
     await _until_removed(_scratch_of(marker.read_text(encoding="utf-8").strip()))
 

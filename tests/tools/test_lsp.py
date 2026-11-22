@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from super_agent.errors import Cancelled
+from super_agent.errors import CancellationError
 from super_agent.runtime.protocol.run_context import RunContext, live_context
 from super_agent.runtime.protocol.types import ToolCall
 from super_agent.tools.lsp import Manager, ServerConfig, connect
@@ -180,7 +180,7 @@ async def test_lsp_cancelling_a_request_leaves_the_client_usable(tmp_path: Path)
         task = asyncio.ensure_future(tool.run(ctx, call))
         await asyncio.sleep(0.05)
         ctx.cancel()
-        with pytest.raises(Cancelled):
+        with pytest.raises(CancellationError):
             await task
         # The late reply lands in a slot the client has already dropped; the
         # read loop must survive it and the client must still answer.

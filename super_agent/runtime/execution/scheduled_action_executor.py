@@ -7,7 +7,7 @@ import dataclasses
 from collections.abc import Callable
 from typing import Final, Protocol
 
-from super_agent.errors import Cancelled
+from super_agent.errors import CancellationError
 from super_agent.runtime.execution.approval_store import ApprovalStore, new_approval_key
 from super_agent.runtime.execution.policy import Policy, ToolDecision, ToolPolicyInput
 from super_agent.runtime.execution.scheduled_action_result import (
@@ -30,7 +30,7 @@ from super_agent.runtime.protocol.run_context import RunContext
 from super_agent.runtime.protocol.types import Message, Model, StreamChunk, ToolCall, ToolRunner, ToolSpec
 
 
-class ApprovalDismissed(Cancelled):
+class ApprovalDismissedError(CancellationError):
     """The approval waiter gave up waiting.
 
     The user dismissed the prompt or the interface went away. The engine treats it
@@ -42,7 +42,7 @@ class ApprovalDismissed(Cancelled):
 #: The sentinel the engine compares against with
 #: :func:`super_agent.errors.errors_is`. Any other approval failure is a real
 #: fault and takes the error path, which answers the outstanding tool calls.
-ERR_APPROVAL_DISMISSED: Final[ApprovalDismissed] = ApprovalDismissed("approval dismissed")
+ERR_APPROVAL_DISMISSED: Final[ApprovalDismissedError] = ApprovalDismissedError("approval dismissed")
 
 
 class ApprovalWaiter(Protocol):
@@ -135,13 +135,13 @@ class DefaultScheduledActionExecutor:
             raise ValueError("no tools are configured")
         try:
             result = await self._tools.run(ctx, action.call)
-        except Cancelled:
+        except CancellationError:
             raise
         except asyncio.CancelledError:
             # A bare CancelledError is a BaseException and would slip past every
             # `except Exception` between here and the engine. Converting it at the
             # adapter boundary keeps the cancel path a normal exception.
-            raise Cancelled("tool run cancelled") from None
+            raise CancellationError("tool run cancelled") from None
         except Exception as error:
             return ToolFinished(call=action.call, error=error)
         return ToolFinished(call=action.call, result=result)

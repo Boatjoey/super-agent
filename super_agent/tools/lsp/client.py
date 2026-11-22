@@ -30,7 +30,7 @@ import urllib.parse
 from collections.abc import Mapping, Sequence
 from typing import Any, Final, cast
 
-from super_agent.errors import Cancelled, JoinedError
+from super_agent.errors import CancellationError, JoinedError
 from super_agent.jsonutil import json_field
 from super_agent.runtime.protocol.run_context import DEFAULT_CANCEL_REASON, RunContext, live_context
 from super_agent.runtime.protocol.types import ToolCall, ToolSpec
@@ -239,7 +239,7 @@ class _Client:
         if self._done.is_set():
             raise self._err if self._err is not None else RuntimeError("LSP server stopped")
         ctx.raise_if_cancelled()
-        raise Cancelled(DEFAULT_CANCEL_REASON)
+        raise CancellationError(DEFAULT_CANCEL_REASON)
 
     async def notify(self, method: str, params: Any) -> None:
         """Send ``method`` without waiting for a reply."""

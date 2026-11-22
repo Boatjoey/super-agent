@@ -12,7 +12,7 @@ import contextlib
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
-from super_agent.errors import Cancelled, JoinedError
+from super_agent.errors import CancellationError, JoinedError
 from super_agent.runtime.engine import Engine, EngineView
 from super_agent.runtime.execution import ERR_APPROVAL_DISMISSED, ApprovalWaiter
 from super_agent.runtime.machine import ApprovalDecision, UserMessageSubmitted
@@ -68,7 +68,7 @@ async def wait_approval(
                     raise error
                 raise ERR_APPROVAL_DISMISSED
             return decision
-        raise Cancelled("run cancelled")
+        raise CancellationError("run cancelled")
     finally:
         for waiter in (getter, cancelled):
             if not waiter.done():

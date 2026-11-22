@@ -19,7 +19,7 @@ import asyncio
 
 import pytest
 
-from super_agent.errors import Cancelled, errors_is
+from super_agent.errors import CancellationError, errors_is
 from super_agent.runtime import machine
 from super_agent.runtime.engine import (
     Engine,
@@ -150,7 +150,7 @@ async def test_cancel_flushes_streaming_assistant_message() -> None:
     )
     await model.started.wait()
     ctx.cancel()
-    with pytest.raises(Cancelled):
+    with pytest.raises(CancellationError):
         await task
 
     messages = engine.messages()
@@ -641,7 +641,7 @@ async def test_cancel_clears_pending_tool_and_scheduled_actions() -> None:
     assert engine.state() == machine.STATE_WAITING_APPROVAL
 
     await engine.cancel()
-    with pytest.raises(Cancelled):
+    with pytest.raises(CancellationError):
         await task
 
     assert engine.state() == machine.STATE_IDLE
@@ -660,7 +660,7 @@ async def test_approval_wait_context_cancel_cancels_engine() -> None:
     await waiter.requested.wait()
 
     ctx.cancel()
-    with pytest.raises(Cancelled):
+    with pytest.raises(CancellationError):
         await task
 
     assert engine.state() == machine.STATE_IDLE
@@ -994,14 +994,14 @@ async def test_tool_exception_is_settled_and_next_call_runs_before_model_resumes
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", [Cancelled("stopped"), asyncio.CancelledError()])
+@pytest.mark.parametrize("failure", [CancellationError("stopped"), asyncio.CancelledError()])
 async def test_tool_cancellation_stops_batch_and_does_not_resume_model(failure: BaseException) -> None:
     calls = (ToolCall(id="a", name="cancelled"), ToolCall(id="b", name="working"))
     model = ScriptedModel([ModelResponse(tool_calls=calls)])
     tools = FakeToolRunner(specs=(ToolSpec(name="cancelled"), ToolSpec(name="working")), errors={"cancelled": failure})
     engine = new_engine(model, tools, None)
     await engine.ready()
-    with pytest.raises(Cancelled):
+    with pytest.raises(CancellationError):
         await run_turn(engine, "run both")
 
     assert tools.calls == [calls[0]]

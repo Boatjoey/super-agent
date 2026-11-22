@@ -58,7 +58,7 @@ from super_agent.runtime.execution.run_controller import (
 )
 from super_agent.runtime.execution.scheduled_action_executor import (
     ERR_APPROVAL_DISMISSED as ERR_APPROVAL_DISMISSED,
-    ApprovalDismissed as ApprovalDismissed,
+    ApprovalDismissedError as ApprovalDismissedError,
     ApprovalWaiter as ApprovalWaiter,
     DefaultScheduledActionExecutor as DefaultScheduledActionExecutor,
     ScheduledActionExecutor as ScheduledActionExecutor,

@@ -18,7 +18,7 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from super_agent.errors import Cancelled, errors_is
+from super_agent.errors import CancellationError, errors_is
 from super_agent.runtime.execution import (
     ERR_APPROVAL_DISMISSED,
     ActionResultInput,
@@ -98,7 +98,7 @@ def _is_cancellation(error: BaseException) -> bool:
     answers the outstanding tool calls.
     """
     return (
-        errors_is(error, Cancelled)
+        errors_is(error, CancellationError)
         or errors_is(error, ERR_APPROVAL_DISMISSED)
         or isinstance(error, asyncio.CancelledError)
     )

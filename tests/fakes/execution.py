@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Mapping, Sequence
 
-from super_agent.errors import Cancelled
+from super_agent.errors import CancellationError
 from super_agent.runtime.execution import (
     ERR_APPROVAL_DISMISSED,
     ActionCompletion,
@@ -216,7 +216,7 @@ class HangingApprovalWaiter:
     async def wait_approval(self, ctx: RunContext, call: ToolCall, request: PermissionRequest) -> ApprovalDecision:
         self.requested.set()
         await ctx.done().wait()
-        raise Cancelled("approval cancelled")
+        raise CancellationError("approval cancelled")
 
 
 class LockProbeApprovalStore:

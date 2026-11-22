@@ -24,7 +24,7 @@ from openai.types.chat import (
 )
 from openai.types.chat.chat_completion_chunk import ChoiceDelta
 
-from super_agent.errors import Cancelled
+from super_agent.errors import CancellationError
 from super_agent.llm.factory import ProviderConfig
 from super_agent.runtime.protocol.run_context import DEFAULT_CANCEL_REASON, RunContext
 from super_agent.runtime.protocol.types import (
@@ -139,7 +139,7 @@ class OpenAIModel:
                             )
                         )
         except asyncio.CancelledError as err:
-            raise Cancelled(DEFAULT_CANCEL_REASON) from err
+            raise CancellationError(DEFAULT_CANCEL_REASON) from err
 
         if not saw_choice:
             raise RuntimeError("llm returned no choices")

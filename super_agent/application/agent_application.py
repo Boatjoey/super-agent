@@ -25,7 +25,7 @@ from super_agent.application.presentation import (
     to_frontend_status,
     to_frontend_tool_call,
 )
-from super_agent.errors import Cancelled, JoinedError, errors_is
+from super_agent.errors import CancellationError, JoinedError, errors_is
 from super_agent.runtime.execution import PermissionMode
 from super_agent.runtime.machine import STATE_IDLE, STATE_INITIALIZING, ApprovalDecision
 from super_agent.runtime.machine.queued import QueuedInput
@@ -574,7 +574,7 @@ class AgentApplication:
         return frontend.failure_from(
             error,
             operation="run_turn",
-            cancelled=errors_is(error, Cancelled),
+            cancelled=errors_is(error, CancellationError),
         )
 
     async def _bridge_notifications(

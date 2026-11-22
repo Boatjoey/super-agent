@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 
-from super_agent.errors import Cancelled, errors_is
+from super_agent.errors import CancellationError, errors_is
 from super_agent.runtime import machine
 from super_agent.runtime.execution import (
     ERR_APPROVAL_DISMISSED,
@@ -101,7 +101,7 @@ async def test_approval_dismissal_is_reported_as_the_sentinel() -> None:
         )
 
     assert errors_is(raised.value, ERR_APPROVAL_DISMISSED)
-    assert errors_is(raised.value, Cancelled)
+    assert errors_is(raised.value, CancellationError)
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,7 @@ Wrapping, identity checks, and joining use ``__cause__`` chaining,
 ``isinstance``, and ``BaseExceptionGroup``. Two deliberate choices shape the
 error types here:
 
-* :class:`Cancelled` exists because ``asyncio.CancelledError`` derives from
+* :class:`CancellationError` exists because ``asyncio.CancelledError`` derives from
   ``BaseException``. An adapter converts it at its boundary so that ordinary
   ``except Exception`` blocks keep working; the engine also defends against a
   bare ``CancelledError`` reaching it.
@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 
-class Cancelled(Exception):
+class CancellationError(Exception):
     """The work was cancelled.
 
     Adapters translate ``asyncio.CancelledError`` into this at their boundary; the

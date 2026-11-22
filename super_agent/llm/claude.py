@@ -33,7 +33,7 @@ from anthropic.types import (
 )
 from anthropic.types.message_create_params import MessageCreateParamsStreaming
 
-from super_agent.errors import Cancelled
+from super_agent.errors import CancellationError
 from super_agent.llm import openai as _openai
 from super_agent.llm.factory import ProviderConfig
 from super_agent.runtime.protocol.run_context import DEFAULT_CANCEL_REASON, RunContext
@@ -130,7 +130,7 @@ class ClaudeModel:
                     stop_reason = event.delta.stop_reason
                     output_tokens = event.usage.output_tokens
         except asyncio.CancelledError as err:
-            raise Cancelled(DEFAULT_CANCEL_REASON) from err
+            raise CancellationError(DEFAULT_CANCEL_REASON) from err
 
         if stop_reason == "max_tokens":
             raise RuntimeError(TRUNCATED_ERROR)

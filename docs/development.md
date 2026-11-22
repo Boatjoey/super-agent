@@ -183,7 +183,7 @@ Web 交互源码使用 TypeScript，样式与页面结构保持原生 CSS 和 HT
 
 ## 并发
 
-并发代码使用 asyncio。适配器在边界将 `asyncio.CancelledError` 转换为项目的 `Cancelled`；它属于 `BaseException`，不会被 `except Exception` 捕获。运行身份、取消及过期结果的行为以[运行时规范](spec/runtime.md#运行生命周期与过期结果)为准。
+并发代码使用 asyncio。适配器在边界将 `asyncio.CancelledError` 转换为项目的 `CancellationError`；它属于 `BaseException`，不会被 `except Exception` 捕获。运行身份、取消及过期结果的行为以[运行时规范](spec/runtime.md#运行生命周期与过期结果)为准。
 
 Python 单线程事件循环排除了对共享内存的未同步访问，但引入了另一类问题：某些状态只有在读取与写入之间不让出执行权时才安全。当前采用以下近似检查：
 
