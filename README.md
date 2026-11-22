@@ -21,6 +21,19 @@ sudo dnf install bubblewrap util-linux   # Fedora
 
 缺少 `bwrap` 或 `prlimit` 时，应用按[沙箱要求](docs/spec/tools.md#沙箱)拒绝启动。macOS 使用系统自带的 `sandbox-exec` 隔离命令，无需另行安装。Windows 目前没有命令隔离，命令以当前用户的完整权限运行；`sandbox.mode` 在 Windows 上的取值见[沙箱配置](docs/spec/config.md#沙箱)。
 
+Ubuntu 24.04 默认用 AppArmor 限制非特权用户命名空间，`/usr/bin/bwrap` 没有授予 `userns` 的 AppArmor 配置时无法建立沙箱，应用会在启动时拒绝启动并说明原因。可任选一种办法处理：
+
+- 启用 Ubuntu 为 bwrap 准备的 AppArmor 配置。它作用于系统上所有调用 `/usr/bin/bwrap` 的程序，Ubuntu 24.04 曾因它使部分 Flatpak 应用无法保存文件而撤回默认启用（[LP #2072811](https://bugs.launchpad.net/ubuntu/+source/apparmor/+bug/2072811)）。
+
+  ```bash
+  sudo apt install apparmor-profiles
+  sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/
+  sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+  ```
+
+- 执行 `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`，对系统上所有程序解除这项限制，重启后恢复。
+- 在 `settings.json` 中把 `sandbox.mode` 设为 `off`，命令将以当前用户的完整权限运行。
+
 ### 安装与启动
 
 在本仓库根目录执行：

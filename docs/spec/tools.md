@@ -86,4 +86,9 @@ macOS 没有挂载与进程命名空间，因此与 Linux 有以下差异：宿�
 
 沙箱参数来自顶层 `sandbox` 配置，见 `config.md`。
 
-严格模式**在条件不满足时拒绝执行**：Linux 上缺少 `bwrap` 或 `prlimit`，或 macOS 上缺少 `/usr/bin/sandbox-exec`、沙箱配置无法应用，就不运行命令。`bwrap` 和 `prlimit` 是 Linux 上的系统依赖，`sandbox-exec` 随 macOS 提供；macOS 在启动时运行一条试验命令，确认配置能够应用。条件不满足时应用在启动阶段即拒绝启动，不会降级为无隔离运行。没有严格沙箱实现的平台上 `sandbox.mode` 的取值与降级规则见[配置：沙箱](config.md#沙箱)。安装方式见 [README](../../README.md#安装与启动)。
+严格模式**在条件不满足时拒绝执行**：Linux 上缺少 `bwrap` 或 `prlimit`、bubblewrap 无法建立沙箱，或 macOS 上缺少 `/usr/bin/sandbox-exec`、沙箱配置无法应用，就不运行命令。`bwrap` 和 `prlimit` 是 Linux 上的系统依赖，`sandbox-exec` 随 macOS 提供。两个平台都在启动时运行一条试验命令：Linux 以命令实际使用的 `bwrap` 与 `prlimit` 参数运行 `true`，macOS 确认配置能够应用。条件不满足时应用在启动阶段即拒绝启动，不会降级为无隔离运行，也不会放宽隔离参数（例如放弃独立的网络命名空间）后重试。没有严格沙箱实现的平台上 `sandbox.mode` 的取值与降级规则见[配置：沙箱](config.md#沙箱)。安装方式见 [README](../../README.md#安装与启动)。
+
+Linux 的试验命令失败时，拒绝信息先给出 `bwrap` 的原始输出，再说明原因与处理办法：
+
+- 内核按 AppArmor 限制非特权用户命名空间（`kernel.apparmor_restrict_unprivileged_userns` 为 `1`，Ubuntu 24.04 默认如此）时，指出这是可能的原因，并列出三种办法：为所用 `bwrap` 解析后的路径加载授予 `userns` 的 AppArmor 配置；把该 sysctl 设为 `0`，代价是系统上所有程序都解除这项限制，不再缓解借助非特权用户命名空间的内核漏洞利用；或把 `sandbox.mode` 设为 `off`，命令不再隔离。
+- 其他情况下，说明 bubblewrap 需要非特权用户命名空间：系统加以限制时为所用的 `bwrap` 放开，或把 `sandbox.mode` 设为 `off`。
