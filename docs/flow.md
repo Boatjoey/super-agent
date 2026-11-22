@@ -17,7 +17,7 @@
 
 | ID | 开发节点 | 关联 Gap | 当前状态 | 后继节点 | 交付物引用 | 状态或阻塞 |
 |---|---|---|---|---|---|---|
-| D94 | 引擎与会话由 mixin 改为显式组合 | G28 | 待开始 | D102 | [运行时](spec/runtime.md)、[文件分工](spec/packages.md#文件分工) | 前驱已完成；开工前先补并发压力与不变量用例 |
+| D94 | 引擎与会话由 mixin 改为显式组合 | G28 | 进行中 | D102 | [运行时](spec/runtime.md)、[文件分工](spec/packages.md#文件分工) | 2026-11-22 开始；前驱已完成；开工前先补并发压力与不变量用例 |
 | D95 | 划清 `app` 包中组合根与设施的边界 | G29 | 待开始 | D102 | [软件架构](design/software-architecture.md#职责的严格判据)、[模块职责](spec/packages.md#六边形边界的代码约束) | 2026-11-14 项目负责人选定拆为独立的组合根包与设施包，包名在更新设计与模块职责时确定；历史控制器构造入口在本节点删除；前驱已完成 |
 | D96 | 收敛 `Any` 并拆分超大文件 | G30 | 待开始 | D102 | [实现与重构](development.md#实现与重构)、[文件分工](spec/packages.md#文件分工) | 前驱已完成；`app/config.py` 的拆分与 D95 的包结构调整相互影响，在 D95 之后实施该部分 |
 | D99 | 对齐 Windows 工具链与路径语义 | G14 | 待开始 | D101 | [工具](spec/tools.md)、[运行时](spec/runtime.md) | Gap 中列出的已修部分不重做 |
@@ -26,7 +26,7 @@
 | D103 | 工程化门槛与发布流程 | G36 | 待开始 | — | [开发命令](development.md#开发命令)、[构建](development.md#构建) | 前驱 D101、D102 |
 | D107 | 为 Windows 实现命令隔离沙箱 | G09 | 待开始 | — | [工具沙箱](spec/tools.md#沙箱)、[配置](spec/config.md#沙箱) | 从 D48 拆出，macOS 部分已于 2026-11-14 完成；机制选型未开始；前驱 D101，借助 Windows 持续集成验证 |
 | D109 | Linux 严格沙箱适配受限的用户命名空间 | G40 | 进行中 | — | [工具沙箱](spec/tools.md#沙箱) | 2026-11-15 核查持续集成的跳过原因时发现；持续集成部分已随 D108 完成；2026-11-15 用户确认节点，D108 合入后同日开始 |
-| D110 | 确认命令分类与网页提取的未决规则 | G41 | 待开始 | — | [配置：权限](spec/config.md)、[工具](spec/tools.md) | 2026-11-15 由 D100 的生成式测试发现。同日项目负责人决定：允许与拒绝前缀逐条匹配链式命令，全部命中允许才放行，任一命中拒绝即拒绝；`deny_env` 覆盖行内任意位置的赋值，包括子 shell、`;` 与 `&&` 之后、`env VAR=x` 和 `export VAR=x`；名称经计算得出的命令按 `destructive` 处理；macOS 与 Windows 上命令名不区分大小写匹配，Linux 保持精确匹配；`npm i` 归为 `network`，`find -delete`、`git branch -D`、`mkfs.*` 归为 `destructive`；正确引用的运算符视为普通文本，引号不配对或无法解析时按最严分类；网页文本排除 `<template>`、带 `hidden`、`aria-hidden="true"` 或行内 `display:none`、`visibility:hidden` 的元素，不输出 `javascript:` 链接地址。改动 command_analyzer 与 policy，在 D92 合入后实施 |
+| D110 | 确认命令分类与网页提取的未决规则 | G41 | 进行中 | — | [配置：权限](spec/config.md)、[工具](spec/tools.md) | 2026-11-22 开始；2026-11-15 由 D100 的生成式测试发现。同日项目负责人决定：允许与拒绝前缀逐条匹配链式命令，全部命中允许才放行，任一命中拒绝即拒绝；`deny_env` 覆盖行内任意位置的赋值，包括子 shell、`;` 与 `&&` 之后、`env VAR=x` 和 `export VAR=x`；名称经计算得出的命令按 `destructive` 处理；macOS 与 Windows 上命令名不区分大小写匹配，Linux 保持精确匹配；`npm i` 归为 `network`，`find -delete`、`git branch -D`、`mkfs.*` 归为 `destructive`；正确引用的运算符视为普通文本，引号不配对或无法解析时按最严分类；网页文本排除 `<template>`、带 `hidden`、`aria-hidden="true"` 或行内 `display:none`、`visibility:hidden` 的元素，不输出 `javascript:` 链接地址。改动 command_analyzer 与 policy，在 D92 合入后实施 |
 
 完成条件统一引用关联 Gap，具体行为由交付物所属 Spec 定义。汇合节点 D101、D102、D103 须全部前驱完成后才能进入正式实施。
 
