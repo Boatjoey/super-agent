@@ -134,7 +134,7 @@ class Model:
         self.submitted = True
         return self, decision, True
 
-    def view(self, fallbackCWD: str) -> Text:
+    def view(self, fallback_cwd: str) -> Text:
         """The menu, or an empty :class:`Text` when nothing is pending."""
         request = self.request
         if request is None:
@@ -157,7 +157,7 @@ class Model:
             rendered.append("\n")
             rendered.append(" Decision submitted…", style=styles.accent)
         if request.command_class != "" or request.reason != "":
-            cwd = request.cwd or fallbackCWD
+            cwd = request.cwd or fallback_cwd
             meta = f" class: {request.command_class} cwd: {cwd}"
             if request.touched_paths:
                 meta += " paths: " + ",".join(request.touched_paths)
@@ -170,5 +170,5 @@ class Model:
             if len(user_input) > 240:
                 user_input = user_input[:240] + "..."
             rendered.append("\n")
-            rendered.append(f" cwd: {fallbackCWD} input: {user_input}", style=styles.dim)
+            rendered.append(f" cwd: {fallback_cwd} input: {user_input}", style=styles.dim)
         return rendered

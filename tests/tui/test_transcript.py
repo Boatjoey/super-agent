@@ -58,7 +58,7 @@ def test_reasoning_line_does_not_colour_the_prose_below_it() -> None:
     and italic -- prose and tool summaries included.
     """
     message = Message(role=ROLE_ASSISTANT, content="plain prose", reasoning_content="why")
-    rendered = model().renderCommitted(message, False, False)
+    rendered = model().render_committed(message, False, False)
 
     assert "plain prose" in rendered.plain, "the prose survives"
     assert not rendered.style, "the joined message carries no base style"
@@ -72,7 +72,7 @@ def test_the_agent_marker_colours_only_the_marker() -> None:
     Rich merges a ``Text``'s own style into every fragment appended to it, so a
     marker has to be appended with a style rather than set as the container's.
     """
-    rendered = model().renderMessage(Message(role=ROLE_ASSISTANT, content="plain prose"), False)
+    rendered = model().render_message(Message(role=ROLE_ASSISTANT, content="plain prose"), False)
 
     assert [style.color for style in styles_at(rendered, _BULLET)] == [palette.default_styles().identity.color]
     assert styles_at(rendered, "plain prose") == [], "the prose keeps the default foreground"
@@ -80,7 +80,7 @@ def test_the_agent_marker_colours_only_the_marker() -> None:
 
 def test_a_message_without_reasoning_shows_no_thinking_line() -> None:
     """``Thinking...`` is the reasoning placeholder, not a decoration on every reply."""
-    rendered = model().renderCommitted(Message(role=ROLE_ASSISTANT, content="just prose"), False, False)
+    rendered = model().render_committed(Message(role=ROLE_ASSISTANT, content="just prose"), False, False)
 
     assert "just prose" in rendered.plain
     assert "Thinking..." not in rendered.plain
@@ -90,7 +90,7 @@ def test_the_agent_marker_sits_on_the_first_line_only() -> None:
     """Assistant prose wraps to the full width rather than inheriting an indent."""
     m = model()
     m.set_width(24)
-    rendered = m.renderMessage(
+    rendered = m.render_message(
         Message(role=ROLE_ASSISTANT, content="alpha beta gamma delta epsilon zeta eta theta"), False
     )
 
@@ -102,7 +102,7 @@ def test_the_agent_marker_sits_on_the_first_line_only() -> None:
 
 def test_the_user_prompt_keeps_its_own_marker_and_indent() -> None:
     """The prompt is prominent, and its marker is not the agent's."""
-    rendered = model().renderMessage(Message(role=ROLE_USER, content="do it"), False)
+    rendered = model().render_message(Message(role=ROLE_USER, content="do it"), False)
 
     assert rendered.plain == f" {_PROMPT} do it"
     assert all(style.color is not None for style in styles_at(rendered, _PROMPT)), (
@@ -113,7 +113,7 @@ def test_the_user_prompt_keeps_its_own_marker_and_indent() -> None:
 def test_a_tool_result_renders_folded_and_counts_what_it_hid() -> None:
     """A result used to render as nothing at all: a role no branch handled."""
     message = Message(role=ROLE_TOOL, content="first line\nsecond\nthird")
-    folded = model().renderMessage(message, False)
+    folded = model().render_message(message, False)
 
     assert "first line" in folded.plain
     assert "second" not in folded.plain, "the folded form keeps one line"
@@ -123,7 +123,7 @@ def test_a_tool_result_renders_folded_and_counts_what_it_hid() -> None:
 def test_a_tool_result_expands_to_its_whole_body() -> None:
     """Expanding shows every line rather than a longer fold."""
     message = Message(role=ROLE_TOOL, content="first line\nsecond\nthird")
-    expanded = model().renderMessage(message, True)
+    expanded = model().render_message(message, True)
 
     assert "first line" in expanded.plain
     assert "second" in expanded.plain and "third" in expanded.plain
@@ -132,7 +132,7 @@ def test_a_tool_result_expands_to_its_whole_body() -> None:
 
 def test_one_hidden_line_is_counted_in_the_singular() -> None:
     """The count reads as English."""
-    folded = model().renderMessage(Message(role=ROLE_TOOL, content="shown\nhidden"), False)
+    folded = model().render_message(Message(role=ROLE_TOOL, content="shown\nhidden"), False)
 
     assert "1 more line" in folded.plain
     assert "1 more lines" not in folded.plain
@@ -140,7 +140,7 @@ def test_one_hidden_line_is_counted_in_the_singular() -> None:
 
 def test_added_and_removed_lines_are_coloured() -> None:
     """A diff is the one place a result says more than its text does."""
-    expanded = model().renderMessage(Message(role=ROLE_TOOL, content="+added\n-removed\ncontext"), True)
+    expanded = model().render_message(Message(role=ROLE_TOOL, content="+added\n-removed\ncontext"), True)
 
     assert [style.color for style in styles_at(expanded, "+added")] == [palette.default_styles().success.color]
     assert [style.color for style in styles_at(expanded, "-removed")] == [palette.default_styles().error.color]
@@ -148,7 +148,7 @@ def test_added_and_removed_lines_are_coloured() -> None:
 
 def test_an_interrupted_message_says_so() -> None:
     """An interrupted turn with no body used to render as a permanent ``Thinking...``."""
-    rendered = model().renderCommitted(Message(role=ROLE_ASSISTANT, interrupted=True), False, False)
+    rendered = model().render_committed(Message(role=ROLE_ASSISTANT, interrupted=True), False, False)
 
     assert "Interrupted" in rendered.plain
     assert "Thinking..." not in rendered.plain
@@ -157,7 +157,7 @@ def test_an_interrupted_message_says_so() -> None:
 def test_an_interrupted_message_keeps_what_it_managed_to_say() -> None:
     """The notice follows the partial body rather than replacing it."""
     message = Message(role=ROLE_ASSISTANT, content="half a thought", interrupted=True)
-    rendered = model().renderCommitted(message, False, False)
+    rendered = model().render_committed(message, False, False)
 
     assert "half a thought" in rendered.plain
     assert "Interrupted" in rendered.plain

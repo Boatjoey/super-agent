@@ -46,8 +46,8 @@ __all__ = [
     "default_styles",
     "extract_code_blocks",
     "new",
-    "toolDisplay",
-    "toolGroups",
+    "tool_display",
+    "tool_groups",
 ]
 
 
@@ -150,10 +150,10 @@ class Model:
     streaming: Message | None = None
     busy: bool = False
     width: int = 80
-    expandLatestTools: bool = False
-    expandAllTools: bool = False
-    expandLatestThink: bool = False
-    expandAllThink: bool = False
+    expand_latest_tools: bool = False
+    expand_all_tools: bool = False
+    expand_latest_think: bool = False
+    expand_all_think: bool = False
 
     def set_width(self, width: int) -> None:
         """The terminal got narrower or wider."""
@@ -187,20 +187,20 @@ class Model:
         """
         match key:
             case "ctrl+o":
-                self.expandLatestTools = not self.expandLatestTools
-                self.expandAllTools = False
+                self.expand_latest_tools = not self.expand_latest_tools
+                self.expand_all_tools = False
                 return self, None, True
             case "alt+o":
-                self.expandAllTools = not self.expandAllTools
-                self.expandLatestTools = False
+                self.expand_all_tools = not self.expand_all_tools
+                self.expand_latest_tools = False
                 return self, None, True
             case "ctrl+r":
-                self.expandLatestThink = not self.expandLatestThink
-                self.expandAllThink = False
+                self.expand_latest_think = not self.expand_latest_think
+                self.expand_all_think = False
                 return self, None, True
             case "alt+r":
-                self.expandAllThink = not self.expandAllThink
-                self.expandLatestThink = False
+                self.expand_all_think = not self.expand_all_think
+                self.expand_latest_think = False
                 return self, None, True
             case "ctrl+y":
                 for message in reversed(self.messages):
@@ -213,41 +213,41 @@ class Model:
 
     def view(self) -> Text:
         """The transcript followed by whatever is streaming."""
-        parts = [self.transcriptView()]
-        if (stream := self.streamingView()) and stream.plain:
+        parts = [self.transcript_view()]
+        if (stream := self.streaming_view()) and stream.plain:
             parts.append(stream)
         return _join(parts, "\n\n")
 
-    def transcriptView(self) -> Text:
+    def transcript_view(self) -> Text:
         """The welcome block and every committed message, in order."""
-        latestTool, latestThinking = -1, -1
+        latest_tool, latest_thinking = -1, -1
         for index, message in enumerate(self.messages):
             if message.tool_calls:
-                latestTool = index
+                latest_tool = index
             if message.role == ROLE_ASSISTANT and message.reasoning_content.strip():
-                latestThinking = index
+                latest_thinking = index
         blocks = [Text(self.welcome)]
         for index, message in enumerate(self.messages):
-            toolsExpanded = self.expandAllTools or (self.expandLatestTools and index == latestTool)
-            thinkingExpanded = self.expandAllThink or (self.expandLatestThink and index == latestThinking)
-            content = self.renderCommitted(message, toolsExpanded, thinkingExpanded)
+            tools_expanded = self.expand_all_tools or (self.expand_latest_tools and index == latest_tool)
+            thinking_expanded = self.expand_all_think or (self.expand_latest_think and index == latest_thinking)
+            content = self.render_committed(message, tools_expanded, thinking_expanded)
             if content.plain.strip():
                 blocks.append(content)
         return _join(blocks, "\n")
 
-    def streamingView(self) -> Text:
+    def streaming_view(self) -> Text:
         """The live message, or the compact busy placeholder."""
         if self.streaming is None:
-            return self._thinkingLine() if self.busy else Text()
+            return self._thinking_line() if self.busy else Text()
         if not self.streaming.content and self.streaming.reasoning_content.strip():
-            return self._thinkingLine()
-        return self.renderMessage(self.streaming, False)
+            return self._thinking_line()
+        return self.render_message(self.streaming, False)
 
-    def renderCommitted(self, message: Message, toolsExpanded: bool, thinkingExpanded: bool) -> Text:
+    def render_committed(self, message: Message, tools_expanded: bool, thinking_expanded: bool) -> Text:
         """One committed message: its reasoning line, then its body."""
-        return _join(self.blocks(message, toolsExpanded, thinkingExpanded), "\n")
+        return _join(self.blocks(message, tools_expanded, thinking_expanded), "\n")
 
-    def blocks(self, message: Message, toolsExpanded: bool, thinkingExpanded: bool) -> tuple[Text, ...]:
+    def blocks(self, message: Message, tools_expanded: bool, thinking_expanded: bool) -> tuple[Text, ...]:
         """The fragments one message contributes, in order.
 
         Splitting the fragments out lets a caller drop the empty ones without
@@ -255,29 +255,29 @@ class Model:
         round.
         """
         rendered: list[Text] = []
-        if message.role == ROLE_ASSISTANT and (reasoning := self._reasoningBlock(message, thinkingExpanded)):
+        if message.role == ROLE_ASSISTANT and (reasoning := self._reasoning_block(message, thinking_expanded)):
             rendered.append(reasoning)
-        if (body := self.renderMessage(message, toolsExpanded)) and body.plain.strip():
+        if (body := self.render_message(message, tools_expanded)) and body.plain.strip():
             rendered.append(body)
         if message.interrupted:
             # The notice follows whatever the turn managed to say: being
             # interrupted is what ended it.
-            rendered.append(self._interruptionLine())
+            rendered.append(self._interruption_line())
         return tuple(rendered)
 
-    def renderMessage(self, message: Message, toolsExpanded: bool) -> Text:
+    def render_message(self, message: Message, tools_expanded: bool) -> Text:
         """One message body, in the shape its role gives it."""
         if message.role == ROLE_USER:
-            return self._userBlock(message)
+            return self._user_block(message)
         if message.role == ROLE_TOOL:
-            return self._resultBlock(message, toolsExpanded)
-        return self._assistantBlock(message, toolsExpanded)
+            return self._result_block(message, tools_expanded)
+        return self._assistant_block(message, tools_expanded)
 
-    def renderToolCalls(self, calls: Sequence[ToolCall], expanded: bool) -> Text:
+    def render_tool_calls(self, calls: Sequence[ToolCall], expanded: bool) -> Text:
         """One summary line per tool group, with its items nested below."""
         styles = self._styles()
         rendered = Text()
-        for index, group in enumerate(toolGroups(calls)):
+        for index, group in enumerate(tool_groups(calls)):
             summary = f"{group.verb} {group.items[0]}"
             if len(group.items) > 1:
                 summary = f"{group.verb} {len(group.items)} {group.kind}"
@@ -291,7 +291,7 @@ class Model:
                     rendered.append(f"  {branch} {item}", style=styles.secondary)
         return rendered
 
-    def _userBlock(self, message: Message) -> Text:
+    def _user_block(self, message: Message) -> Text:
         """The user's prompt: marked, and prominent against the prose below.
 
         The marker is appended with its own style rather than set as the
@@ -304,7 +304,7 @@ class Model:
         rendered.append(message.content, style=styles.default)
         return _indent(rendered, 1)
 
-    def _assistantBlock(self, message: Message, toolsExpanded: bool) -> Text:
+    def _assistant_block(self, message: Message, tools_expanded: bool) -> Text:
         """The agent's prose, its tool calls, and any attachment lines.
 
         Only the first line carries the identity marker: the prose below wraps to
@@ -313,16 +313,16 @@ class Model:
         styles = self._styles()
         parts: list[Text] = []
         if message.content:
-            parts.append(self._renderMarkdown(message.content))
+            parts.append(self._render_markdown(message.content))
         if message.tool_calls:
-            parts.append(self.renderToolCalls(message.tool_calls, toolsExpanded))
+            parts.append(self.render_tool_calls(message.tool_calls, tools_expanded))
         body = _join(parts, "\n")
         for attachment in message.attachments:
             body.append("\n")
             body.append(f"  attachment: {attachment.name} ({attachment.mime})", style=styles.accent)
-        return _markFirstLine(body, _BULLET_GLYPH, styles.identity)
+        return _mark_first_line(body, _BULLET_GLYPH, styles.identity)
 
-    def _resultBlock(self, message: Message, expanded: bool) -> Text:
+    def _result_block(self, message: Message, expanded: bool) -> Text:
         """A tool result: one folded line, or the whole body when expanded.
 
         A result is the largest thing a tool produces, so the folded form keeps
@@ -335,15 +335,15 @@ class Model:
         shown = lines if expanded else lines[:1]
         rendered = Text()
         rendered.append(_RESULT_GLYPH + " ", style=styles.secondary)
-        rendered.append(shown[0], style=self._resultStyle(shown[0]) if expanded else styles.secondary)
+        rendered.append(shown[0], style=self._result_style(shown[0]) if expanded else styles.secondary)
         for line in shown[1:]:
             rendered.append("\n")
-            rendered.append("  " + line, style=self._resultStyle(line))
+            rendered.append("  " + line, style=self._result_style(line))
         if hidden := len(lines) - len(shown):
             rendered.append(f"  … {hidden} more line{'' if hidden == 1 else 's'}", style=styles.secondary)
         return rendered
 
-    def _resultStyle(self, line: str) -> Style:
+    def _result_style(self, line: str) -> Style:
         """A result line's colour: additions and removals are called out."""
         styles = self._styles()
         if line.startswith("+"):
@@ -352,7 +352,7 @@ class Model:
             return styles.error
         return styles.default
 
-    def _reasoningBlock(self, message: Message, expanded: bool) -> Text:
+    def _reasoning_block(self, message: Message, expanded: bool) -> Text:
         """The compact reasoning line, expanded in place when asked.
 
         Built as fragments rather than as one styled value: a base style on the
@@ -367,11 +367,11 @@ class Model:
                 parts.append(Text(f"  {'└ ' if index == 0 else '  '}{line}", style=styles.secondary))
         return _join(parts, "\n")
 
-    def _thinkingLine(self) -> Text:
+    def _thinking_line(self) -> Text:
         """The placeholder shown while a turn runs with nothing to display yet."""
         return Text(_THINKING_LABEL, style=self._styles().secondary)
 
-    def _interruptionLine(self) -> Text:
+    def _interruption_line(self) -> Text:
         """The notice that a turn stopped before the message finished.
 
         An interrupted message with no body would otherwise render as nothing at
@@ -379,7 +379,7 @@ class Model:
         """
         return Text(_INTERRUPTED_LABEL, style=self._styles().secondary)
 
-    def _renderMarkdown(self, content: str) -> Text:
+    def _render_markdown(self, content: str) -> Text:
         """Assistant prose through the configured markdown renderer."""
         renderer = self._styles().markdown_renderer
         try:
@@ -428,11 +428,11 @@ def extract_code_blocks(content: str) -> list[str]:
     return blocks
 
 
-def toolGroups(calls: Sequence[ToolCall]) -> list[ToolDisplayGroup]:
+def tool_groups(calls: Sequence[ToolCall]) -> list[ToolDisplayGroup]:
     """Merge consecutive calls with the same verb and kind into one summary."""
     groups: list[ToolDisplayGroup] = []
     for call in calls:
-        verb, kind, items = toolDisplay(call)
+        verb, kind, items = tool_display(call)
         if groups and groups[-1].verb == verb and groups[-1].kind == kind:
             previous = groups[-1]
             groups[-1] = dataclasses.replace(previous, items=(*previous.items, *items))
@@ -441,9 +441,9 @@ def toolGroups(calls: Sequence[ToolCall]) -> list[ToolDisplayGroup]:
     return groups
 
 
-def toolDisplay(call: ToolCall) -> tuple[str, str, list[str]]:
+def tool_display(call: ToolCall) -> tuple[str, str, list[str]]:
     """The verb, the noun, and the items one tool call contributes."""
-    args = _parseArgs(call.input)
+    args = _parse_args(call.input)
 
     def value(key: str) -> str:
         """A string argument, or the empty string when it is absent."""
@@ -475,7 +475,7 @@ def toolDisplay(call: ToolCall) -> tuple[str, str, list[str]]:
             return "Called", "tools", [call.name]
 
 
-def _parseArgs(input_text: str) -> dict[str, Any]:
+def _parse_args(input_text: str) -> dict[str, Any]:
     """The tool call's JSON arguments, or an empty mapping when there are none.
 
     Parsing is tolerant: a failure and anything that is not an object both
@@ -490,7 +490,7 @@ def _parseArgs(input_text: str) -> dict[str, Any]:
     return cast("dict[str, Any]", parsed)
 
 
-def _markFirstLine(text: Text, glyph: str, style: Style) -> Text:
+def _mark_first_line(text: Text, glyph: str, style: Style) -> Text:
     """Prefix the first line with a marker, leaving the rest unindented.
 
     Indenting the whole block would push wrapped prose out of the width the

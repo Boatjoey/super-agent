@@ -8,7 +8,7 @@ Two deliberate choices:
 * The clipboard write prefers OSC 52 when stdout is a terminal — it is the only
   encoding that survives SSH and tmux — and falls back to ``pyperclip`` when it
   is not.
-* ``cancelRun`` is a coroutine, because cancelling the turn is an ``await`` on
+* ``cancel_run`` is a coroutine, because cancelling the turn is an ``await`` on
   the turn port rather than a synchronous call.
 """
 
@@ -27,10 +27,10 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ClipboardDone",
-    "cancelRun",
-    "copyCommand",
-    "defaultClipboardWrite",
-    "finishCopy",
+    "cancel_run",
+    "copy_command",
+    "default_clipboard_write",
+    "finish_copy",
     "osc52",
 ]
 
@@ -49,7 +49,7 @@ def osc52(text: str) -> str:
     return f"\x1b]52;c;{encoded}\x07"
 
 
-def defaultClipboardWrite(text: str) -> None:
+def default_clipboard_write(text: str) -> None:
     """Write ``text`` to the clipboard, off the update loop.
 
     OSC 52 reaches the terminal's own clipboard over SSH and inside tmux, where
@@ -73,7 +73,7 @@ def _stdout_is_terminal() -> bool:
         return False
 
 
-def copyCommand(app: App, text: str) -> runtime.Command[Msg] | None:
+def copy_command(app: App, text: str) -> runtime.Command[Msg] | None:
     """The command that writes ``text`` to the clipboard.
 
     The native clipboard tools are child processes, so the write happens in a
@@ -81,7 +81,7 @@ def copyCommand(app: App, text: str) -> runtime.Command[Msg] | None:
     """
     if not text.strip():
         return None
-    write = app.writeClipboard
+    write = app.write_clipboard
     lines = text.count("\n") + 1
 
     async def run() -> ClipboardDone:
@@ -94,7 +94,7 @@ def copyCommand(app: App, text: str) -> runtime.Command[Msg] | None:
     return run
 
 
-def finishCopy(app: App, message: ClipboardDone) -> App:
+def finish_copy(app: App, message: ClipboardDone) -> App:
     """Report the outcome of an asynchronous clipboard write."""
     if message.err is not None:
         app.err = f"Failed to copy: {message.err}"
@@ -106,7 +106,7 @@ def finishCopy(app: App, message: ClipboardDone) -> App:
     return app
 
 
-async def cancelRun(app: App) -> App:
+async def cancel_run(app: App) -> App:
     """Cancel the turn in flight, and stop what was queued behind it.
 
     The runtime is told, not just the turn's cancellation value: the queue for the

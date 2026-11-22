@@ -23,7 +23,7 @@ from super_agent.tui import (
     ToolCall,
     runtime,
     update,
-    updateConversationNotification,
+    update_conversation_notification,
 )
 from super_agent.tui.approval import Request
 from tests.tui.fakes import ApprovalFrontendPorts, FakeFrontendPorts, new_app
@@ -54,7 +54,7 @@ def menu_request() -> Request:
 
 async def open_menu(app: App, request_id: str = "approval-7") -> App:
     """Show the approval menu the way a running turn does."""
-    app, _commands = updateConversationNotification(app, approval_request(request_id))
+    app, _commands = update_conversation_notification(app, approval_request(request_id))
     return app
 
 
@@ -65,7 +65,7 @@ async def test_the_menu_records_the_request_it_answers() -> None:
     app = await open_menu(app, "approval-7")
 
     assert app.approval.active()
-    assert app.approvalRequestID == "approval-7"
+    assert app.approval_request_id == "approval-7"
 
 
 @pytest.mark.asyncio
@@ -74,7 +74,7 @@ async def test_a_decision_reaches_the_port_with_the_request_id() -> None:
     fake = ApprovalFrontendPorts()
     fake.pending_request_id = "approval-7"
     app = new_app(fake)
-    app.approvalRequestID = "approval-7"
+    app.approval_request_id = "approval-7"
     app.approval.open(menu_request())
 
     app, _commands = await update(app, runtime.KeyMsg(key="1"))
@@ -87,7 +87,7 @@ async def test_a_refused_decision_is_shown_instead_of_assumed() -> None:
     """The menu closes and the decision was never applied: say which, and why."""
     fake = FakeFrontendPorts()
     app = new_app(fake)
-    app.approvalRequestID = "approval-gone"
+    app.approval_request_id = "approval-gone"
     app.approval.open(menu_request())
 
     app, _commands = await update(app, runtime.KeyMsg(key="3"))
@@ -101,9 +101,9 @@ async def test_a_refused_decision_is_shown_instead_of_assumed() -> None:
 async def test_a_cleared_approval_forgets_the_request() -> None:
     app = await open_menu(new_app(ApprovalFrontendPorts()), "approval-7")
 
-    app, _commands = updateConversationNotification(app, ToolApprovalCleared(request_id="approval-7"))
+    app, _commands = update_conversation_notification(app, ToolApprovalCleared(request_id="approval-7"))
 
-    assert app.approvalRequestID == ""
+    assert app.approval_request_id == ""
     assert not app.approval.active()
 
 
@@ -112,13 +112,13 @@ async def test_a_failure_is_shown_and_a_cancellation_is_not_shouted_about() -> N
     """The code says whether the input was accepted; the message is display-ready."""
     app = new_app(FakeFrontendPorts())
 
-    app, _commands = updateConversationNotification(
+    app, _commands = update_conversation_notification(
         app, ConversationError(failure=Failure(message="provider refused", code="failed", operation="run_turn"))
     )
     assert app.err == "provider refused"
 
     app.err = ""
-    app, _commands = updateConversationNotification(
+    app, _commands = update_conversation_notification(
         app, ConversationError(failure=Failure(message="cancelled", code="cancelled", operation="run_turn"))
     )
     assert app.err == ""

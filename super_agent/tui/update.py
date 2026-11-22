@@ -43,20 +43,20 @@ from super_agent.tui.conversation import (
 from super_agent.tui.transcript import ROLE_ASSISTANT
 
 __all__ = [
-    "finishSubmit",
-    "pendingAttachments",
-    "queueInput",
+    "finish_submit",
+    "pending_attachments",
+    "queue_input",
     "resize",
     "run_turn",
-    "steerInput",
-    "submitPrompt",
-    "submitText",
+    "steer_input",
+    "submit_prompt",
+    "submit_text",
     "update",
-    "updateAttachments",
-    "updateCommands",
-    "updateConversationNotification",
-    "updateKey",
-    "waitForNotification",
+    "update_attachments",
+    "update_commands",
+    "update_conversation_notification",
+    "update_key",
+    "wait_for_notification",
 ]
 
 #: The keys that reach the root even while the approval menu is open.
@@ -68,22 +68,22 @@ async def update(app: App, message: Msg) -> tuple[App, tuple[runtime.Command[Msg
     if isinstance(message, runtime.WindowSizeMsg):
         return resize(app, message)
     if isinstance(message, actions.ClipboardDone):
-        return actions.finishCopy(app, message), ()
+        return actions.finish_copy(app, message), ()
     if isinstance(message, (attachments.Loaded, attachments.Attached)):
-        return updateAttachments(app, message)
+        return update_attachments(app, message)
     if isinstance(message, (commands.CompactDone, commands.MCPDone)):
-        return await updateCommands(app, message)
+        return await update_commands(app, message)
     if isinstance(message, runtime.KeyMsg):
-        return await updateKey(app, message.key)
+        return await update_key(app, message.key)
     if isinstance(message, ConversationNotificationMsg):
         if message.turn != app.turn:
             # A stale listener on a replaced turn channel delivered a leftover
             # notification after a new turn started. Drop it and keep listening
             # on the current channel.
-            return app, (waitForNotification(app.notifications, app.turn),)
-        return updateConversationNotification(app, message.notification)
+            return app, (wait_for_notification(app.notifications, app.turn),)
+        return update_conversation_notification(app, message.notification)
     if isinstance(message, SubmitDone):
-        return finishSubmit(app, message.err)
+        return finish_submit(app, message.err)
     # Everything else would belong to the composer, where only the textarea's
     # own messages live. This composer has none, so there is nothing to do.
     return app, ()
@@ -99,7 +99,7 @@ def resize(app: App, message: runtime.WindowSizeMsg) -> tuple[App, tuple[runtime
     return app, ()
 
 
-def updateAttachments(
+def update_attachments(
     app: App, message: attachments.Loaded | attachments.Attached
 ) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Apply an attachment result: a load is silent, an attach reports."""
@@ -117,26 +117,26 @@ def updateAttachments(
     return app, ()
 
 
-async def updateCommands(
+async def update_commands(
     app: App, message: commands.CompactDone | commands.MCPDone
 ) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Apply a background command's result through the root's routing table."""
     model, outcome = app.commands.update(message)
     app.commands = model
-    return await _applyOutcome(app, outcome, ())
+    return await _apply_outcome(app, outcome, ())
 
 
-async def updateKey(app: App, key: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
+async def update_key(app: App, key: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Dispatch one key press, from the most global owner to the most focused."""
-    if app.showHelp:
+    if app.show_help:
         if key in ("?", "esc"):
-            app.showHelp = False
+            app.show_help = False
         return app, ()
     if app.approval.active() and key not in _CANCEL_KEYS:
         _, decision, submitted = app.approval.update(key)
         if submitted:
             app.transcript.clear_streaming()
-            receipt = await app.turn_port.approve(decision, app.approvalRequestID)
+            receipt = await app.turn_port.approve(decision, app.approval_request_id)
             if receipt.status != ACCEPTED:
                 # The decision answered nothing: the request it named is gone, or a
                 # second click raced the first. Saying so is the point — silently
@@ -146,18 +146,18 @@ async def updateKey(app: App, key: str) -> tuple[App, tuple[runtime.Command[Msg]
     match key:
         case "ctrl+c":
             if app.approval.active() or app.cancellation is not None:
-                return await actions.cancelRun(app), ()
+                return await actions.cancel_run(app), ()
             return app, (runtime.QUIT,)
         case "esc":
             if app.approval.active() or app.cancellation is not None:
-                return await actions.cancelRun(app), ()
+                return await actions.cancel_run(app), ()
         case "ctrl+l":
             app.err = ""
             app.status = ""
             return app, (runtime.CLEAR_SCREEN,)
         case "?":
             if app.composer.draft() == "":
-                app.showHelp = True
+                app.show_help = True
                 app.status = ""
                 return app, ()
         case "pgup" | "pgdown":
@@ -177,19 +177,19 @@ async def updateKey(app: App, key: str) -> tuple[App, tuple[runtime.Command[Msg]
             app.err, app.status = intent.error, ""
             return app, ()
         app.err = ""
-        return app, runtime.batch(actions.copyCommand(app, intent.copy_text))
+        return app, runtime.batch(actions.copy_command(app, intent.copy_text))
     app.composer.set_turn_running(app.cancellation is not None)
-    composer, composerIntent = app.composer.update(key)
+    composer, composer_intent = app.composer.update(key)
     app.composer = composer
-    if composerIntent is None:
+    if composer_intent is None:
         return app, ()
-    match composerIntent.kind:
+    match composer_intent.kind:
         case IntentKind.SUBMIT:
-            return await submitText(app, composerIntent.text)
+            return await submit_text(app, composer_intent.text)
         case IntentKind.QUEUE:
-            return await queueInput(app, composerIntent.text)
+            return await queue_input(app, composer_intent.text)
         case IntentKind.STEER:
-            return await steerInput(app, composerIntent.text)
+            return await steer_input(app, composer_intent.text)
         case IntentKind.CLEAR:
             app.status = "Input cleared"
         case _:
@@ -198,18 +198,18 @@ async def updateKey(app: App, key: str) -> tuple[App, tuple[runtime.Command[Msg]
     return app, ()
 
 
-def updateConversationNotification(
+def update_conversation_notification(
     app: App, notification: ConversationNotification
 ) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Apply one notification, then re-arm the listener for the next one."""
     if isinstance(notification, AgentStatusChanged):
-        app.agentStatus = notification.status
+        app.agent_status = notification.status
         app.transcript.set_busy(notification.status.busy)
-        if not app.needsInput():
+        if not app.needs_input():
             app.approval.clear()
     elif isinstance(notification, ToolApprovalRequested):
         request = notification.request
-        app.approvalRequestID = notification.request_id
+        app.approval_request_id = notification.request_id
         app.approval.open(
             Request(
                 tool_name=notification.tool_call.name,
@@ -223,7 +223,7 @@ def updateConversationNotification(
             )
         )
     elif isinstance(notification, ToolApprovalCleared):
-        app.approvalRequestID = ""
+        app.approval_request_id = ""
         app.approval.clear()
     elif isinstance(notification, MessageAppended):
         app.transcript.append(notification.message)
@@ -251,29 +251,29 @@ def updateConversationNotification(
     elif isinstance(notification, UsageReported):
         # The status line draws the most recent call's cost, so a later report
         # replaces an earlier one rather than accumulating.
-        app.contextUsage = notification.usage
-    return app, (waitForNotification(app.notifications, app.turn),)
+        app.context_usage = notification.usage
+    return app, (wait_for_notification(app.notifications, app.turn),)
 
 
-async def submitText(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
+async def submit_text(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Route submitted input to the feature that owns its meaning.
 
     Slash commands belong to the command feature; everything else starts a turn.
     """
-    if app.commands.is_compacting() or app.commands.managing_mcp():
+    if app.commands.is_compacting() or app.commands.is_managing_mcp():
         app.status = "Background operation in progress…"
         return app, ()
     if not commands.is_command(text):
-        return submitPrompt(app, text)
+        return submit_prompt(app, text)
     app.composer.clear_input()
     model, outcome, command = await app.commands.handle(
-        commands.Input(text=text, attachments=pendingAttachments(app.attachments.queued_items()))
+        commands.Input(text=text, attachments=pending_attachments(app.attachments.queued_items()))
     )
     app.commands = model
-    return await _applyOutcome(app, outcome, runtime.batch(command))
+    return await _apply_outcome(app, outcome, runtime.batch(command))
 
 
-async def queueInput(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
+async def queue_input(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Queue a follow-up for after the running turn, through the application.
 
     The queue belongs to the application, not to this footer: the turn that takes
@@ -300,7 +300,7 @@ async def queueInput(app: App, text: str) -> tuple[App, tuple[runtime.Command[Ms
     return app, ()
 
 
-async def steerInput(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
+async def steer_input(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Submit an in-turn input for the next step of the running turn.
 
     Not a cancellation: the turn keeps running and takes the input up at its next
@@ -321,12 +321,12 @@ async def steerInput(app: App, text: str) -> tuple[App, tuple[runtime.Command[Ms
     return app, ()
 
 
-def pendingAttachments(items: tuple[attachments.Item, ...]) -> tuple[commands.Attachment, ...]:
+def pending_attachments(items: tuple[attachments.Item, ...]) -> tuple[commands.Attachment, ...]:
     """The queue, in the vocabulary the command feature owns."""
     return tuple(commands.Attachment(name=item.name, mime=item.mime) for item in items)
 
 
-def finishSubmit(app: App, err: Failure | None) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
+def finish_submit(app: App, err: Failure | None) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Close out a submission the application has finished running.
 
     Nothing is started here. A queued follow-up becomes the next turn inside the
@@ -343,12 +343,12 @@ def finishSubmit(app: App, err: Failure | None) -> tuple[App, tuple[runtime.Comm
     return app, ()
 
 
-def submitPrompt(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
+def submit_prompt(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Start a turn: fresh channels, a fresh cancellation, and a new turn number."""
     app.err = ""
     app.status = ""
     app.transcript.clear_streaming()
-    app.agentStatus = AgentStatus(label="Submitting", busy=True)
+    app.agent_status = AgentStatus(label="Submitting", busy=True)
     app.transcript.set_busy(True)
     app.approval.clear()
     app.composer.clear_input()
@@ -359,10 +359,10 @@ def submitPrompt(app: App, text: str) -> tuple[App, tuple[runtime.Command[Msg], 
     cancellation = Cancellation()
     app.notifications = notifications
     app.cancellation = cancellation
-    app.approvalRequestID = ""
+    app.approval_request_id = ""
     app.turn += 1
     return app, (
-        waitForNotification(notifications, app.turn),
+        wait_for_notification(notifications, app.turn),
         run_turn(app, text, notifications, cancellation),
     )
 
@@ -382,7 +382,7 @@ def run_turn(
     return run
 
 
-def waitForNotification(channel: Channel[ConversationNotification], turn: int) -> runtime.Listener[Msg]:
+def wait_for_notification(channel: Channel[ConversationNotification], turn: int) -> runtime.Listener[Msg]:
     """The listener command for one turn's notification channel.
 
     It ends when the channel closes, which is what stops the chain: a closed
@@ -398,10 +398,10 @@ def waitForNotification(channel: Channel[ConversationNotification], turn: int) -
     return runtime.Listener(listen)
 
 
-async def _applyOutcome(
+async def _apply_outcome(
     app: App, outcome: commands.Outcome | None, command: tuple[runtime.Command[Msg], ...]
 ) -> tuple[App, tuple[runtime.Command[Msg], ...]]:
     """Deferred: the package surface imports this module, so it is patched in late."""
-    from super_agent.tui import applyOutcome
+    from super_agent.tui import apply_outcome
 
-    return await applyOutcome(app, outcome, command)
+    return await apply_outcome(app, outcome, command)

@@ -9,9 +9,9 @@ Three things live here because they read the whole model rather than one feature
 * :func:`new` wires the features to the frontend ports, including the one
   translation the root owns — the command palette's entry type into the
   composer's.
-* :func:`welcomeString` composes the cross-feature welcome block: the model, the
+* :func:`welcome_string` composes the cross-feature welcome block: the model, the
   working directory, and the final instruction source.
-* :func:`applyOutcome` is the routing table: a command reports its whole effect,
+* :func:`apply_outcome` is the routing table: a command reports its whole effect,
   and the root applies the parts it owns and hands the cross-feature parts to the
   feature that owns them.
 
@@ -28,7 +28,7 @@ import os
 from super_agent.tui import approval as approval_feature, attachments, commands, composer, runtime, transcript
 from super_agent.tui.actions import (
     ClipboardDone as ClipboardDone,
-    finishCopy as finishCopy,
+    finish_copy as finish_copy,
 )
 from super_agent.tui.app import (
     App as App,
@@ -39,9 +39,9 @@ from super_agent.tui.app import (
     OutputPrinter as OutputPrinter,
     StartupInfo as StartupInfo,
     SubmitDone as SubmitDone,
-    composerCommands as composerCommands,
-    displayCWD as displayCWD,
-    printCommand as printCommand,
+    composer_commands as composer_commands,
+    display_cwd as display_cwd,
+    print_command as print_command,
     with_clipboard_writer as with_clipboard_writer,
     with_output_printer as with_output_printer,
 )
@@ -122,17 +122,17 @@ from super_agent.tui.transcript import (
     extract_code_blocks as extract_code_blocks,
 )
 from super_agent.tui.update import (
-    finishSubmit as finishSubmit,
-    pendingAttachments as pendingAttachments,
-    queueInput as queueInput,
+    finish_submit as finish_submit,
+    pending_attachments as pending_attachments,
+    queue_input as queue_input,
     resize as resize,
-    steerInput as steerInput,
-    submitPrompt as submitPrompt,
-    submitText as submitText,
+    steer_input as steer_input,
+    submit_prompt as submit_prompt,
+    submit_text as submit_text,
     update as update,
-    updateConversationNotification as updateConversationNotification,
-    updateKey as updateKey,
-    waitForNotification as waitForNotification,
+    update_conversation_notification as update_conversation_notification,
+    update_key as update_key,
+    wait_for_notification as wait_for_notification,
 )
 
 __all__ = [
@@ -206,28 +206,28 @@ __all__ = [
     "TurnPort",
     "UsageReported",
     "WindowSizeMsg",
-    "applyOutcome",
+    "apply_outcome",
     "batch",
-    "composerCommands",
+    "composer_commands",
     "default_styles",
-    "displayCWD",
+    "display_cwd",
     "extract_code_blocks",
-    "finishCopy",
-    "finishSubmit",
+    "finish_copy",
+    "finish_submit",
     "new",
-    "pendingAttachments",
-    "printCommand",
-    "queueInput",
-    "refreshSnapshot",
+    "pending_attachments",
+    "print_command",
+    "queue_input",
+    "refresh_snapshot",
     "resize",
-    "steerInput",
-    "submitPrompt",
-    "submitText",
+    "steer_input",
+    "submit_prompt",
+    "submit_text",
     "update",
-    "updateConversationNotification",
-    "updateKey",
-    "waitForNotification",
-    "welcomeString",
+    "update_conversation_notification",
+    "update_key",
+    "wait_for_notification",
+    "welcome_string",
     "with_clipboard_writer",
     "with_output_printer",
 ]
@@ -254,7 +254,7 @@ def new(frontend_ports: FrontendPorts, info: StartupInfo, *options: Option) -> A
         turn_port=frontend_ports,
         commands=command_model,
         composer=composer.new(
-            composerCommands(command_model.palette()),
+            composer_commands(command_model.palette()),
             styles=composer.Styles(
                 prompt=styles.accent_bold,
                 accent=styles.accent,
@@ -276,7 +276,7 @@ def new(frontend_ports: FrontendPorts, info: StartupInfo, *options: Option) -> A
         info=info,
     )
     app.transcript = transcript.new(
-        welcomeString(app),
+        welcome_string(app),
         TranscriptStyles(
             default=styles.default,
             secondary=styles.secondary,
@@ -293,7 +293,7 @@ def new(frontend_ports: FrontendPorts, info: StartupInfo, *options: Option) -> A
     return app
 
 
-def welcomeString(app: App) -> str:
+def welcome_string(app: App) -> str:
     """The compact welcome card: product, version, model, directory, instructions."""
     title = ">_ Super Agent"
     if app.info.version:
@@ -301,17 +301,17 @@ def welcomeString(app: App) -> str:
     rows = [title, ""]
     if app.info.model_name:
         rows.append("model:       " + app.info.model_name)
-    if location := displayCWD(app.info.cwd):
+    if location := display_cwd(app.info.cwd):
         rows.append("directory:   " + location)
     if app.info.instruction_paths:
         rows.append("instructions: " + os.path.basename(app.info.instruction_paths[-1]))
     return "\n".join(rows)
 
 
-def refreshSnapshot(app: App) -> None:
+def refresh_snapshot(app: App) -> None:
     """Re-read conversation state after a command replaced or shrank the transcript."""
     snapshot = app.snapshot_port.snapshot()
-    app.agentStatus = snapshot.agent_status
+    app.agent_status = snapshot.agent_status
     app.transcript.replace(snapshot.messages)
     app.transcript.set_busy(snapshot.agent_status.busy)
     app.approval.clear()
@@ -332,7 +332,7 @@ def refreshSnapshot(app: App) -> None:
     app.transcript.set_streaming(snapshot.streaming_message)
 
 
-async def applyOutcome(
+async def apply_outcome(
     app: App,
     outcome: commands.Outcome | None,
     command: tuple[runtime.Command[Msg], ...],
@@ -357,15 +357,15 @@ async def applyOutcome(
             app.info = dataclasses.replace(app.info, model_name=outcome.status_bar.model_name)
         app.info = dataclasses.replace(app.info, permission_mode=outcome.status_bar.permission_mode)
     if outcome.refresh_snapshot:
-        refreshSnapshot(app)
+        refresh_snapshot(app)
     if outcome.quit:
         return app, (runtime.QUIT,)
     if outcome.show_help:
-        app.showHelp = True
+        app.show_help = True
     if outcome.attach_path:
         return app, (app.attachments.attach(outcome.attach_path),)
     if outcome.prompt:
-        return submitPrompt(app, outcome.prompt)
+        return submit_prompt(app, outcome.prompt)
     if outcome.output:
-        return app, runtime.batch(printCommand(app, outcome.output))
+        return app, runtime.batch(print_command(app, outcome.output))
     return app, command

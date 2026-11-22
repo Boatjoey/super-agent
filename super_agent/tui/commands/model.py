@@ -47,17 +47,17 @@ class Model:
 
     ports: Ports
     config: Config
-    customCommands: tuple[str, ...] = ()
+    custom_commands: tuple[str, ...] = ()
     compacting: bool = False
-    managingMCP: bool = False
+    managing_mcp: bool = False
 
     def is_compacting(self) -> bool:
         """Whether ``/compact`` is still running."""
         return self.compacting
 
-    def managing_mcp(self) -> bool:
+    def is_managing_mcp(self) -> bool:
         """Whether an MCP lifecycle change is still running."""
-        return self.managingMCP
+        return self.managing_mcp
 
     def palette(self) -> tuple[catalog.Command, ...]:
         """The palette the composer offers."""
@@ -78,7 +78,7 @@ class Model:
                 refresh_snapshot=True,
             )
         # The union is closed, so anything that is not a compaction is an MCP run.
-        self.managingMCP = False
+        self.managing_mcp = False
         if message.err is not None:
             return self, Outcome(err=f"MCP failed: {message.err}")
         return self, Outcome(status=message.status)
@@ -89,29 +89,29 @@ class Model:
         command = parts[0]
         match command:
             case "/agent":
-                return self, await self._handleAgent(parts), None
+                return self, await self._handle_agent(parts), None
             case "/plan":
-                return self, await self._handleAgent(["/agent", "plan"]), None
+                return self, await self._handle_agent(["/agent", "plan"]), None
             case "/build":
-                return self, await self._handleAgent(["/agent", "build"]), None
+                return self, await self._handle_agent(["/agent", "build"]), None
             case "/mode":
                 if len(parts) != 2 or parts[1] not in ("plan", "build"):
                     return self, Outcome(err="Usage: /mode <plan|build>"), None
-                return self, await self._handleAgent(["/agent", parts[1]]), None
+                return self, await self._handle_agent(["/agent", parts[1]]), None
             case "/fork":
-                return self, await self._handleFork(input.text.removeprefix(command).strip()), None
+                return self, await self._handle_fork(input.text.removeprefix(command).strip()), None
             case "/memory":
-                return self, await self._handleMemory(parts[1:]), None
+                return self, await self._handle_memory(parts[1:]), None
             case "/config":
-                return self, await self._handleConfig(parts[1:]), None
+                return self, await self._handle_config(parts[1:]), None
             case "/remember":
-                return self, await self._handleRemember(input.text.removeprefix(command).strip()), None
+                return self, await self._handle_remember(input.text.removeprefix(command).strip()), None
             case "/forget":
-                return self, await self._handleForget(), None
+                return self, await self._handle_forget(), None
             case "/diff":
-                return self, await self._handleGitDiff(), None
+                return self, await self._handle_git_diff(), None
             case "/branch":
-                return self, await self._handleGitStatus(), None
+                return self, await self._handle_git_status(), None
             case "/review":
                 return self, Outcome(prompt=WORKFLOW_PROMPTS["review"]), None
             case "/fix-ci":
@@ -121,9 +121,9 @@ class Model:
             case "/export":
                 if len(parts) != 2:
                     return self, Outcome(err="Usage: /export <markdown|json>"), None
-                return self, await self._handleExport(parts[1]), None
+                return self, await self._handle_export(parts[1]), None
             case "/share":
-                return self, await self._handleExport("html"), None
+                return self, await self._handle_export("html"), None
             case "/attach":
                 if len(parts) != 2:
                     return self, Outcome(err="Usage: /attach <path>"), None
@@ -134,11 +134,11 @@ class Model:
                 names = [f"{item.name} ({item.mime})" for item in input.attachments]
                 return self, Outcome(status="Attachments", output="Attachments:\n- " + "\n- ".join(names)), None
             case "/commands":
-                return self, self._handleNamedItems("Custom commands"), None
+                return self, self._handle_named_items("Custom commands"), None
             case "/skills":
-                return self, self._handleNamedItems("Skills"), None
+                return self, self._handle_named_items("Skills"), None
             case "/plugins":
-                return self, self._handleNamedItems("Plugins"), None
+                return self, self._handle_named_items("Plugins"), None
             case "/diagnostics":
                 if len(parts) != 2:
                     return self, Outcome(err="Usage: /diagnostics <path>"), None
@@ -148,25 +148,25 @@ class Model:
                     return self, Outcome(err=f"Diagnostics failed: {err}"), None
                 return self, Outcome(status="Diagnostics", output=result), None
             case "/instructions":
-                return self, self._handleInstructions(), None
+                return self, self._handle_instructions(), None
             case "/permissions":
-                return self, await self._handlePermissions(parts), None
+                return self, await self._handle_permissions(parts), None
             case "/mcp":
-                return self._handleMCP(parts)
+                return self._handle_mcp(parts)
             case "/clear" | "/reset":
-                return self, await self._handleReset(), None
+                return self, await self._handle_reset(), None
             case "/sessions":
-                return self, await self._handleSessions(), None
+                return self, await self._handle_sessions(), None
             case "/resume":
-                return self, await self._handleResume(parts), None
+                return self, await self._handle_resume(parts), None
             case "/rename":
-                return self, await self._handleRename(input.text, parts), None
+                return self, await self._handle_rename(input.text, parts), None
             case "/delete-session":
-                return self, await self._handleDelete(parts), None
+                return self, await self._handle_delete(parts), None
             case "/compact":
-                return self._handleCompact(input.text, command)
+                return self._handle_compact(input.text, command)
             case "/undo":
-                return self, await self._handleUndo(), None
+                return self, await self._handle_undo(), None
             case "/quit" | "/exit":
                 return self, Outcome(quit=True), None
             case "/help":
@@ -179,7 +179,7 @@ class Model:
                     return self, Outcome(err=f"Unknown command: {command}"), None
                 return self, Outcome(prompt=expanded), None
 
-    def _handleCompact(self, text: str, command: str) -> tuple[Model, Outcome | None, Command | None]:
+    def _handle_compact(self, text: str, command: str) -> tuple[Model, Outcome | None, Command | None]:
         """Pass the optional summary; the keep-newest policy stays in the runtime."""
         summary = text.removeprefix(command).strip()
         self.compacting = True
@@ -193,11 +193,11 @@ class Model:
 
         return self, Outcome(status="Compacting conversation…"), run
 
-    def _handleMCP(self, parts: list[str]) -> tuple[Model, Outcome | None, Command | None]:
+    def _handle_mcp(self, parts: list[str]) -> tuple[Model, Outcome | None, Command | None]:
         if len(parts) == 1 or (len(parts) == 2 and parts[1] == "list"):
             return (
                 self,
-                Outcome(status="MCP servers", output=format.formatMCPServers(self.ports.mcp.list_mcp_servers())),
+                Outcome(status="MCP servers", output=format.format_mcp_servers(self.ports.mcp.list_mcp_servers())),
                 None,
             )
         operation = parts[1]
@@ -207,25 +207,25 @@ class Model:
                     return self, Outcome(err="Usage: /mcp add <name> <command> [args...]"), None
                 name, command, args = parts[2], parts[3], list(parts[4:])
                 status = "Added MCP server " + name
-                run = self._mcpCommand(status, lambda: self.ports.mcp.add_mcp_server(name, command, args))
+                run = self._mcp_command(status, lambda: self.ports.mcp.add_mcp_server(name, command, args))
             case "remove":
                 if len(parts) != 3:
                     return self, Outcome(err="Usage: /mcp remove <name>"), None
                 name = parts[2]
                 status = "Removed MCP server " + name
-                run = self._mcpCommand(status, lambda: self.ports.mcp.remove_mcp_server(name))
+                run = self._mcp_command(status, lambda: self.ports.mcp.remove_mcp_server(name))
             case "restart":
                 if len(parts) != 3:
                     return self, Outcome(err="Usage: /mcp restart <name>"), None
                 name = parts[2]
                 status = "Restarted MCP server " + name
-                run = self._mcpCommand(status, lambda: self.ports.mcp.restart_mcp_server(name))
+                run = self._mcp_command(status, lambda: self.ports.mcp.restart_mcp_server(name))
             case _:
                 return self, Outcome(err="Usage: /mcp <list|add|remove|restart>"), None
-        self.managingMCP = True
+        self.managing_mcp = True
         return self, Outcome(status="Updating MCP servers…"), run
 
-    def _mcpCommand(self, status: str, operation: Callable[[], Coroutine[object, object, None]]) -> Command:
+    def _mcp_command(self, status: str, operation: Callable[[], Coroutine[object, object, None]]) -> Command:
         """Wrap one MCP lifecycle call as the command that reports its outcome."""
 
         async def change() -> MCPDone:
@@ -237,7 +237,7 @@ class Model:
 
         return change
 
-    async def _handleAgent(self, parts: list[str]) -> Outcome:
+    async def _handle_agent(self, parts: list[str]) -> Outcome:
         if len(parts) == 1 or (len(parts) == 2 and parts[1] == "list"):
             current = self.ports.agents.current_agent().name
             rows = [
@@ -259,7 +259,7 @@ class Model:
             status_bar=StatusBar(model_name=profile.model, permission_mode=profile.permission_mode),
         )
 
-    def _handleNamedItems(self, label: str) -> Outcome:
+    def _handle_named_items(self, label: str) -> Outcome:
         match label:
             case "Custom commands":
                 items = self.ports.extensions.custom_commands()
@@ -267,12 +267,12 @@ class Model:
                 items = self.ports.extensions.skills()
             case _:
                 items = self.ports.extensions.plugins()
-        return Outcome(status=label, output=format.formatNamedItems(label, items))
+        return Outcome(status=label, output=format.format_named_items(label, items))
 
-    def _handleInstructions(self) -> Outcome:
-        return Outcome(status="Instructions", output=format.formatInstructions(self.config.instruction_paths))
+    def _handle_instructions(self) -> Outcome:
+        return Outcome(status="Instructions", output=format.format_instructions(self.config.instruction_paths))
 
-    async def _handlePermissions(self, parts: list[str]) -> Outcome:
+    async def _handle_permissions(self, parts: list[str]) -> Outcome:
         if len(parts) >= 3 and parts[1] == "mode":
             try:
                 await self.ports.permissions.set_permission_mode(parts[2])
@@ -284,25 +284,25 @@ class Model:
         mode = self.ports.permissions.permission_mode()
         return Outcome(
             status="Permissions",
-            output=format.formatPermissions(self.config, mode, self.ports.permissions.auto_approve_tools()),
+            output=format.format_permissions(self.config, mode, self.ports.permissions.auto_approve_tools()),
             status_bar=StatusBar(permission_mode=mode),
         )
 
-    async def _handleReset(self) -> Outcome:
+    async def _handle_reset(self) -> Outcome:
         try:
             await self.ports.sessions.reset()
         except Exception as err:
             return Outcome(err=f"Reset failed: {err}", refresh_snapshot=True)
         return Outcome(output=format.divider("New conversation"), refresh_snapshot=True)
 
-    async def _handleSessions(self) -> Outcome:
+    async def _handle_sessions(self) -> Outcome:
         try:
             summaries = await self.ports.sessions.list_sessions()
         except Exception as err:
             return Outcome(err=f"Sessions failed: {err}")
-        return Outcome(status="Sessions", output=format.formatSessions(summaries))
+        return Outcome(status="Sessions", output=format.format_sessions(summaries))
 
-    async def _handleResume(self, parts: list[str]) -> Outcome:
+    async def _handle_resume(self, parts: list[str]) -> Outcome:
         if len(parts) < 2:
             return Outcome(err="Usage: /resume <id>")
         try:
@@ -315,7 +315,7 @@ class Model:
             refresh_snapshot=True,
         )
 
-    async def _handleRename(self, text: str, parts: list[str]) -> Outcome:
+    async def _handle_rename(self, text: str, parts: list[str]) -> Outcome:
         if len(parts) < 3:
             return Outcome(err="Usage: /rename <id> <title>")
         title = text.removeprefix(parts[0] + " " + parts[1]).strip()
@@ -325,7 +325,7 @@ class Model:
             return Outcome(err=f"Rename failed: {err}")
         return Outcome(status="Renamed " + parts[1])
 
-    async def _handleDelete(self, parts: list[str]) -> Outcome:
+    async def _handle_delete(self, parts: list[str]) -> Outcome:
         if len(parts) < 2:
             return Outcome(err="Usage: /delete-session <id>")
         try:
@@ -334,7 +334,7 @@ class Model:
             return Outcome(err=f"Delete failed: {err}")
         return Outcome(status="Deleted " + parts[1])
 
-    async def _handleUndo(self) -> Outcome:
+    async def _handle_undo(self) -> Outcome:
         try:
             await self.ports.sessions.undo()
         except Exception as err:
@@ -345,21 +345,21 @@ class Model:
             refresh_snapshot=True,
         )
 
-    async def _handleExport(self, exportFormat: str) -> Outcome:
+    async def _handle_export(self, export_format: str) -> Outcome:
         try:
-            path = await self.ports.sessions.export(exportFormat)
+            path = await self.ports.sessions.export(export_format)
         except Exception as err:
             return Outcome(err=f"Export failed: {err}")
         return Outcome(status="Exported " + path)
 
-    async def _handleFork(self, title: str) -> Outcome:
+    async def _handle_fork(self, title: str) -> Outcome:
         try:
             session_id = await self.ports.sessions.fork(title)
         except Exception as err:
             return Outcome(err=f"Fork failed: {err}")
         return Outcome(status="Forked session " + session_id, refresh_snapshot=True)
 
-    async def _handleMemory(self, arguments: list[str]) -> Outcome:
+    async def _handle_memory(self, arguments: list[str]) -> Outcome:
         """Show the memory, or turn it on and off.
 
         The switch is the point: a memory that cannot be turned off is a memory
@@ -388,21 +388,21 @@ class Model:
             output="Memory:\n- " + "\n- ".join(items),
         )
 
-    async def _handleRemember(self, value: str) -> Outcome:
+    async def _handle_remember(self, value: str) -> Outcome:
         try:
             await self.ports.memory.remember(value)
         except Exception as err:
             return Outcome(err=f"Remember failed: {err}")
         return Outcome(status="Memory saved")
 
-    async def _handleForget(self) -> Outcome:
+    async def _handle_forget(self) -> Outcome:
         try:
             await self.ports.memory.forget_memories()
         except Exception as err:
             return Outcome(err=f"Forget failed: {err}")
         return Outcome(status="Memory cleared")
 
-    async def _handleConfig(self, arguments: list[str]) -> Outcome:
+    async def _handle_config(self, arguments: list[str]) -> Outcome:
         """Show provider configuration, or set a provider's key and model.
 
         The key is a credential, so the listing redacts it to a presence flag
@@ -426,7 +426,7 @@ class Model:
             return Outcome(status=f"Configured {name}", refresh_snapshot=True)
         return Outcome(err="Usage: /config [list] | /config provider <name> <api_key> [model]")
 
-    async def _handleGitDiff(self) -> Outcome:
+    async def _handle_git_diff(self) -> Outcome:
         try:
             result = await self.ports.workspace.git_diff()
         except Exception as err:
@@ -435,7 +435,7 @@ class Model:
             return Outcome(status="No changes")
         return Outcome(status="Patch preview", output=result)
 
-    async def _handleGitStatus(self) -> Outcome:
+    async def _handle_git_status(self) -> Outcome:
         try:
             result = await self.ports.workspace.git_status()
         except Exception as err:
@@ -449,4 +449,4 @@ class Model:
 
 def new(config: Config, ports: Ports) -> Model:
     """The constructor: the catalogue follows the discovered extensions."""
-    return Model(ports=ports, config=config, customCommands=tuple(ports.extensions.custom_commands()))
+    return Model(ports=ports, config=config, custom_commands=tuple(ports.extensions.custom_commands()))

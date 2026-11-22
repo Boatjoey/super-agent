@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from super_agent.tui.commands.model import Model
 
-__all__ = ["Command", "is_command", "palette", "slashCommandDescriptions", "slashCommands"]
+__all__ = ["SLASH_COMMANDS", "SLASH_COMMAND_DESCRIPTIONS", "Command", "is_command", "palette"]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -24,7 +24,7 @@ class Command:
 
 
 #: The built-in commands, in palette order.
-slashCommands: tuple[str, ...] = (
+SLASH_COMMANDS: tuple[str, ...] = (
     "/clear",
     "/compact",
     "/delete-session",
@@ -63,7 +63,7 @@ slashCommands: tuple[str, ...] = (
 )
 
 #: What each built-in does, as the palette shows it.
-slashCommandDescriptions: dict[str, str] = {
+SLASH_COMMAND_DESCRIPTIONS: dict[str, str] = {
     "/clear": "Reset the conversation",
     "/agent": "List or select an agent <name>",
     "/attach": "Attach a workspace file <path>",
@@ -112,7 +112,7 @@ def is_command(text: str) -> bool:
 
 def palette(model: Model) -> tuple[Command, ...]:
     """The built-ins followed by the discovered custom commands."""
-    commands = [Command(name=name, description=slashCommandDescriptions[name]) for name in slashCommands]
-    for name in sorted(model.customCommands):
+    commands = [Command(name=name, description=SLASH_COMMAND_DESCRIPTIONS[name]) for name in SLASH_COMMANDS]
+    for name in sorted(model.custom_commands):
         commands.append(Command(name="/" + name.removeprefix("/"), description="Custom command"))
     return tuple(commands)

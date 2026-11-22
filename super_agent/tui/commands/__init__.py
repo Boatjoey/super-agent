@@ -13,11 +13,11 @@ from super_agent.tui.commands.catalog import (
 )
 from super_agent.tui.commands.format import (
     divider as divider,
-    formatInstructions as formatInstructions,
-    formatMCPServers as formatMCPServers,
-    formatNamedItems as formatNamedItems,
-    formatPermissions as formatPermissions,
-    formatSessions as formatSessions,
+    format_instructions as format_instructions,
+    format_mcp_servers as format_mcp_servers,
+    format_named_items as format_named_items,
+    format_permissions as format_permissions,
+    format_sessions as format_sessions,
 )
 from super_agent.tui.commands.model import (
     Config as Config,
@@ -68,11 +68,11 @@ __all__ = [
     "StatusBar",
     "WorkspacePort",
     "divider",
-    "formatInstructions",
-    "formatMCPServers",
-    "formatNamedItems",
-    "formatPermissions",
-    "formatSessions",
+    "format_instructions",
+    "format_mcp_servers",
+    "format_named_items",
+    "format_permissions",
+    "format_sessions",
     "is_command",
     "new",
 ]

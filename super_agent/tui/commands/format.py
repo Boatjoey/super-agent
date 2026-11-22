@@ -14,11 +14,11 @@ if TYPE_CHECKING:
 
 __all__ = [
     "divider",
-    "formatInstructions",
-    "formatMCPServers",
-    "formatNamedItems",
-    "formatPermissions",
-    "formatSessions",
+    "format_instructions",
+    "format_mcp_servers",
+    "format_named_items",
+    "format_permissions",
+    "format_sessions",
 ]
 
 
@@ -27,7 +27,7 @@ def divider(label: str) -> str:
     return "── " + label + " ──"
 
 
-def formatSessions(summaries: list[SessionSummary]) -> str:
+def format_sessions(summaries: list[SessionSummary]) -> str:
     """One row per saved session."""
     if not summaries:
         return "No saved sessions"
@@ -38,7 +38,7 @@ def formatSessions(summaries: list[SessionSummary]) -> str:
     return "\n".join(lines)
 
 
-def formatMCPServers(servers: list[MCPServerSummary]) -> str:
+def format_mcp_servers(servers: list[MCPServerSummary]) -> str:
     """One row per configured MCP server."""
     if not servers:
         return "No MCP servers"
@@ -49,29 +49,29 @@ def formatMCPServers(servers: list[MCPServerSummary]) -> str:
     return "\n".join(lines)
 
 
-def formatInstructions(paths: tuple[str, ...]) -> str:
+def format_instructions(paths: tuple[str, ...]) -> str:
     """The instruction sources that were loaded, in load order."""
     if not paths:
         return "No instruction files loaded"
     return "Loaded instruction sources:\n" + "\n".join(f"- {path}" for path in paths)
 
 
-def formatPermissions(config: Config, mode: str, autoApprove: bool) -> str:
+def format_permissions(config: Config, mode: str, auto_approve: bool) -> str:
     """The runtime's own policy values, so the display cannot drift from them."""
     return (
         f"Permission mode: {mode or 'ask'}\n"
-        f"Tools: {_onOff(not config.no_tools)}\n"
-        f"Approval: {_onOff(autoApprove)}\n"
+        f"Tools: {_on_off(not config.no_tools)}\n"
+        f"Approval: {_on_off(auto_approve)}\n"
         f"CWD: {config.cwd}"
     )
 
 
-def formatNamedItems(label: str, items: list[str]) -> str:
+def format_named_items(label: str, items: list[str]) -> str:
     """A titled bullet list, or the empty case."""
     if not items:
         return "No " + label.lower()
     return label + ":\n- " + "\n- ".join(items)
 
 
-def _onOff(enabled: bool) -> str:
+def _on_off(enabled: bool) -> str:
     return "on" if enabled else "off"

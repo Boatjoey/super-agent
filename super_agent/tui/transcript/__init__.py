@@ -22,8 +22,8 @@ from super_agent.tui.transcript.model import (
     default_styles as default_styles,
     extract_code_blocks as extract_code_blocks,
     new as new,
-    toolDisplay as toolDisplay,
-    toolGroups as toolGroups,
+    tool_display as tool_display,
+    tool_groups as tool_groups,
 )
 
 __all__ = [
@@ -42,6 +42,6 @@ __all__ = [
     "default_styles",
     "extract_code_blocks",
     "new",
-    "toolDisplay",
-    "toolGroups",
+    "tool_display",
+    "tool_groups",
 ]

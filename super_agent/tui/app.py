@@ -5,7 +5,7 @@ dimensions, and layout composition. Every user capability lives in the feature
 that owns it, so nothing here knows how a command, an approval, or an attachment
 behaves.
 
-The package surface — ``new``, ``welcomeString``, and ``applyOutcome`` — lives
+The package surface — ``new``, ``welcome_string``, and ``apply_outcome`` — lives
 in ``super_agent/tui/__init__.py``, because those functions read the whole model
 and wire several features together.
 """
@@ -42,9 +42,9 @@ __all__ = [
     "OutputPrinter",
     "StartupInfo",
     "SubmitDone",
-    "composerCommands",
-    "displayCWD",
-    "printCommand",
+    "composer_commands",
+    "display_cwd",
+    "print_command",
     "with_clipboard_writer",
     "with_output_printer",
 ]
@@ -99,7 +99,7 @@ class App:
     ready: bool = False
     width: int = 80
     height: int = 24
-    showHelp: bool = False
+    show_help: bool = False
     err: str = ""
     status: str = ""
     cancellation: Cancellation | None = None
@@ -108,14 +108,14 @@ class App:
     )
     #: The approval a decision would answer. Sent back with the decision, so a
     #: second click, or one from a menu left open across turns, is refused.
-    approvalRequestID: str = ""
-    agentStatus: AgentStatus = dataclasses.field(default_factory=AgentStatus)
-    contextUsage: ContextUsage | None = None
+    approval_request_id: str = ""
+    agent_status: AgentStatus = dataclasses.field(default_factory=AgentStatus)
+    context_usage: ContextUsage | None = None
     turn: int = 0
-    writeClipboard: ClipboardWriter = dataclasses.field(default_factory=lambda: actions.defaultClipboardWrite)
+    write_clipboard: ClipboardWriter = dataclasses.field(default_factory=lambda: actions.default_clipboard_write)
     #: Where command output goes. The application shell installs its own viewer
     #: at construction, so a bare model has nowhere to print and drops it.
-    printOutput: OutputPrinter | None = None
+    print_output: OutputPrinter | None = None
 
     def init(self) -> tuple[runtime.Command[Msg], ...]:
         """The commands a freshly built app starts with.
@@ -125,9 +125,9 @@ class App:
         """
         return (self.attachments.init(),)
 
-    def needsInput(self) -> bool:
+    def needs_input(self) -> bool:
         """Whether the runtime is waiting on the user rather than on work."""
-        return self.agentStatus.awaiting_approval
+        return self.agent_status.awaiting_approval
 
 
 #: Every message the app's update accepts: the terminal's, the turn's, and each
@@ -158,7 +158,7 @@ def with_clipboard_writer(write: ClipboardWriter) -> Option:
     """Replace the clipboard writer, for a platform or a test."""
 
     def apply(app: App) -> None:
-        app.writeClipboard = write
+        app.write_clipboard = write
 
     return apply
 
@@ -167,12 +167,12 @@ def with_output_printer(printer: OutputPrinter) -> Option:
     """Replace the command-output printer, for scrollback or a test."""
 
     def apply(app: App) -> None:
-        app.printOutput = printer
+        app.print_output = printer
 
     return apply
 
 
-def composerCommands(palette: Sequence[commands.Command]) -> tuple[ComposerCommand, ...]:
+def composer_commands(palette: Sequence[commands.Command]) -> tuple[ComposerCommand, ...]:
     """Map the command feature's palette onto the composer's own entry type.
 
     The composer never learns the command catalogue. This is the one place the
@@ -181,15 +181,15 @@ def composerCommands(palette: Sequence[commands.Command]) -> tuple[ComposerComma
     return tuple(ComposerCommand(name=entry.name, description=entry.description) for entry in palette)
 
 
-def printCommand(app: App, content: str) -> runtime.Command[Msg] | None:
+def print_command(app: App, content: str) -> runtime.Command[Msg] | None:
     """Commit command output to the shell's viewer, or do nothing when there is none."""
-    printer = app.printOutput
+    printer = app.print_output
     if printer is None or not content.strip():
         return None
     return printer(content.rstrip("\n"))
 
 
-def displayCWD(cwd: str) -> str:
+def display_cwd(cwd: str) -> str:
     """``cwd`` with the home directory abbreviated to ``~``."""
     home = os.path.expanduser("~")
     if home and home != "~" and cwd.startswith(home):

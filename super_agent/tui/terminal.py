@@ -74,7 +74,7 @@ class TUIAdapter:
         self._streamed_content = ""
         self._streamed_reasoning = ""
         self._live_input = reader is _read_input and sys.stdin.isatty() and sys.stdout.isatty()
-        self.model.printOutput = self._output_printer
+        self.model.print_output = self._output_printer
 
     async def run_terminal(self) -> None:
         """Run without switching screens or taking over terminal scrolling."""
@@ -203,10 +203,10 @@ class TUIAdapter:
             sys.stdout.flush()
 
     def _prompt_lines(self) -> int:
-        return len(self.model.composer.paletteView().plain.splitlines()) + 1 if self.model.composer.matches() else 1
+        return len(self.model.composer.palette_view().plain.splitlines()) + 1 if self.model.composer.matches() else 1
 
     def _draw_prompt(self) -> None:
-        palette = self.model.composer.paletteView().plain
+        palette = self.model.composer.palette_view().plain
         if palette:
             sys.stdout.write(palette + "\n")
         sys.stdout.write("\u276f " + self.model.composer.draft())
@@ -267,11 +267,11 @@ class TUIAdapter:
                         )
                     else:
                         self._console.print()
-                        self._console.print(self.model.transcript.renderCommitted(message, False, False))
+                        self._console.print(self.model.transcript.render_committed(message, False, False))
                     self._streamed_content = ""
                     self._streamed_reasoning = ""
                 else:
-                    self._console.print(self.model.transcript.renderCommitted(message, False, False))
+                    self._console.print(self.model.transcript.render_committed(message, False, False))
         self._rendered_messages = len(messages)
         if streaming is None and self._streamed_content and self.model.cancellation is None:
             self._console.print()
@@ -285,11 +285,11 @@ class TUIAdapter:
         self._last_error = self.model.err
         self._last_status = self.model.status
 
-        if self.model.showHelp:
+        if self.model.show_help:
             self._console.print(
                 "Enter a prompt normally. Slash commands start with /. Use /commands to list them and /quit to exit."
             )
-            self.model.showHelp = False
+            self.model.show_help = False
 
     def _start(self, commands: Sequence[runtime.Command[Msg]]) -> None:
         for command in commands:

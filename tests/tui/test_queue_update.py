@@ -19,7 +19,7 @@ from super_agent.tui import (
     QueuedReceipt,
     runtime,
     update,
-    updateConversationNotification,
+    update_conversation_notification,
 )
 from tests.tui.fakes import FakeFrontendPorts, new_app
 
@@ -77,7 +77,7 @@ async def test_the_turn_that_takes_the_input_up_clears_the_footer() -> None:
     app, _commands = await type_and_queue(app, TEXT)
     input_id = app.composer.queued[0].id
 
-    app, _commands = updateConversationNotification(app, QueuedInputAccepted(input_id=input_id, turn=2))
+    app, _commands = update_conversation_notification(app, QueuedInputAccepted(input_id=input_id, turn=2))
 
     assert app.composer.queued == []
     assert app.status == "Queued input started turn 2"
@@ -92,7 +92,7 @@ async def test_a_withdrawn_input_leaves_the_footer_and_says_why() -> None:
     app, _commands = await type_and_queue(app, TEXT)
     input_id = app.composer.queued[0].id
 
-    app, _commands = updateConversationNotification(app, QueuedInputWithdrawn(input_id=input_id))
+    app, _commands = update_conversation_notification(app, QueuedInputWithdrawn(input_id=input_id))
 
     assert app.composer.queued == []
     assert "cancelled" in app.err
@@ -105,13 +105,13 @@ async def test_a_finished_submission_does_not_start_the_queued_input_here() -> N
     app = new_app(fake)
     app, _commands = await type_and_queue(app, TEXT)
 
-    from super_agent.tui import finishSubmit
+    from super_agent.tui import finish_submit
 
-    app, commands = finishSubmit(app, None)
+    app, commands = finish_submit(app, None)
 
     assert commands == ()
     assert fake.queries == []
-    assert app.composer.turnRunning is False
+    assert app.composer.turn_running is False
 
 
 @pytest.mark.asyncio

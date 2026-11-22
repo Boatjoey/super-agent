@@ -48,7 +48,7 @@ class FakeFrontendPorts:
     ) -> None:
         self.script = list(script)
         self.receipts = list(receipts)
-        self.queuedReceipts = list(queued)
+        self.queued_receipts = list(queued)
         self.queries: list[str] = []
         self.steers: list[str] = []
         self.queued: list[str] = []
@@ -99,8 +99,8 @@ class FakeFrontendPorts:
     async def queue(self, text: str) -> QueuedReceipt:
         """Accept the input for the next turn, unless the test scripted a refusal."""
         self.queued.append(text)
-        if self.queuedReceipts:
-            return self.queuedReceipts.pop(0)
+        if self.queued_receipts:
+            return self.queued_receipts.pop(0)
         return QueuedReceipt.queued(f"queue-{len(self.queued)}")
 
     async def cancel(self) -> Failure | None:

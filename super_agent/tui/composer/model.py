@@ -114,12 +114,12 @@ class Model:
     value: str = ""
     cursor: int = 0
     history: list[str] = dataclasses.field(default_factory=list[str])
-    historyIndex: int = 0
-    historyDraft: str = ""
+    history_index: int = 0
+    history_draft: str = ""
     queued: list[QueuedEntry] = dataclasses.field(default_factory=list[QueuedEntry])
     selection: int = 0
-    turnRunning: bool = False
-    compactPalette: bool = False
+    turn_running: bool = False
+    compact_palette: bool = False
     width: int = 76
     styles: Styles = dataclasses.field(default_factory=default_styles)
 
@@ -133,11 +133,11 @@ class Model:
 
     def set_compact_palette(self, compact: bool) -> None:
         """Short terminals show palette names without descriptions."""
-        self.compactPalette = compact
+        self.compact_palette = compact
 
     def set_turn_running(self, running: bool) -> None:
         """Whether Enter steers and Tab queues instead of submitting."""
-        self.turnRunning = running
+        self.turn_running = running
 
     def draft(self) -> str:
         """The current draft."""
@@ -176,27 +176,27 @@ class Model:
                 if self.value == "":
                     return self, None
                 self.clear_input()
-                self.historyIndex = len(self.history)
-                self.historyDraft = ""
+                self.history_index = len(self.history)
+                self.history_draft = ""
                 return self, Intent(kind=IntentKind.CLEAR)
             case "ctrl+j" | "shift+enter" | "alt+enter":
                 self._insert("\n")
                 return self, None
             case "tab":
-                if self.turnRunning:
+                if self.turn_running:
                     return self._action(IntentKind.QUEUE)
-                if self.completeSelected() or self.completeUnique():
+                if self.complete_selected() or self.complete_unique():
                     return self, None
             case "up":
                 if matches := self.matches():
                     if self.selection > 0:
                         self.selection -= 1
                     return self, None
-                if "\n" not in self.value and self.historyIndex > 0:
-                    if self.historyIndex == len(self.history):
-                        self.historyDraft = self.value
-                    self.historyIndex -= 1
-                    self._setValue(self.history[self.historyIndex])
+                if "\n" not in self.value and self.history_index > 0:
+                    if self.history_index == len(self.history):
+                        self.history_draft = self.value
+                    self.history_index -= 1
+                    self._set_value(self.history[self.history_index])
                     return self, None
             case "down":
                 if matches := self.matches():
@@ -204,18 +204,18 @@ class Model:
                         self.selection += 1
                     return self, None
                 if "\n" not in self.value:
-                    if self.historyIndex < len(self.history) - 1:
-                        self.historyIndex += 1
-                        self._setValue(self.history[self.historyIndex])
+                    if self.history_index < len(self.history) - 1:
+                        self.history_index += 1
+                        self._set_value(self.history[self.history_index])
                         return self, None
-                    if self.historyIndex == len(self.history) - 1:
-                        self.historyIndex = len(self.history)
-                        self._setValue(self.historyDraft)
+                    if self.history_index == len(self.history) - 1:
+                        self.history_index = len(self.history)
+                        self._set_value(self.history_draft)
                         return self, None
             case "enter":
-                if not self.turnRunning and self.completeSelected():
+                if not self.turn_running and self.complete_selected():
                     return self, None
-                if self.turnRunning:
+                if self.turn_running:
                     return self._action(IntentKind.STEER)
                 return self._action(IntentKind.SUBMIT)
             case "backspace":
@@ -239,18 +239,18 @@ class Model:
     def view(self) -> Text:
         """The queued preview, the palette, and the input box."""
         sections: list[Text] = []
-        if queue := self.queueView():
+        if queue := self.queue_view():
             sections.append(queue)
-        if (palette := self.paletteView()) and not self.turnRunning:
+        if (palette := self.palette_view()) and not self.turn_running:
             sections.append(palette)
         rule = " " + "─" * max(1, self.width + 2)
-        sections.append(self.inputView(rule))
+        sections.append(self.input_view(rule))
         return _join(sections)
 
-    def inputView(self, rule: str) -> Text:
+    def input_view(self, rule: str) -> Text:
         """The rule, the draft, and the rule again."""
         rendered = Text(rule)
-        for index, line in enumerate(self._visibleLines()):
+        for index, line in enumerate(self._visible_lines()):
             rendered.append("\n")
             rendered.append(f" {_PROMPT_GLYPH} " if index == 0 else "   ", style=self.styles.prompt)
             rendered.append_text(line)
@@ -258,11 +258,11 @@ class Model:
         rendered.append(rule)
         return rendered
 
-    def queueView(self) -> Text:
+    def queue_view(self) -> Text:
         """The queued follow-ups, bounded and elided."""
         if not self.queued:
             return Text()
-        limit = 0 if self.compactPalette else min(_QUEUE_PREVIEW, len(self.queued))
+        limit = 0 if self.compact_palette else min(_QUEUE_PREVIEW, len(self.queued))
         rendered = Text(f" Queued ({len(self.queued)})", style=self.styles.accent)
         for index in range(limit):
             preview = " ".join(self.queued[index].text.split())
@@ -275,12 +275,12 @@ class Model:
             rendered.append(f" … {remaining} more", style=self.styles.dim)
         return rendered
 
-    def paletteView(self) -> Text:
+    def palette_view(self) -> Text:
         """The slash-command matches, scrolled to keep the selection visible."""
         matches = self.matches()
         if not matches:
             return Text()
-        visible = _PALETTE_ROWS_COMPACT if self.compactPalette else _PALETTE_ROWS
+        visible = _PALETTE_ROWS_COMPACT if self.compact_palette else _PALETTE_ROWS
         start = 0
         if self.selection >= visible:
             start = self.selection - visible + 1
@@ -291,14 +291,14 @@ class Model:
             if index == self.selection:
                 prefix, style = _SELECTED_MARKER + " ", self.styles.selected
             label = matches[index].name
-            if not self.compactPalette:
+            if not self.compact_palette:
                 label = f"{label:<{_DESCRIPTION_COLUMN}} {matches[index].description}"
             if index > start:
                 rendered.append("\n")
             rendered.append(prefix + label, style=style)
         return rendered
 
-    def completeSelected(self) -> bool:
+    def complete_selected(self) -> bool:
         """Complete the highlighted match, if that changes the draft."""
         matches = self.matches()
         if not matches:
@@ -308,16 +308,16 @@ class Model:
         selected = matches[self.selection].name
         if self.value == selected:
             return False
-        self._setValue(selected)
+        self._set_value(selected)
         self.selection = 0
         return True
 
-    def completeUnique(self) -> bool:
+    def complete_unique(self) -> bool:
         """Complete a lone match, which is what Tab does for ``/ins``."""
         matches = self.matches()
         if len(matches) != 1 or matches[0].name == self.value:
             return False
-        self._setValue(matches[0].name)
+        self._set_value(matches[0].name)
         self.selection = 0
         return True
 
@@ -342,10 +342,10 @@ class Model:
     def _remember(self, text: str) -> None:
         if not self.history or self.history[-1] != text:
             self.history.append(text)
-        self.historyIndex = len(self.history)
-        self.historyDraft = ""
+        self.history_index = len(self.history)
+        self.history_draft = ""
 
-    def _setValue(self, value: str) -> None:
+    def _set_value(self, value: str) -> None:
         self.value = value
         self.cursor = len(value)
 
@@ -364,7 +364,7 @@ class Model:
             return
         self.value = self.value[: self.cursor] + self.value[self.cursor + 1 :]
 
-    def _visibleLines(self) -> list[Text]:
+    def _visible_lines(self) -> list[Text]:
         """The draft, at most :data:`_MAX_VISIBLE_LINES` lines, cursor included."""
         if self.value == "":
             return [Text("Ask me anything... (try /help)", style=self.styles.dim)]

@@ -19,7 +19,7 @@ from super_agent.tui import (
     SteeringWithdrawn,
     runtime,
     update,
-    updateConversationNotification,
+    update_conversation_notification,
 )
 from tests.tui.fakes import FakeFrontendPorts, new_app
 
@@ -73,7 +73,7 @@ async def test_acceptance_names_the_step_that_took_the_input_up() -> None:
     app = new_app(fake)
     app, _commands = await type_and_submit(app, TEXT)
 
-    app, _commands = updateConversationNotification(app, SteeringAccepted(input_id="steer-1", step=2))
+    app, _commands = update_conversation_notification(app, SteeringAccepted(input_id="steer-1", step=2))
 
     assert app.status == "Steering accepted at step 2"
     assert app.err == ""
@@ -85,6 +85,6 @@ async def test_a_withdrawn_input_is_reported_rather_than_left_waiting() -> None:
     app = new_app(fake)
     app, _commands = await type_and_submit(app, TEXT)
 
-    app, _commands = updateConversationNotification(app, SteeringWithdrawn(input_id="steer-1"))
+    app, _commands = update_conversation_notification(app, SteeringWithdrawn(input_id="steer-1"))
 
     assert "discarded" in app.err
